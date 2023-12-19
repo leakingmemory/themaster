@@ -17,7 +17,8 @@ enum {
     TheMaster_Connect_Id = 1,
     TheMaster_FindPatient_Id = 2,
     TheMaster_CreatePatient_Id = 3,
-    TheMaster_GetMedication_Id = 4
+    TheMaster_GetMedication_Id = 4,
+    TheMaster_SendMedication_Id = 5
 };
 
 class TheMasterFrame : public wxFrame {
@@ -34,6 +35,7 @@ public:
     void OnFindPatient(wxCommandEvent &e);
     void OnCreatePatient(wxCommandEvent &e);
     void OnGetMedication(wxCommandEvent &e);
+    void OnSendMedication(wxCommandEvent &e);
     void Connect(const std::string &url);
 };
 
