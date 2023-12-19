@@ -1,0 +1,10 @@
+#ifndef THEMASTER_INSTALLPRFIX_H
+#define THEMASTER_INSTALLPRFIX_H
+
+#include <string>
+
+constexpr std::string GetInstallPrefix() {
+    return "PREFIX";
+}
+
+#endif

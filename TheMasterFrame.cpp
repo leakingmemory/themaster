@@ -19,10 +19,18 @@
 #include <cpprest/http_client.h>
 #include <wx/listctrl.h>
 #include "MedBundleData.h"
+#include <InstallPrefix.h>
 
 TheMasterFrame::TheMasterFrame() : wxFrame(nullptr, wxID_ANY, "The Master"),
                                    patientStore(std::make_shared<PatientStoreInMemory>())
 {
+    std::string iconPath{GetInstallPrefix()};
+    if (!iconPath.ends_with("/")) {
+        iconPath.append("/");
+    }
+    iconPath.append("share/themaster/TheMasterLogo.png");
+    wxIcon icon{iconPath, wxBITMAP_TYPE_PNG};
+    SetIcon(icon);
     auto *patientMenu = new wxMenu();
     patientMenu->Append(TheMaster_FindPatient_Id, "Find patient");
     patientMenu->Append(TheMaster_CreatePatient_Id, "Create patient");

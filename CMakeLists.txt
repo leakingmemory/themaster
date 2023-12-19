@@ -8,6 +8,13 @@ include(${wxWidgets_USE_FILE})
 
 find_package(cpprestsdk REQUIRED)
 
+string(REPLACE "/" "\\\\/" PREFIX_ESCAPED "${CMAKE_INSTALL_PREFIX}")
+
+add_custom_target("InstallPrefix.h"
+        ALL "cat" "${CMAKE_CURRENT_SOURCE_DIR}/InstallPrefix.h.in" | sed -e "s/PREFIX/${PREFIX_ESCAPED}/" > "${CMAKE_CURRENT_BINARY_DIR}/InstallPrefix.h"
+        DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/InstallPrefix.h.in"
+)
+
 add_executable(themaster TheMasterApp.cpp TheMasterApp.h TheMasterFrame.cpp TheMasterFrame.h ConnectDialog.cpp ConnectDialog.h
     FindPatientDialog.cpp FindPatientDialog.h PatientStoreInMemory.cpp PatientStoreInMemory.h
     CreatePatientDialog.cpp CreatePatientDialog.h WaitingForApiDialog.cpp WaitingForApiDialog.h)
@@ -15,8 +22,8 @@ target_link_libraries(themaster PRIVATE -lsfmbasisapi)
 target_link_libraries(themaster PRIVATE cpprestsdk::cpprest -lcrypto)
 target_link_libraries(themaster PRIVATE ${wxWidgets_LIBRARIES})
 target_include_directories(themaster PRIVATE ${wxWidgets_INCLUDE})
-
-string(REPLACE "/" "\\\\/" PREFIX_ESCAPED "${CMAKE_INSTALL_PREFIX}")
+target_include_directories(themaster PRIVATE ${CMAKE_CURRENT_BINARY_DIR})
+add_dependencies(themaster "InstallPrefix.h")
 
 add_custom_target(
         "TheMaster.desktop"
