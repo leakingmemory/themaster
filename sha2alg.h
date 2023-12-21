@@ -134,9 +134,6 @@ public:
                 len = 64;
             }
             Digest(data);
-            for (int i = 0; i < (64-8); i++) {
-                data[i] = 0;
-            }
             uint64_t flen{mlength_bits};
             uint64_t *rawlen = (uint64_t *) &(data[64-8]);
             if constexpr (std::endian::native == std::endian::big) {
