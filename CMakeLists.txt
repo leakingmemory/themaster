@@ -3,7 +3,7 @@ project(drwhatsnot)
 
 set(CMAKE_CXX_STANDARD 23)
 
-find_package(wxWidgets REQUIRED)
+find_package(wxWidgets REQUIRED COMPONENTS core base webview)
 include(${wxWidgets_USE_FILE})
 
 find_package(cpprestsdk REQUIRED)
@@ -17,7 +17,9 @@ add_custom_target("InstallPrefix.h"
 
 add_executable(themaster TheMasterApp.cpp TheMasterApp.h TheMasterFrame.cpp TheMasterFrame.h ConnectDialog.cpp ConnectDialog.h
     FindPatientDialog.cpp FindPatientDialog.h PatientStoreInMemory.cpp PatientStoreInMemory.h
-    CreatePatientDialog.cpp CreatePatientDialog.h WaitingForApiDialog.cpp WaitingForApiDialog.h)
+    CreatePatientDialog.cpp CreatePatientDialog.h WaitingForApiDialog.cpp WaitingForApiDialog.h
+    HelseidLoginDialog.cpp HelseidLoginDialog.h HelseidAuthorization.cpp HelseidAuthorization.h
+    sha2alg.cpp sha2alg.h PkceS256.cpp PkceS256.h Base64.cpp Base64.h)
 target_link_libraries(themaster PRIVATE -lsfmbasisapi)
 target_link_libraries(themaster PRIVATE cpprestsdk::cpprest -lcrypto)
 target_link_libraries(themaster PRIVATE ${wxWidgets_LIBRARIES})

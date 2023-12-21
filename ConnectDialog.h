@@ -13,6 +13,8 @@ class ConnectDialog : public wxDialog {
 private:
     TheMasterFrame *frame;
     wxTextCtrl *urlTextCtrl;
+    wxTextCtrl *helseidUrlCtrl;
+    wxTextCtrl *helseidClientIdCtrl;
 public:
     ConnectDialog(TheMasterFrame *);
     void OnConnect(wxCommandEvent &);
