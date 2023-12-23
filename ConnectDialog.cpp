@@ -53,6 +53,7 @@ void ConnectDialog::OnConnect(wxCommandEvent &) {
     if (!helseidUrl.empty()) {
         HelseidLoginDialog helseidLoginDialog{this, helseidUrl.ToStdString(), helseidClientId.ToStdString()};
         helseidLoginDialog.ShowModal();
+        std::cout << "Result url: " << helseidLoginDialog.GetResultUrl() << "\n";
     }
     frame->Connect(std::string(url.ToUTF8()));
     Close();

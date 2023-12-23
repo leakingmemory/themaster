@@ -8,9 +8,17 @@
 #include <string>
 #include <wx/wx.h>
 
+class wxWebViewEvent;
+
 class HelseidLoginDialog : public wxDialog {
+private:
+    std::string resultUrl;
 public:
     explicit HelseidLoginDialog(wxWindow *parent, const std::string &url, const std::string &clientId);
+    void OnNavigating(wxWebViewEvent &);
+    std::string GetResultUrl() const {
+        return resultUrl;
+    }
 };
 
 

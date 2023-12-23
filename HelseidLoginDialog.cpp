@@ -16,7 +16,6 @@ public:
 HelseidAppHandler::HelseidAppHandler() : wxWebViewHandler("app"){}
 
 wxFSFile *HelseidAppHandler::GetFile(const wxString &uri) {
-    std::cout << uri.ToUTF8() << "\n";
     return new wxFSFile(new wxStringInputStream(wxT("Please wait...")), uri, wxT("text/plain"), wxT(""), wxDateTime::Now());
 }
 
@@ -24,9 +23,19 @@ HelseidLoginDialog::HelseidLoginDialog(wxWindow *parent, const std::string &url,
     auto *webView = wxWebView::New();
     webView->Create(this, wxID_ANY, wxWebViewDefaultURLStr, wxDefaultPosition, wxSize(800,600));
     webView->RegisterHandler(wxSharedPtr<wxWebViewHandler>(new HelseidAppHandler(), [] (auto *handler) { delete handler; }));
+    webView->Bind(wxEVT_WEBVIEW_NAVIGATING, &HelseidLoginDialog::OnNavigating, this);
+
     auto *sizer = new wxBoxSizer(wxVERTICAL);
     sizer->Add(webView, 1, wxEXPAND | wxALL);
     SetSizerAndFit(sizer);
     HelseidAuthorization authorization{url, clientId};
     webView->LoadURL(authorization.GetAuthorizeUrl());
+}
+
+void HelseidLoginDialog::OnNavigating(wxWebViewEvent &e) {
+    std::string url{e.GetURL().ToStdString()};
+    if (url.starts_with("app://")) {
+        resultUrl = url;
+        wxDialog::EndModal(0);
+    }
 }

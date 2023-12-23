@@ -26,8 +26,8 @@ std::string HelseidAuthorization::GetAuthorizeUrl() {
         strurl << web::uri::encode_data_string(to_string(uuid));
     }
     strurl << "&redirect_uri=";
-    strurl << web::uri::encode_data_string("app://returntoapp");
-    strurl << "&response_mode=&response_type=code&resource=e-helse%3Asfm.api&resource=nhn%3Akjernejournal&scope=";
+    strurl << web::uri::encode_data_string("https://appredirect.radiotube.org/jeo-at-dips");
+    strurl << "&response_mode=query&response_type=code&resource=e-helse%3Asfm.api&resource=nhn%3Akjernejournal&scope=";
     {
         std::stringstream scopeStream{};
         std::vector<std::string> scopes = {
