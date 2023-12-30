@@ -71,6 +71,8 @@ static_assert(AssertBase64EncodeDecode("aa"));
 static_assert(AssertBase64EncodeDecode("aaa"));
 static_assert(AssertBase64EncodeDecode("test"));
 static_assert(AssertBase64EncodeDecode("YWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhc2Rmc2Rmc2RmYWFhYWFhYWRnZ2ZnYWFoYTQyYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhc2Rmc2Rmc2RmYWFhYWFhYWRnZ2ZnYWFoYTQyfg\", \"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaasdfsdfsdfaaaaaaadggfgaaha42aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaasdfsdfsdfaaaaaaadggfgaaha42~"));
+static_assert(AssertBase64EncodeDecode("\x01\xad"));
+static_assert(AssertBase64EncodeDecode("\x01\xad\x0c\xf0\xdf\xdf\xef\xab\x3e\x99\x7b\xd3\x4f\x13\xcf"));
 
 static_assert(AssertBase64EncodeDecodeSizes(""));
 static_assert(AssertBase64EncodeDecodeSizes("a"));

@@ -46,7 +46,8 @@ public:
         for (size_t i = 0; i < size;) {
             if (bitoff < 6) {
                 w = w << 8;
-                w |= (uint16_t) input[i++];
+                static_assert(sizeof(bytetype) == 1);
+                w |= (uint16_t) ((unsigned char) input[i++]);
                 bitoff += 8;
             }
             auto extract = (w >> (bitoff - 6)) & 63;
