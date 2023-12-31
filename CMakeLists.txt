@@ -21,7 +21,8 @@ add_library(crypto OBJECT sha2alg.cpp sha2alg.h PkceS256.cpp PkceS256.h OpensslR
 add_executable(themaster TheMasterApp.cpp TheMasterApp.h TheMasterFrame.cpp TheMasterFrame.h ConnectDialog.cpp ConnectDialog.h
     FindPatientDialog.cpp FindPatientDialog.h PatientStoreInMemory.cpp PatientStoreInMemory.h
     CreatePatientDialog.cpp CreatePatientDialog.h WaitingForApiDialog.cpp WaitingForApiDialog.h
-    HelseidLoginDialog.cpp HelseidLoginDialog.h HelseidAuthorization.cpp HelseidAuthorization.h)
+    HelseidLoginDialog.cpp HelseidLoginDialog.h HelseidAuthorization.cpp HelseidAuthorization.h
+    HelseidTokenRequest.cpp HelseidTokenRequest.h)
 target_link_libraries(themaster PRIVATE crypto)
 target_link_libraries(themaster PRIVATE -lsfmbasisapi)
 target_link_libraries(themaster PRIVATE cpprestsdk::cpprest -lcrypto)
@@ -53,3 +54,10 @@ target_link_libraries(jwktopemtest PRIVATE crypto)
 target_link_libraries(jwktopemtest PRIVATE -lssl -lcrypto)
 
 add_test(NAME JwkToPemTest COMMAND jwktopemtest)
+
+add_executable(helseidtokenrequesttest HelseIdTokenRequestTest.cpp HelseidTokenRequest.cpp HelseidTokenRequest.h)
+target_link_libraries(helseidtokenrequesttest PRIVATE crypto)
+target_link_libraries(helseidtokenrequesttest PRIVATE -lssl -lcrypto)
+target_link_libraries(helseidtokenrequesttest PRIVATE cpprestsdk::cpprest -lcrypto)
+
+add_test(NAME HelseIdTokenRequestTest COMMAND helseidtokenrequesttest)

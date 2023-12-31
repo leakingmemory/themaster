@@ -5,6 +5,9 @@
 #include "ConnectDialog.h"
 #include "TheMasterFrame.h"
 #include "HelseidLoginDialog.h"
+#include <cpprest/uri.h>
+#include "HelseidTokenRequest.h"
+#include <cpprest/http_client.h>
 
 ConnectDialog::ConnectDialog(TheMasterFrame *parent) : wxDialog(parent, wxID_ANY, "Connect"), frame(parent) {
 
@@ -27,6 +30,12 @@ ConnectDialog::ConnectDialog(TheMasterFrame *parent) : wxDialog(parent, wxID_ANY
     helseidClientIdSizer->Add(helseidClientIdLabel, 0, wxALL, 5);
     helseidClientIdSizer->Add(helseidClientIdCtrl, 0, wxALL, 5);
 
+    wxBoxSizer *helseidSecretJwkSizer = new wxBoxSizer(wxHORIZONTAL);
+    wxStaticText *helseidSecretJwkLabel = new wxStaticText(this, wxID_ANY, "HelseID Secret: ");
+    helseidSecretJwkCtrl = new wxTextCtrl(this, wxID_ANY);
+    helseidSecretJwkSizer->Add(helseidSecretJwkLabel, 0, wxALL, 5);
+    helseidSecretJwkSizer->Add(helseidSecretJwkCtrl, 0, wxALL, 5);
+
     // Create sizer for buttons
     wxBoxSizer *buttonSizer = new wxBoxSizer(wxHORIZONTAL);
     wxButton *connectButton = new wxButton(this, wxID_ANY, "Connect");
@@ -39,6 +48,7 @@ ConnectDialog::ConnectDialog(TheMasterFrame *parent) : wxDialog(parent, wxID_ANY
     mainSizer->Add(urlSizer, 1, wxEXPAND | wxALL, 5);
     mainSizer->Add(helseidUrlSizer, 1, wxEXPAND | wxALL, 5);
     mainSizer->Add(helseidClientIdSizer, 1, wxEXPAND | wxALL, 5);
+    mainSizer->Add(helseidSecretJwkSizer, 1, wxEXPAND | wxALL, 5);
     mainSizer->Add(buttonSizer, 0, wxALIGN_CENTER | wxALL, 5);
     this->SetSizerAndFit(mainSizer);
 
@@ -50,10 +60,93 @@ void ConnectDialog::OnConnect(wxCommandEvent &) {
     wxString url = urlTextCtrl->GetValue();
     wxString helseidUrl = helseidUrlCtrl->GetValue();
     wxString helseidClientId = helseidClientIdCtrl->GetValue();
+    wxString helseidSecretJwk = helseidSecretJwkCtrl->GetValue();
     if (!helseidUrl.empty()) {
         HelseidLoginDialog helseidLoginDialog{this, helseidUrl.ToStdString(), helseidClientId.ToStdString()};
         helseidLoginDialog.ShowModal();
-        std::cout << "Result url: " << helseidLoginDialog.GetResultUrl() << "\n";
+        std::string uri{helseidLoginDialog.GetResultUrl()};
+        auto querySeparatorPos = uri.find('?');
+        if (querySeparatorPos < uri.size()) {
+            auto query = uri.substr(querySeparatorPos + 1);
+            std::map<std::string,std::string> queryMap{};
+            {
+                auto queryMapRaw = web::uri::split_query(query);
+                for (auto pair: queryMapRaw) {
+                    queryMap.insert_or_assign(web::uri::decode(pair.first), web::uri::decode(pair.second));
+                }
+            }
+            for (auto pair: queryMap) {
+                std::cout << pair.first << ": " << pair.second << "\n";
+            }
+            auto findCode = queryMap.find("code");
+            if (findCode != queryMap.end()) {
+                try {
+                    auto authorizationCode = findCode->second;
+                    HelseidTokenRequest tokenRequest{url.ToStdString(), helseidClientId.ToStdString(),
+                                                     helseidSecretJwk.ToStdString(),
+                                                     helseidLoginDialog.GetRedirectUri(), authorizationCode,
+                                                     helseidLoginDialog.GetScopes(),
+                                                     helseidLoginDialog.GetVerification()};
+                    auto firstTokenRequest = tokenRequest.GetTokenRequest();
+                    web::http::client::http_client client{url.ToStdString()};
+                    web::http::http_request req{web::http::methods::POST};
+                    req.set_request_uri("/oauth/token");
+                    {
+                        std::stringstream sstr{};
+                        auto iterator = firstTokenRequest.params.begin();
+                        if (iterator != firstTokenRequest.params.end()) {
+                            const auto &param = *iterator;
+                            sstr << web::uri::encode_data_string(param.first) << "=";
+                            sstr << web::uri::encode_data_string(param.second);
+                            ++iterator;
+                        }
+                        while (iterator != firstTokenRequest.params.end()) {
+                            const auto &param = *iterator;
+                            sstr << "&" << web::uri::encode_data_string(param.first) << "=";
+                            sstr << web::uri::encode_data_string(param.second);
+                            ++iterator;
+                        }
+                        req.set_body(sstr.str(), "application/x-www-form-urlencoded");
+                    }
+                    auto respTask = client.request(req);
+                    respTask.then([](const pplx::task<web::http::http_response> &task) {
+                        try {
+                            auto response = task.get();
+                            if ((response.status_code() / 100) == 2) {
+                                response.extract_json().then([](const pplx::task<web::json::value> &jsonTask) {
+                                    try {
+                                        auto json = jsonTask.get();
+                                        std::cout << json.to_string() << "\n";
+                                    } catch (...) {
+                                        wxTheApp->GetTopWindow()->GetEventHandler()->CallAfter([]() {
+                                            wxMessageBox(
+                                                    wxT("HelseID token request failed with json error, or no json response"),
+                                                    wxT("HelseID failed"), wxOK | wxICON_ERROR);
+                                        });
+                                    }
+                                });
+                            } else {
+                                wxTheApp->GetTopWindow()->GetEventHandler()->CallAfter([]() {
+                                    wxMessageBox(wxT("HelseID token request failed with error code"),
+                                                 wxT("HelseID failed"), wxOK | wxICON_ERROR);
+                                });
+                            }
+                        } catch (...) {
+                            wxTheApp->GetTopWindow()->GetEventHandler()->CallAfter([]() {
+                                wxMessageBox(wxT("HelseID token request failed"), wxT("HelseID failed"),
+                                             wxOK | wxICON_ERROR);
+                            });
+                        }
+                    });
+                } catch (std::exception &e) {
+                    wxMessageBox(e.what(), wxT("HelseID token request exception"), wxOK | wxICON_ERROR);
+                } catch (...) {
+                    wxMessageBox(wxT("Failed to generate a token request"), wxT("HelseID failed"), wxOK | wxICON_ERROR);
+                }
+            }
+        } else {
+            wxMessageBox(wxT("HelseID failed"), wxT("HelseID failed"), wxOK | wxICON_ERROR);
+        }
     }
     frame->Connect(std::string(url.ToUTF8()));
     Close();

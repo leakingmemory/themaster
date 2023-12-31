@@ -15,6 +15,7 @@ private:
     wxTextCtrl *urlTextCtrl;
     wxTextCtrl *helseidUrlCtrl;
     wxTextCtrl *helseidClientIdCtrl;
+    wxTextCtrl *helseidSecretJwkCtrl;
 public:
     ConnectDialog(TheMasterFrame *);
     void OnConnect(wxCommandEvent &);

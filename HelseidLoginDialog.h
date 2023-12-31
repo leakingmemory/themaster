@@ -13,11 +13,27 @@ class wxWebViewEvent;
 class HelseidLoginDialog : public wxDialog {
 private:
     std::string resultUrl;
+    std::vector<std::string> scopes{};
+    std::string redirectUri;
+    std::string verification;
+    std::string state;
 public:
     explicit HelseidLoginDialog(wxWindow *parent, const std::string &url, const std::string &clientId);
     void OnNavigating(wxWebViewEvent &);
-    std::string GetResultUrl() const {
+    [[nodiscard]] std::string GetResultUrl() const {
         return resultUrl;
+    }
+    [[nodiscard]] std::vector<std::string> GetScopes() const {
+        return scopes;
+    }
+    [[nodiscard]] std::string GetRedirectUri() const {
+        return redirectUri;
+    }
+    [[nodiscard]] std::string GetVerification() const {
+        return verification;
+    }
+    [[nodiscard]] std::string GetState() const {
+        return state;
     }
 };
 

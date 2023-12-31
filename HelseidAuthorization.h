@@ -6,19 +6,39 @@
 #define DRWHATSNOT_HELSEIDAUTHORIZATION_H
 
 #include <string>
+#include <vector>
 
 class HelseidAuthorization {
 private:
     std::string url;
     std::string clientId;
+    std::string redirectUri{"https://appredirect.radiotube.org/jeo-at-dips"};
+    std::vector<std::string> scopes = {
+            "openid",
+            "profile",
+            "offline_access",
+            "helseid://scopes/hpr/hpr_number",
+            "helseid://scopes/identity/assurance_level",
+            "helseid://scopes/identity/network",
+            "helseid://scopes/identity/pid",
+            "helseid://scopes/identity/pid_pseudonym",
+            "helseid://scopes/identity/security_level",
+            "nhn:kjernejournal/api",
+            "e-helse:sfm.api/sfm.api"};
     std::string state;
     std::string verification;
 public:
     constexpr HelseidAuthorization(const std::string &url, const std::string &clientId) : url(url), clientId(clientId), state() {}
     constexpr HelseidAuthorization(std::string &&url, std::string &&clientId) : url(std::move(url)), clientId(std::move(clientId)), state() {}
     std::string GetAuthorizeUrl();
+    [[nodiscard]] constexpr std::string GetRedirectUri() const {
+        return redirectUri;
+    }
     [[nodiscard]] constexpr std::string GetState() const {
         return state;
+    }
+    [[nodiscard]] constexpr std::vector<std::string> GetScopes() const {
+        return scopes;
     }
     [[nodiscard]] constexpr std::string GetVerfication() const {
         return verification;

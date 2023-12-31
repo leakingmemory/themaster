@@ -26,22 +26,10 @@ std::string HelseidAuthorization::GetAuthorizeUrl() {
         strurl << web::uri::encode_data_string(to_string(uuid));
     }
     strurl << "&redirect_uri=";
-    strurl << web::uri::encode_data_string("https://appredirect.radiotube.org/jeo-at-dips");
+    strurl << web::uri::encode_data_string(redirectUri);
     strurl << "&response_mode=query&response_type=code&resource=e-helse%3Asfm.api&resource=nhn%3Akjernejournal&scope=";
     {
         std::stringstream scopeStream{};
-        std::vector<std::string> scopes = {
-                "openid",
-                "profile",
-                "offline_access",
-                "helseid://scopes/hpr/hpr_number",
-                "helseid://scopes/identity/assurance_level",
-                "helseid://scopes/identity/network",
-                "helseid://scopes/identity/pid",
-                "helseid://scopes/identity/pid_pseudonym",
-                "helseid://scopes/identity/security_level",
-                "nhn:kjernejournal/api",
-                "e-helse:sfm.api/sfm.api"};
         auto iterator = scopes.begin();
         if (iterator != scopes.end()) {
             scopeStream << *iterator;

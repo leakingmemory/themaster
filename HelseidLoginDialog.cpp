@@ -29,6 +29,10 @@ HelseidLoginDialog::HelseidLoginDialog(wxWindow *parent, const std::string &url,
     sizer->Add(webView, 1, wxEXPAND | wxALL);
     SetSizerAndFit(sizer);
     HelseidAuthorization authorization{url, clientId};
+    scopes = authorization.GetScopes();
+    redirectUri = authorization.GetRedirectUri();
+    verification = authorization.GetVerfication();
+    state = authorization.GetState();
     webView->LoadURL(authorization.GetAuthorizeUrl());
 }
 
