@@ -7,7 +7,8 @@
 
 #include <sstream>
 #include <cpprest/uri.h>
-#include <jwt-cpp/jwt.h>
+#include "Jwt.h"
+#include "Rs256.h"
 
 HelseidPostRequest HelseidTokenRequest::GetTokenRequest() const {
     std::string tokenEndpoint{};
@@ -17,7 +18,7 @@ HelseidPostRequest HelseidTokenRequest::GetTokenRequest() const {
         if (!url.ends_with("/")) {
             sstr << "/";
         }
-        sstr << "oauth/token";
+        sstr << "connect/token";
         tokenEndpoint = sstr.str();
     }
     std::string scopeStr{};
@@ -36,21 +37,22 @@ HelseidPostRequest HelseidTokenRequest::GetTokenRequest() const {
     }
     std::string jwt{};
     {
-        std::string pem{};
+        std::shared_ptr<SigningKey> signingKey{};
         {
             JwkPemRsaKey rsa{};
             rsa.FromJwk(jwk);
-            pem = rsa.ToTraditionalPrivatePem();
+            signingKey = rsa.ToSigningKey();
         }
-        auto token = jwt::create()
-                .set_issuer("app://themaster")
-                .set_type("JWT")
-                .set_issued_at(std::chrono::system_clock::now())
-                .set_expires_at(std::chrono::system_clock::now() + std::chrono::seconds{60})
-                .set_subject(clientId)
-                .set_audience(tokenEndpoint)
-                .sign(jwt::algorithm::rs256("", pem, "", ""));
-        jwt = token;
+        auto iat = std::time(nullptr);
+        Jwt token{};
+        token.Body()->Add("iss", "app://themaster");
+        token.Body()->Add("iat", iat);
+        token.Body()->Add("exp", iat + 120);
+        token.Body()->Add("sub", clientId);
+        token.Body()->Add("aud", tokenEndpoint);
+        Rs256 rs256{signingKey};
+        rs256.Sign(token);
+        jwt = token.ToString();
     }
     std::map<std::string,std::string> params{};
     params.insert_or_assign("client_id", clientId);

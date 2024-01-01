@@ -8,10 +8,12 @@
 #include <memory>
 #include <string>
 #include <map>
+#include "Bignum.h"
+#include "SigningKey.h"
 
 typedef struct evp_pkey_st EVP_PKEY;
 
-class OpensslRsa {
+class OpensslRsa : public SigningKey {
 private:
     std::unique_ptr<EVP_PKEY,void (*)(EVP_PKEY *)> rsa;
 public:
@@ -21,8 +23,10 @@ public:
     ~OpensslRsa();
     void GenerateRandom(int sizeKey = 2048, int exponent = 65537);
     std::map<std::string,std::string> ExportParams() const;
-    void ImportParams(const std::map<std::string,std::string> &params);
+    void ImportParams(const std::map<std::string,Bignum> &params);
     std::string ToTraditionalPrivatePem() const;
+    std::string ToPublicPem() const;
+    std::string Sign(const std::string &content) const override;
 };
 
 

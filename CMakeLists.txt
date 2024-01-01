@@ -16,7 +16,9 @@ add_custom_target("InstallPrefix.h"
 )
 
 add_library(crypto OBJECT sha2alg.cpp sha2alg.h PkceS256.cpp PkceS256.h OpensslRsa.cpp OpensslRsa.h
-        Openssl.cpp Openssl.h  JwkPemRsaKey.cpp JwkPemRsaKeyJson.cpp JwkPemRsaKey.h Base64.cpp Base64.h)
+        Openssl.cpp Openssl.h  JwkPemRsaKey.cpp JwkPemRsaKeyJson.cpp JwkPemRsaKey.h Base64.cpp Base64.h
+        Bignum.cpp Bignum.h)
+add_library(jwtobj OBJECT JwtPart.cpp JwtPart.h Jwt.cpp Jwt.h Rs256.cpp Rs256.h)
 
 add_executable(themaster TheMasterApp.cpp TheMasterApp.h TheMasterFrame.cpp TheMasterFrame.h ConnectDialog.cpp ConnectDialog.h
     FindPatientDialog.cpp FindPatientDialog.h PatientStoreInMemory.cpp PatientStoreInMemory.h
@@ -24,6 +26,7 @@ add_executable(themaster TheMasterApp.cpp TheMasterApp.h TheMasterFrame.cpp TheM
     HelseidLoginDialog.cpp HelseidLoginDialog.h HelseidAuthorization.cpp HelseidAuthorization.h
     HelseidTokenRequest.cpp HelseidTokenRequest.h)
 target_link_libraries(themaster PRIVATE crypto)
+target_link_libraries(themaster PRIVATE jwtobj)
 target_link_libraries(themaster PRIVATE -lsfmbasisapi)
 target_link_libraries(themaster PRIVATE cpprestsdk::cpprest -lcrypto)
 target_link_libraries(themaster PRIVATE ${wxWidgets_LIBRARIES})
@@ -57,6 +60,7 @@ add_test(NAME JwkToPemTest COMMAND jwktopemtest)
 
 add_executable(helseidtokenrequesttest HelseIdTokenRequestTest.cpp HelseidTokenRequest.cpp HelseidTokenRequest.h)
 target_link_libraries(helseidtokenrequesttest PRIVATE crypto)
+target_link_libraries(helseidtokenrequesttest PRIVATE jwtobj)
 target_link_libraries(helseidtokenrequesttest PRIVATE -lssl -lcrypto)
 target_link_libraries(helseidtokenrequesttest PRIVATE cpprestsdk::cpprest -lcrypto)
 

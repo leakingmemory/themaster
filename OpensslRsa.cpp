@@ -10,6 +10,7 @@
 #include <openssl/rsa.h>
 #include <openssl/pem.h>
 #include <openssl/bio.h>
+#include <openssl/param_build.h>
 
 OpensslRsa::OpensslRsa() : rsa(nullptr, [] (EVP_PKEY *) {}) {}
 
@@ -61,16 +62,27 @@ std::map<std::string,std::string> OpensslRsa::ExportParams() const {
     return paramsMap;
 }
 
-void OpensslRsa::ImportParams(const std::map<std::string, std::string> &params) {
+void OpensslRsa::ImportParams(const std::map<std::string, Bignum> &params) {
     std::unique_ptr<EVP_PKEY_CTX, void (*)(EVP_PKEY_CTX *)> pctx{EVP_PKEY_CTX_new_id( EVP_PKEY_RSA, NULL), [] (EVP_PKEY_CTX *ctx) {EVP_PKEY_CTX_free(ctx);}};
     EVP_PKEY_fromdata_init(&(*pctx));
-    std::vector<OSSL_PARAM> opensslParams{};
-    opensslParams.reserve(params.size() + 1);
+    std::unique_ptr<OSSL_PARAM_BLD,void (*)(OSSL_PARAM_BLD *)> bld{
+            OSSL_PARAM_BLD_new(),
+            [](OSSL_PARAM_BLD *release) { OSSL_PARAM_BLD_free(release); }
+    };
     for (const auto &param : params) {
-        opensslParams.push_back(OSSL_PARAM_BN(param.first.c_str(), (void *) param.second.data(), param.second.size()));
+        if (!OSSL_PARAM_BLD_push_BN(&(*bld), param.first.c_str(), param.second.bn)) {
+            throw std::exception();
+        }
     }
-    opensslParams.push_back(OSSL_PARAM_END);
-    rsa = std::move(PkeyFromParams(*pctx, opensslParams.data()));
+    std::unique_ptr<OSSL_PARAM,void (*)(OSSL_PARAM *)> opensslParams{nullptr, [] (OSSL_PARAM *) {}};
+    {
+        OSSL_PARAM *p = OSSL_PARAM_BLD_to_param(&(*bld));
+        if (p == NULL) {
+            throw std::exception();
+        }
+        opensslParams = {p, [] (OSSL_PARAM *release) {OSSL_PARAM_free(release);}};
+    }
+    rsa = std::move(PkeyFromParams(*pctx, &(*opensslParams)));
 }
 
 std::string OpensslRsa::ToTraditionalPrivatePem() const {
@@ -85,4 +97,49 @@ std::string OpensslRsa::ToTraditionalPrivatePem() const {
     pem.resize(size);
     BIO_read(&(*bio), pem.data(), size);
     return pem;
+}
+
+std::string OpensslRsa::ToPublicPem() const {
+    std::string pem{};
+    std::unique_ptr<BIO,void (*)(BIO*)> bio{BIO_new(BIO_s_mem()), [] (auto *release) {BIO_free(release);}};
+    auto ret = PEM_write_bio_PUBKEY(&(*bio), &(*rsa));
+    if (ret <= 0) {
+        return "";
+    }
+    size_t size{0};
+    size = BIO_pending(&(*bio));
+    pem.resize(size);
+    BIO_read(&(*bio), pem.data(), size);
+    return pem;
+}
+
+std::string OpensslRsa::Sign(const std::string &content) const {
+    std::unique_ptr<EVP_MD_CTX, void (*)(EVP_MD_CTX *)> ctx{
+        EVP_MD_CTX_new(),
+        [] (EVP_MD_CTX *release) { EVP_MD_CTX_free(release); }
+    };
+    if (!ctx) {
+        std::cerr << Openssl::GetError() << "\n";
+        throw std::exception();
+    }
+    if (EVP_DigestSignInit(&(*ctx), NULL, EVP_sha256(), NULL, &(*rsa)) <= 0) {
+        std::cerr << Openssl::GetError() << "\n";
+        throw std::exception();
+    }
+    size_t siglen{0};
+    if (EVP_DigestSignUpdate(&(*ctx), content.data(), content.size()) <= 0) {
+        std::cerr << Openssl::GetError() << "\n";
+        throw std::exception();
+    }
+    if (EVP_DigestSignFinal(&(*ctx), NULL, &siglen) <= 0) {
+        std::cerr << Openssl::GetError() << "\n";
+        throw std::exception();
+    }
+    std::string signature{};
+    signature.resize(siglen);
+    if (EVP_DigestSignFinal(&(*ctx), (unsigned char *) signature.data(), &siglen) <= 0) {
+        std::cerr << Openssl::GetError() << "\n";
+        throw std::exception();
+    }
+    return signature;
 }

@@ -82,31 +82,36 @@ void ConnectDialog::OnConnect(wxCommandEvent &) {
             if (findCode != queryMap.end()) {
                 try {
                     auto authorizationCode = findCode->second;
-                    HelseidTokenRequest tokenRequest{url.ToStdString(), helseidClientId.ToStdString(),
+                    HelseidTokenRequest tokenRequest{helseidUrl.ToStdString(), helseidClientId.ToStdString(),
                                                      helseidSecretJwk.ToStdString(),
                                                      helseidLoginDialog.GetRedirectUri(), authorizationCode,
                                                      helseidLoginDialog.GetScopes(),
                                                      helseidLoginDialog.GetVerification()};
                     auto firstTokenRequest = tokenRequest.GetTokenRequest();
-                    web::http::client::http_client client{url.ToStdString()};
+                    web::http::client::http_client client{helseidUrl.ToStdString()};
                     web::http::http_request req{web::http::methods::POST};
-                    req.set_request_uri("/oauth/token");
+                    req.set_request_uri("/connect/token");
                     {
-                        std::stringstream sstr{};
-                        auto iterator = firstTokenRequest.params.begin();
-                        if (iterator != firstTokenRequest.params.end()) {
-                            const auto &param = *iterator;
-                            sstr << web::uri::encode_data_string(param.first) << "=";
-                            sstr << web::uri::encode_data_string(param.second);
-                            ++iterator;
+                        std::string rqBody{};
+                        {
+                            std::stringstream sstr{};
+                            auto iterator = firstTokenRequest.params.begin();
+                            if (iterator != firstTokenRequest.params.end()) {
+                                const auto &param = *iterator;
+                                sstr << web::uri::encode_data_string(param.first) << "=";
+                                sstr << web::uri::encode_data_string(param.second);
+                                ++iterator;
+                            }
+                            while (iterator != firstTokenRequest.params.end()) {
+                                const auto &param = *iterator;
+                                sstr << "&" << web::uri::encode_data_string(param.first) << "=";
+                                sstr << web::uri::encode_data_string(param.second);
+                                ++iterator;
+                            }
+                            rqBody = sstr.str();
                         }
-                        while (iterator != firstTokenRequest.params.end()) {
-                            const auto &param = *iterator;
-                            sstr << "&" << web::uri::encode_data_string(param.first) << "=";
-                            sstr << web::uri::encode_data_string(param.second);
-                            ++iterator;
-                        }
-                        req.set_body(sstr.str(), "application/x-www-form-urlencoded");
+                        std::cout << rqBody << "\n";
+                        req.set_body(rqBody, "application/x-www-form-urlencoded");
                     }
                     auto respTask = client.request(req);
                     respTask.then([](const pplx::task<web::http::http_response> &task) {
@@ -126,11 +131,27 @@ void ConnectDialog::OnConnect(wxCommandEvent &) {
                                     }
                                 });
                             } else {
+                                std::cerr << "HTTP error " << response.status_code() << "\n";
+                                typedef typeof(response.extract_string()) task_string_type;
+                                response.extract_string().then([] (const task_string_type &t) {
+                                    try {
+                                        auto str = t.get();
+                                        std::cerr << str << "\n";
+                                    } catch (...) {
+                                        std::cerr << "Unable to retrieve error string\n";
+                                    }
+                                });
                                 wxTheApp->GetTopWindow()->GetEventHandler()->CallAfter([]() {
                                     wxMessageBox(wxT("HelseID token request failed with error code"),
                                                  wxT("HelseID failed"), wxOK | wxICON_ERROR);
                                 });
                             }
+                        } catch (std::exception &e) {
+                            std::string error{e.what()};
+                            wxTheApp->GetTopWindow()->GetEventHandler()->CallAfter([error]() {
+                                wxMessageBox(error, wxT("HelseID request error exception"),
+                                             wxOK | wxICON_ERROR);
+                            });
                         } catch (...) {
                             wxTheApp->GetTopWindow()->GetEventHandler()->CallAfter([]() {
                                 wxMessageBox(wxT("HelseID token request failed"), wxT("HelseID failed"),

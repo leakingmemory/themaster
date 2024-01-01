@@ -6,23 +6,30 @@
 #define DRWHATSNOT_JWKPEMRSAKEY_H
 
 #include <string>
+#include <memory>
+#include "Bignum.h"
+
+class SigningKey;
 
 class JwkPemRsaKey {
 private:
-    std::string d{};
-    std::string dp{};
-    std::string dq{};
-    std::string e{};
-    std::string n{};
-    std::string p{};
-    std::string q{};
-    std::string qi{};
+    Bignum d{};
+    Bignum dp{};
+    Bignum dq{};
+    Bignum e{};
+    Bignum n{};
+    Bignum p{};
+    Bignum q{};
+    Bignum qi{};
 public:
     constexpr JwkPemRsaKey() {}
     void GenerateRandom(int keySize = 2048, int kExp = 65537);
     std::string ToTraditionalPrivatePem() const;
+    std::string ToPublicPem() const;
     std::string ToJwk() const;
+    std::string ToPublicJwk() const;
     void FromJwk(const std::string &json);
+    std::shared_ptr<SigningKey> ToSigningKey() const;
 };
 
 
