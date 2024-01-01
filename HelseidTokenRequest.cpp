@@ -4,6 +4,8 @@
 
 #include "HelseidTokenRequest.h"
 #include "JwkPemRsaKey.h"
+#include <boost/uuid/uuid_generators.hpp> // for random_generator
+#include <boost/uuid/uuid_io.hpp> // for to_string
 
 #include <sstream>
 #include <cpprest/uri.h>
@@ -45,8 +47,15 @@ HelseidPostRequest HelseidTokenRequest::GetTokenRequest() const {
         }
         auto iat = std::time(nullptr);
         Jwt token{};
-        token.Body()->Add("iss", "app://themaster");
+        {
+            boost::uuids::random_generator generator;
+            boost::uuids::uuid randomUUID = generator();
+            std::string uuidStr = boost::uuids::to_string(randomUUID);
+            token.Body()->Add("jti", uuidStr);
+        }
+        token.Body()->Add("iss", clientId);
         token.Body()->Add("iat", iat);
+        token.Body()->Add("nbf", iat);
         token.Body()->Add("exp", iat + 120);
         token.Body()->Add("sub", clientId);
         token.Body()->Add("aud", tokenEndpoint);

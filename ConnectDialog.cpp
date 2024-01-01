@@ -111,7 +111,7 @@ void ConnectDialog::OnConnect(wxCommandEvent &) {
                             rqBody = sstr.str();
                         }
                         std::cout << rqBody << "\n";
-                        req.set_body(rqBody, "application/x-www-form-urlencoded");
+                        req.set_body(rqBody, "application/x-www-form-urlencoded; charset=utf-8");
                     }
                     auto respTask = client.request(req);
                     respTask.then([](const pplx::task<web::http::http_response> &task) {
