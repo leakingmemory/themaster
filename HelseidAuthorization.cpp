@@ -3,7 +3,7 @@
 //
 
 #include "HelseidAuthorization.h"
-#include "PkceS256.h"
+#include <jjwtid/PkceS256.h>
 #include <sstream>
 #include <vector>
 #include <cpprest/uri.h>

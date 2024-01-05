@@ -6,7 +6,7 @@
 #include "TheMasterFrame.h"
 #include "HelseidLoginDialog.h"
 #include <cpprest/uri.h>
-#include "HelseidTokenRequest.h"
+#include <jjwtid/OidcTokenRequest.h>
 #include <cpprest/http_client.h>
 
 ConnectDialog::ConnectDialog(TheMasterFrame *parent) : wxDialog(parent, wxID_ANY, "Connect"), frame(parent) {
@@ -82,7 +82,7 @@ void ConnectDialog::OnConnect(wxCommandEvent &) {
             if (findCode != queryMap.end()) {
                 try {
                     auto authorizationCode = findCode->second;
-                    HelseidTokenRequest tokenRequest{helseidUrl.ToStdString(), helseidClientId.ToStdString(),
+                    OidcTokenRequest tokenRequest{helseidUrl.ToStdString(), helseidClientId.ToStdString(),
                                                      helseidSecretJwk.ToStdString(),
                                                      helseidLoginDialog.GetRedirectUri(), authorizationCode,
                                                      helseidLoginDialog.GetScopes(),
