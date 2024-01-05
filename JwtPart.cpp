@@ -36,6 +36,22 @@ void JwtPartIntegerValue::AddToJson(nlohmann::json &obj, const std::string &name
     obj.emplace(name, integer);
 }
 
+JwtPart::JwtPart(const std::string &str) : JwtPart() {
+    Base64UrlEncoding encoding{};
+    nlohmann::json obj = nlohmann::json::parse(encoding.Decode(str));
+    if (obj.is_object()) {
+        for (const auto &prop: obj.items()) {
+            std::string key = prop.key();
+            auto value = prop.value();
+            if (value.is_string()) {
+                insert_or_assign(key, std::make_shared<JwtPartStringValue>(value));
+            } else if (value.is_number_integer()) {
+                insert_or_assign(key, std::make_shared<JwtPartIntegerValue>(value));
+            }
+        }
+    }
+}
+
 std::string JwtPart::ToJson() const {
     nlohmann::json obj{};
     for (const auto &item : *this) {

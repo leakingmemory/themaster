@@ -18,6 +18,7 @@ public:
     Bignum &operator =(const Bignum &);
     Bignum &operator =(Bignum &&);
     Bignum &operator =(const std::string &raw);
+    Bignum &operator =(const BIGNUM *);
     operator std::string() const;
     ~Bignum();
     constexpr bool empty() const {

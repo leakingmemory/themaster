@@ -51,6 +51,14 @@ Bignum &Bignum::operator=(const std::string &raw) {
     return *this;
 }
 
+Bignum &Bignum::operator=(const BIGNUM *input) {
+    if (bn != nullptr) {
+        BN_free(bn);
+    }
+    bn = BN_dup(input);
+    return *this;
+}
+
 Bignum::operator std::string() const {
     if (bn != nullptr) {
         std::string raw{};

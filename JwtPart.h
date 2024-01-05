@@ -13,6 +13,8 @@ class JwtPartValue;
 
 class JwtPart : public std::map<std::string,std::shared_ptr<JwtPartValue>> {
 public:
+    JwtPart() : std::map<std::string,std::shared_ptr<JwtPartValue>>() {}
+    JwtPart(const std::string &);
     std::string ToJson() const;
     std::string ToBase64() const;
     void Add(const std::string &name, const std::string &value);
