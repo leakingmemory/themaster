@@ -22,6 +22,7 @@
 #include <InstallPrefix.h>
 
 TheMasterFrame::TheMasterFrame() : wxFrame(nullptr, wxID_ANY, "The Master"),
+                                   weakRefDispatcher(std::make_shared<WeakRefUiDispatcher<TheMasterFrame>>(this)),
                                    patientStore(std::make_shared<PatientStoreInMemory>())
 {
     std::string iconPath{GetInstallPrefix()};
@@ -465,6 +466,19 @@ void TheMasterFrame::OnSendMedication(wxCommandEvent &e) {
     str << "Recalled " << recallCount << (recallCount == 1 ? " prescription and prescribed " : " prescriptions and prescribed ")
         << prescriptionCount << (prescriptionCount == 1 ? " prescription." : " prescriptions.");
     wxMessageBox(str.str(), wxT("Successful sending"), wxICON_INFORMATION);
+}
+
+WeakRefUiDispatcherRef<TheMasterFrame> TheMasterFrame::GetWeakRefDispatcher() {
+    return weakRefDispatcher->GetRef();
+}
+
+void TheMasterFrame::SetHelseid(const std::string &url, const std::string &clientId, const std::string &secretJwk,
+                                const std::string &refreshToken, long expiresIn) {
+    helseidUrl = url;
+    helseidClientId = clientId;
+    helseidSecretJwk = secretJwk;
+    helseidRefreshToken = refreshToken;
+    helseidRefreshTokenValidTo = std::time(NULL) + expiresIn - 60;
 }
 
 void TheMasterFrame::Connect(const std::string &url) {
