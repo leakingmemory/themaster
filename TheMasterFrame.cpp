@@ -6,7 +6,7 @@
 #include "ConnectDialog.h"
 #include "FindPatientDialog.h"
 #include "CreatePatientDialog.h"
-#include "PatientStoreInMemory.h"
+#include "PatientStoreInMemoryWithPersistence.h"
 #include "WaitingForApiDialog.h"
 #include <boost/uuid/uuid.hpp>
 #include <boost/uuid/uuid_generators.hpp>
@@ -23,7 +23,7 @@
 
 TheMasterFrame::TheMasterFrame() : wxFrame(nullptr, wxID_ANY, "The Master"),
                                    weakRefDispatcher(std::make_shared<WeakRefUiDispatcher<TheMasterFrame>>(this)),
-                                   patientStore(std::make_shared<PatientStoreInMemory>())
+                                   patientStore(std::make_shared<PatientStoreInMemoryWithPersistence>())
 {
     std::string iconPath{GetInstallPrefix()};
     if (!iconPath.ends_with("/")) {
