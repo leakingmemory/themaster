@@ -6,18 +6,24 @@
 #define DRWHATSNOT_CONNECTDIALOG_H
 
 #include <wx/wx.h>
+#include <vector>
+#include <memory>
 
 class TheMasterFrame;
+class ConnectionConfig;
 
 class ConnectDialog : public wxDialog {
 private:
     TheMasterFrame *frame;
+    std::vector<std::shared_ptr<ConnectionConfig>> configs{};
+    wxComboBox *configNameCtrl;
     wxTextCtrl *urlTextCtrl;
     wxTextCtrl *helseidUrlCtrl;
     wxTextCtrl *helseidClientIdCtrl;
     wxTextCtrl *helseidSecretJwkCtrl;
 public:
     ConnectDialog(TheMasterFrame *);
+    void OnSelect(wxCommandEvent &);
     void OnConnect(wxCommandEvent &);
     void OnCancel(wxCommandEvent &);
 };

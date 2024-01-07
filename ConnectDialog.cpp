@@ -8,8 +8,82 @@
 #include <cpprest/uri.h>
 #include <jjwtid/OidcTokenRequest.h>
 #include <cpprest/http_client.h>
+#include <nlohmann/json.hpp>
+#include "DataDirectory.h"
+#include "Guard.h"
+
+class ConnectionConfig {
+public:
+    std::string name{};
+    std::string url{};
+    std::string helseidUrl{};
+    std::string helseidClientId{};
+    std::string helseidSecretJwk{};
+
+    void FromJson(const std::string &json);
+    std::string ToJson() const;
+};
+
+void ConnectionConfig::FromJson(const std::string &json) {
+    nlohmann::json obj = nlohmann::json::parse(json);
+    name = obj.value("name", "");
+    url = obj.value("url", "");
+    helseidUrl = obj.value("helseidurl", "");
+    helseidClientId = obj.value("helseidclientid", "");
+    helseidSecretJwk = obj.value("helseidsecretjwt", "");
+}
+
+std::string ConnectionConfig::ToJson() const {
+    auto obj = nlohmann::json::object();
+    obj["name"] = name;
+    obj["url"] = url;
+    obj["helseidurl"] = helseidUrl;
+    obj["helseidclientid"] = helseidClientId;
+    obj["helseidsecretjwt"] = helseidSecretJwk;
+    return obj.dump();
+}
+
+static std::vector<ConnectionConfig> ReadConfigs() {
+    std::vector<ConnectionConfig> configs{};
+    {
+        DataDirectory configDir = DataDirectory::Config("themaster");
+        auto json = configDir.ReadFile("clients.json");
+        if (!json.empty()) {
+            auto arr = nlohmann::json::parse(json);
+            if (arr.is_array()) {
+                for (const auto &val: arr) {
+                    auto raw = val.dump();
+                    ConnectionConfig config{};
+                    config.FromJson(raw);
+                    if (!config.name.empty() && (!config.url.empty() || !config.helseidUrl.empty())) {
+                        configs.push_back(config);
+                    }
+                }
+            }
+        }
+    }
+    return configs;
+}
 
 ConnectDialog::ConnectDialog(TheMasterFrame *parent) : wxDialog(parent, wxID_ANY, "Connect"), frame(parent) {
+    try {
+        for (const auto &config : ReadConfigs()) {
+            configs.push_back(std::make_shared<ConnectionConfig>(config));
+        }
+    } catch (std::exception &e) {
+        wxMessageBox(e.what(), wxT("Failed to read client configs"), wxOK | wxICON_ERROR);
+    } catch (...) {
+        wxMessageBox(wxT("Unknown type of error"), wxT("Failed to read client configs"), wxOK | wxICON_ERROR);
+    }
+
+    wxBoxSizer *configNameSizer = new wxBoxSizer(wxHORIZONTAL);
+    wxStaticText *configNameLabel = new wxStaticText(this, wxID_ANY, "Config: ");
+    configNameCtrl = new wxComboBox(this, wxID_ANY);
+    configNameSizer->Add(configNameLabel, 0, wxALL, 5);
+    configNameSizer->Add(configNameCtrl, 1, wxEXPAND | wxALL, 5);
+    for (const auto &config : configs) {
+        configNameCtrl->Append(config->name);
+    }
 
     // Create sizer for Url label and text field
     wxBoxSizer *urlSizer = new wxBoxSizer(wxHORIZONTAL);
@@ -45,6 +119,7 @@ ConnectDialog::ConnectDialog(TheMasterFrame *parent) : wxDialog(parent, wxID_ANY
 
     // Create main sizer and add to dialog
     wxBoxSizer *mainSizer = new wxBoxSizer(wxVERTICAL);
+    mainSizer->Add(configNameSizer, 1, wxEXPAND | wxALL, 5);
     mainSizer->Add(urlSizer, 1, wxEXPAND | wxALL, 5);
     mainSizer->Add(helseidUrlSizer, 1, wxEXPAND | wxALL, 5);
     mainSizer->Add(helseidClientIdSizer, 1, wxEXPAND | wxALL, 5);
@@ -52,15 +127,76 @@ ConnectDialog::ConnectDialog(TheMasterFrame *parent) : wxDialog(parent, wxID_ANY
     mainSizer->Add(buttonSizer, 0, wxALIGN_CENTER | wxALL, 5);
     this->SetSizerAndFit(mainSizer);
 
+    configNameCtrl->Bind(wxEVT_COMBOBOX, &ConnectDialog::OnSelect, this);
     connectButton->Bind(wxEVT_BUTTON, &ConnectDialog::OnConnect, this);
     cancelButton->Bind(wxEVT_BUTTON, &ConnectDialog::OnCancel, this);
 }
 
+void ConnectDialog::OnSelect(wxCommandEvent &) {
+    auto selectedWx = configNameCtrl->GetValue();
+    auto selected = selectedWx.ToStdString();
+    for (const auto &config : configs) {
+        if (config->name == selected) {
+            urlTextCtrl->SetValue(config->url);
+            helseidUrlCtrl->SetValue(config->helseidUrl);
+            helseidClientIdCtrl->SetValue(config->helseidClientId);
+            helseidSecretJwkCtrl->SetValue(config->helseidSecretJwk);
+            return;
+        }
+    }
+}
+
 void ConnectDialog::OnConnect(wxCommandEvent &) {
+    wxString configName = configNameCtrl->GetValue();
     wxString url = urlTextCtrl->GetValue();
     wxString helseidUrl = helseidUrlCtrl->GetValue();
     wxString helseidClientId = helseidClientIdCtrl->GetValue();
     wxString helseidSecretJwk = helseidSecretJwkCtrl->GetValue();
+    if (!configName.empty() && (!url.empty() || !helseidUrl.empty())) {
+        try {
+            std::string configsJson{};
+            {
+                auto configs = ReadConfigs();
+                {
+                    std::string stdConfigName = configName.ToStdString();
+                    bool found{false};
+                    for (auto &config: configs) {
+                        if (config.name == stdConfigName) {
+                            found = true;
+                            config.url = url.ToStdString();
+                            config.helseidUrl = helseidUrl.ToStdString();
+                            config.helseidClientId = helseidClientId.ToStdString();
+                            config.helseidSecretJwk = helseidSecretJwk.ToStdString();
+                        }
+                    }
+                    if (!found) {
+                        ConnectionConfig config{};
+                        config.name = stdConfigName;
+                        config.url = url.ToStdString();
+                        config.helseidUrl = helseidUrl.ToStdString();
+                        config.helseidClientId = helseidClientId.ToStdString();
+                        config.helseidSecretJwk = helseidSecretJwk.ToStdString();
+                        configs.push_back(config);
+                    }
+                }
+                auto i = 0;
+                auto arr = nlohmann::json::array();
+                for (const auto &config: configs) {
+                    auto raw = config.ToJson();
+                    arr[i++] = nlohmann::json::parse(raw);
+                }
+                configsJson = arr.dump();
+            }
+            DataDirectory configDir = DataDirectory::Config("themaster");
+            auto prevMask = umask(00177);
+            Guard resetMask{[prevMask]() { umask(prevMask); }};
+            configDir.WriteFile("clients.json", configsJson);
+        } catch (std::exception &e) {
+            wxMessageBox(e.what(), wxT("Failed to update client configs"), wxOK | wxICON_ERROR);
+        } catch (...) {
+            wxMessageBox(wxT("Unknown type of error"), wxT("Failed to update client configs"), wxOK | wxICON_ERROR);
+        }
+    }
     if (!helseidUrl.empty()) {
         HelseidLoginDialog helseidLoginDialog{this, helseidUrl.ToStdString(), helseidClientId.ToStdString()};
         helseidLoginDialog.ShowModal();
