@@ -6,6 +6,7 @@
 #define DRWHATSNOT_HELSEIDLOGINDIALOG_H
 
 #include <string>
+#include <vector>
 #include <wx/wx.h>
 
 class wxWebViewEvent;
