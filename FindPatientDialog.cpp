@@ -23,7 +23,8 @@ FindPatientDialog::FindPatientDialog(const std::shared_ptr<PatientStore> &patien
 
     // Add buttons at the bottom
     // Ok button
-    wxButton *okButton = new wxButton(this, wxID_OK, wxT("OK"));
+    okButton = new wxButton(this, wxID_OK, wxT("OK"));
+    okButton->Enable(false);
     sizerButtons->Add(okButton, 0, wxALIGN_CENTER | wxALL, 5);
 
     // Cancel button
@@ -36,6 +37,8 @@ FindPatientDialog::FindPatientDialog(const std::shared_ptr<PatientStore> &patien
     SetSizer(sizer);
 
     searchInput->Bind(wxEVT_TEXT, &FindPatientDialog::OnText, this);
+    listView->Bind(wxEVT_LIST_ITEM_SELECTED, &FindPatientDialog::OnSelect, this);
+    listView->Bind(wxEVT_LIST_ITEM_DESELECTED, &FindPatientDialog::OnSelect, this);
 }
 
 void FindPatientDialog::OnText(wxCommandEvent &e) {
@@ -79,5 +82,27 @@ void FindPatientDialog::OnText(wxCommandEvent &e) {
             patientDesc = "No name";
         }
         listView->InsertItem(i++, patientDesc);
+    }
+}
+
+void FindPatientDialog::OnSelect(wxCommandEvent &e) {
+    if (listView->GetSelectedItemCount() == 1) {
+        auto selectedIdx = listView->GetFirstSelected();
+        if (selectedIdx < patients.size()) {
+            if (patient) {
+                *patient = patients.at(selectedIdx);
+            } else {
+                patient = std::make_shared<PatientInformation>(patients.at(selectedIdx));
+            }
+        } else {
+            patient = {};
+        }
+    } else {
+        patient = {};
+    }
+    if (patient) {
+        okButton->Enable(true);
+    } else {
+        okButton->Enable(false);
     }
 }

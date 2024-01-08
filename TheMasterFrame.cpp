@@ -99,7 +99,9 @@ void TheMasterFrame::OnConnect(wxCommandEvent( &e)) {
 
 void TheMasterFrame::OnFindPatient(wxCommandEvent &e) {
     FindPatientDialog dialog{patientStore, this};
-    dialog.ShowModal();
+    if (dialog.ShowModal() == wxID_OK) {
+        patientInformation = dialog.GetPatient();
+    }
 }
 
 void TheMasterFrame::OnCreatePatient(wxCommandEvent &e) {

@@ -16,11 +16,17 @@ class FindPatientDialog : public wxDialog {
 private:
     std::shared_ptr<PatientStore> patientStore;
     std::vector<PatientInformation> patients{};
+    std::shared_ptr<PatientInformation> patient{};
     wxTextCtrl *searchInput;
     wxListView *listView;
+    wxButton *okButton;
 public:
     FindPatientDialog(const std::shared_ptr<PatientStore> &patientStore, TheMasterFrame *);
     void OnText(wxCommandEvent &e);
+    void OnSelect(wxCommandEvent &e);
+    std::shared_ptr<PatientInformation> GetPatient() const {
+        return patient;
+    }
 };
 
 
