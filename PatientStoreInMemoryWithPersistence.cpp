@@ -65,6 +65,7 @@ static void StorePatients(const std::vector<PatientInformation> &patients) {
     std::string jsonString{};
     {
         auto json = nlohmann::json::array();
+        auto i = 0;
         for (const auto &patient: patients) {
             auto pj = nlohmann::json::object();
             pj["patientId"] = patient.GetPatientId();
@@ -94,6 +95,7 @@ static void StorePatients(const std::vector<PatientInformation> &patients) {
                 default:
                     pj["gender"] = "";
             }
+            json[i++] = pj;
         }
         jsonString = json.dump();
     }
