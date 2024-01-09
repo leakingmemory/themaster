@@ -36,9 +36,11 @@ private:
     std::string helseidRefreshToken{};
     std::time_t helseidRefreshTokenValidTo{0};
     wxListView *header;
+    wxListView *prescriptions;
 public:
     TheMasterFrame();
     void UpdateHeader();
+    void UpdateMedications();
     void OnConnect(wxCommandEvent &e);
     void OnFindPatient(wxCommandEvent &e);
     void OnCreatePatient(wxCommandEvent &e);

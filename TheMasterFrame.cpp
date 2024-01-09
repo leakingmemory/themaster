@@ -16,6 +16,7 @@
 #include <sfmbasisapi/fhir/parameters.h>
 #include <sfmbasisapi/fhir/bundle.h>
 #include <sfmbasisapi/fhir/value.h>
+#include <sfmbasisapi/fhir/medstatement.h>
 #include <cpprest/http_client.h>
 #include <wx/listctrl.h>
 #include "MedBundleData.h"
@@ -46,7 +47,7 @@ TheMasterFrame::TheMasterFrame() : wxFrame(nullptr, wxID_ANY, "The Master"),
 
     wxBoxSizer* sizer = new wxBoxSizer(wxVERTICAL);
 
-    header = new wxListView(this, wxID_ANY);
+    header = new wxListView(this, wxID_ANY, wxDefaultPosition, wxSize(-1, 100));
     header->AppendColumn(wxT(""));
     header->AppendColumn(wxT(""));
     header->AppendColumn(wxT(""));
@@ -61,7 +62,13 @@ TheMasterFrame::TheMasterFrame() : wxFrame(nullptr, wxID_ANY, "The Master"),
     header->SetItem(1, 4, wxT("KJ Meds:"));
     header->InsertItem(2, wxT("KJ Locked:"));
     header->SetItem(2, 2, wxT("RF Locked:"));
-    sizer->Add(header, 1, wxEXPAND | wxALL, 5);
+    sizer->Add(header, 0, wxEXPAND | wxALL, 5);
+
+    prescriptions = new wxListView(this, wxID_ANY);
+    prescriptions->AppendColumn(wxT("Name"));
+    sizer->Add(prescriptions, 1, wxEXPAND | wxALL, 5);
+
+    SetSizerAndFit(sizer);
 
     Bind(wxEVT_MENU, &TheMasterFrame::OnConnect, this, TheMaster_Connect_Id);
     Bind(wxEVT_MENU, &TheMasterFrame::OnFindPatient, this, TheMaster_FindPatient_Id);
@@ -89,6 +96,20 @@ void TheMasterFrame::UpdateHeader() {
         header->SetItem(1, 5, wxT(""));
         header->SetItem(2, 1, wxT(""));
         header->SetItem(1, 3, wxT(""));
+    }
+}
+
+void TheMasterFrame::UpdateMedications() {
+    prescriptions->ClearAll();
+    prescriptions->AppendColumn(wxT("Name"));
+    auto pos = 0;
+    for (const auto &bundleEntry : medicationBundle->medBundle->GetEntries()) {
+        auto resource = bundleEntry.GetResource();
+        auto resourceType = resource->GetResourceType();
+        auto medicationStatement = std::dynamic_pointer_cast<FhirMedicationStatement>(resource);
+        if (medicationStatement) {
+            prescriptions->InsertItem(pos++, medicationStatement->GetMedicationReference().GetDisplay());
+        }
     }
 }
 
@@ -335,6 +356,7 @@ void TheMasterFrame::OnGetMedication(wxCommandEvent &e) {
                 .rfHarLaste = rfHarLaste
             };
             UpdateHeader();
+            UpdateMedications();
         }
     }
 }
