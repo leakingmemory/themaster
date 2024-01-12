@@ -288,7 +288,10 @@ void TheMasterFrame::OnGetMedication(wxCommandEvent &e) {
                 requestBody = requestParameters.ToJson();
             }
             request.set_request_uri("patient/$getMedication");
-            request.set_body(requestBody);
+            {
+                auto jsonString = requestBody.serialize();
+                request.set_body(jsonString, "application/fhir+json; charset=utf-8");
+            }
         }
         web::http::client::http_client client{apiUrl};
         return client.request(request);
@@ -495,7 +498,11 @@ void TheMasterFrame::OnSendMedication(wxCommandEvent &e) {
                 }
                 sendMedicationParameters.AddParameter("medication", medBundle);
             }
-            request.set_body(sendMedicationParameters.ToJson());
+            {
+                auto json = sendMedicationParameters.ToJson();
+                auto jsonString = json.serialize();
+                request.set_body(jsonString, "application/fhir+json; charset=utf-8");
+            }
         }
         web::http::client::http_client client{url};
         responseTask = client.request(request);
@@ -510,21 +517,47 @@ void TheMasterFrame::OnSendMedication(wxCommandEvent &e) {
                 wxTheApp->GetTopWindow()->GetEventHandler()->CallAfter([waitingDialog]() {
                     waitingDialog->SetMessage("Receiving results...");
                 });
-                response.extract_json().then([waitingDialog, sendMedResponse, sendMedResponseMtx](const pplx::task<web::json::value> &responseBodyTask) {
-                    try {
-                        auto responseBody = responseBodyTask.get();
+                auto contentType = response.headers().content_type();
+                if (!contentType.starts_with("application/fhir+json")) {
+                    wxTheApp->GetTopWindow()->GetEventHandler()->CallAfter([waitingDialog, contentType]() {
+                        waitingDialog->Close();
+                        std::string msg{"Wrong content type in response: "};
+                        msg.append(contentType);
+                        wxMessageBox(msg, "Error", wxICON_ERROR);
+                    });
+                } else {
+                    response.extract_json(true).then([waitingDialog, sendMedResponse, sendMedResponseMtx](
+                            const pplx::task<web::json::value> &responseBodyTask) {
                         try {
-                            wxTheApp->GetTopWindow()->GetEventHandler()->CallAfter([waitingDialog]() {
-                                waitingDialog->SetMessage("Decoding response...");
-                            });
-                            FhirParameters responseParameterBundle = FhirParameters::Parse(responseBody);
-                            {
-                                std::lock_guard lock{*sendMedResponseMtx};
-                                *sendMedResponse = std::make_unique<FhirParameters>(std::move(responseParameterBundle));
+                            auto responseBody = responseBodyTask.get();
+                            try {
+                                wxTheApp->GetTopWindow()->GetEventHandler()->CallAfter([waitingDialog]() {
+                                    waitingDialog->SetMessage("Decoding response...");
+                                });
+                                FhirParameters responseParameterBundle = FhirParameters::Parse(responseBody);
+                                {
+                                    std::lock_guard lock{*sendMedResponseMtx};
+                                    *sendMedResponse = std::make_unique<FhirParameters>(
+                                            std::move(responseParameterBundle));
+                                }
+                                wxTheApp->GetTopWindow()->GetEventHandler()->CallAfter(
+                                        [waitingDialog, sendMedResponse]() {
+                                            waitingDialog->Close();
+                                        });
+                            } catch (std::exception &e) {
+                                std::string error = e.what();
+                                wxTheApp->GetTopWindow()->GetEventHandler()->CallAfter([waitingDialog, error]() {
+                                    waitingDialog->Close();
+                                    std::string msg{"Error: std::exception: "};
+                                    msg.append(error);
+                                    wxMessageBox(msg, "Error", wxICON_ERROR);
+                                });
+                            } catch (...) {
+                                wxTheApp->GetTopWindow()->GetEventHandler()->CallAfter([waitingDialog]() {
+                                    waitingDialog->Close();
+                                    wxMessageBox("Error: Decoding failed", "Error", wxICON_ERROR);
+                                });
                             }
-                            wxTheApp->GetTopWindow()->GetEventHandler()->CallAfter([waitingDialog, sendMedResponse]() {
-                                waitingDialog->Close();
-                            });
                         } catch (std::exception &e) {
                             std::string error = e.what();
                             wxTheApp->GetTopWindow()->GetEventHandler()->CallAfter([waitingDialog, error]() {
@@ -536,24 +569,11 @@ void TheMasterFrame::OnSendMedication(wxCommandEvent &e) {
                         } catch (...) {
                             wxTheApp->GetTopWindow()->GetEventHandler()->CallAfter([waitingDialog]() {
                                 waitingDialog->Close();
-                                wxMessageBox("Error: Decoding failed", "Error", wxICON_ERROR);
+                                wxMessageBox("Error: Send medication failed", "Error", wxICON_ERROR);
                             });
                         }
-                    } catch (std::exception &e) {
-                        std::string error = e.what();
-                        wxTheApp->GetTopWindow()->GetEventHandler()->CallAfter([waitingDialog, error]() {
-                            waitingDialog->Close();
-                            std::string msg{"Error: std::exception: "};
-                            msg.append(error);
-                            wxMessageBox(msg, "Error", wxICON_ERROR);
-                        });
-                    } catch (...) {
-                        wxTheApp->GetTopWindow()->GetEventHandler()->CallAfter([waitingDialog]() {
-                            waitingDialog->Close();
-                            wxMessageBox("Error: Send medication failed", "Error", wxICON_ERROR);
-                        });
-                    }
-                });
+                    });
+                }
             } catch (...) {
                 wxTheApp->GetTopWindow()->GetEventHandler()->CallAfter([waitingDialog]() {
                     waitingDialog->Close();
