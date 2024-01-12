@@ -251,11 +251,12 @@ void ConnectDialog::OnConnect(wxCommandEvent &) {
                     }
                     auto respTask = client.request(req);
                     auto frameWeakRefDispatcher = frame->GetWeakRefDispatcher();
-                    respTask.then([frameWeakRefDispatcher, helseidUrl, helseidClientId, helseidSecretJwk](const pplx::task<web::http::http_response> &task) {
+                    auto helseidScopes = helseidLoginDialog.GetScopes();
+                    respTask.then([frameWeakRefDispatcher, helseidUrl, helseidClientId, helseidSecretJwk, helseidScopes](const pplx::task<web::http::http_response> &task) {
                         try {
                             auto response = task.get();
                             if ((response.status_code() / 100) == 2) {
-                                response.extract_json().then([frameWeakRefDispatcher, helseidUrl, helseidClientId, helseidSecretJwk](const pplx::task<web::json::value> &jsonTask) {
+                                response.extract_json().then([frameWeakRefDispatcher, helseidUrl, helseidClientId, helseidSecretJwk, helseidScopes](const pplx::task<web::json::value> &jsonTask) {
                                     try {
                                         auto json = jsonTask.get();
                                         if (json.has_string_field("refresh_token") && json.has_number_field("rt_expires_in")) {
@@ -263,9 +264,9 @@ void ConnectDialog::OnConnect(wxCommandEvent &) {
                                             long rt_expires = json.at("rt_expires_in").as_number().to_int64();
                                             std::cout << "Refresh token: " << refresh_token << "\n";
                                             std::cout << "Expires: " << rt_expires << "\n";
-                                            wxTheApp->GetTopWindow()->GetEventHandler()->CallAfter([frameWeakRefDispatcher, helseidUrl, helseidClientId, helseidSecretJwk, refresh_token, rt_expires]() {
-                                                frameWeakRefDispatcher.Invoke([helseidUrl, helseidClientId, helseidSecretJwk, refresh_token, rt_expires] (TheMasterFrame *frame) {
-                                                    frame->SetHelseid(helseidUrl.ToStdString(), helseidClientId.ToStdString(), helseidSecretJwk.ToStdString(), refresh_token, rt_expires);
+                                            wxTheApp->GetTopWindow()->GetEventHandler()->CallAfter([frameWeakRefDispatcher, helseidUrl, helseidClientId, helseidSecretJwk, helseidScopes, refresh_token, rt_expires]() {
+                                                frameWeakRefDispatcher.Invoke([helseidUrl, helseidClientId, helseidSecretJwk, helseidScopes, refresh_token, rt_expires] (TheMasterFrame *frame) {
+                                                    frame->SetHelseid(helseidUrl.ToStdString(), helseidClientId.ToStdString(), helseidSecretJwk.ToStdString(), helseidScopes, refresh_token, rt_expires);
                                                 });
                                             });
                                         } else {

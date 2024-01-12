@@ -17,6 +17,8 @@
 #include <sfmbasisapi/fhir/bundle.h>
 #include <sfmbasisapi/fhir/value.h>
 #include <sfmbasisapi/fhir/medstatement.h>
+#include <jjwtid/Jwt.h>
+#include <jjwtid/OidcTokenRequest.h>
 #include <cpprest/http_client.h>
 #include <wx/listctrl.h>
 #include "MedBundleData.h"
@@ -134,6 +136,85 @@ void TheMasterFrame::OnCreatePatient(wxCommandEvent &e) {
     }
 }
 
+pplx::task<std::string> TheMasterFrame::GetAccessToken() {
+    if (accessToken && !accessToken->empty()) {
+        std::string atWithoutSignature{};
+        {
+            Jwt unverifierJwt{*accessToken};
+            auto unverifiedHeader = unverifierJwt.GetUnverifiedHeader();
+            auto unverifiedBody = unverifierJwt.GetUnverifiedBody();
+            if (!unverifiedHeader.empty() || !unverifiedBody.empty()) {
+                atWithoutSignature = unverifiedHeader;
+                atWithoutSignature.append(".");
+                atWithoutSignature.append(unverifiedBody);
+            } else {
+                atWithoutSignature = *accessToken;
+            }
+        }
+        Jwt jwt{atWithoutSignature};
+        auto body = jwt.Body();
+        if (body->contains("exp")) {
+            auto exp = body->GetInt("exp");
+            if ((exp - 60) >= std::time(nullptr)) {
+                std::string at{*accessToken};
+                return pplx::task<std::string>([at] () {return at;});
+            }
+        }
+    }
+    if (accessToken) {
+        accessToken->clear();
+    } else {
+        accessToken = std::make_shared<std::string>();
+    }
+    if (!helseidRefreshToken.empty()) {
+        OidcTokenRequest tokenRequest{helseidUrl, helseidClientId, helseidSecretJwk, helseidScopes, helseidRefreshToken};
+        auto requestData = tokenRequest.GetTokenRequest();
+        web::http::client::http_client client{helseidUrl};
+        web::http::http_request req{web::http::methods::POST};
+        req.set_request_uri("/connect/token");
+        {
+            std::string rqBody{};
+            {
+                std::stringstream sstr{};
+                auto iterator = requestData.params.begin();
+                if (iterator != requestData.params.end()) {
+                    const auto &param = *iterator;
+                    sstr << web::uri::encode_data_string(param.first) << "=";
+                    sstr << web::uri::encode_data_string(param.second);
+                    ++iterator;
+                }
+                while (iterator != requestData.params.end()) {
+                    const auto &param = *iterator;
+                    sstr << "&" << web::uri::encode_data_string(param.first) << "=";
+                    sstr << web::uri::encode_data_string(param.second);
+                    ++iterator;
+                }
+                rqBody = sstr.str();
+            }
+            std::cout << rqBody << "\n";
+            req.set_body(rqBody, "application/x-www-form-urlencoded; charset=utf-8");
+        }
+        auto respTask = client.request(req);
+        std::shared_ptr<std::string> at = accessToken;
+        return respTask.then([at] (const web::http::http_response &response) {
+            if ((response.status_code() / 100) == 2) {
+                return response.extract_json().then([at] (const web::json::value &json) {
+                    if (json.has_string_field("access_token")) {
+                        *at = json.at("access_token").as_string();
+                        return *at;
+                    } else {
+                        std::cerr << "Missing access_token\n";
+                        throw std::exception();
+                    }
+                });
+            } else {
+                throw std::exception();
+            }
+        });
+    }
+    return pplx::task<std::string>([] () {return std::string();});
+}
+
 void TheMasterFrame::OnGetMedication(wxCommandEvent &e) {
     if (!patientInformation) {
         wxMessageBox("Error: No patient information provided", "Error", wxICON_ERROR);
@@ -143,56 +224,65 @@ void TheMasterFrame::OnGetMedication(wxCommandEvent &e) {
         wxMessageBox("Error: Not connected", "Error", wxICON_ERROR);
         return;
     }
+    std::string apiUrl = url;
+
+    auto patient = std::make_shared<FhirPatient>();
+    {
+        {
+            boost::uuids::uuid uuid = boost::uuids::random_generator()();
+            std::string uuid_string = to_string(uuid);
+            patient->SetId(uuid_string);
+        }
+        patient->SetProfile("http://ehelse.no/fhir/StructureDefinition/sfm-Patient");
+        {
+            std::vector <FhirIdentifier> identifiers{};
+            auto patientIdType = this->patientInformation->GetPatientIdType();
+            if (patientIdType == PatientIdType::FODSELSNUMMER) {
+                identifiers.emplace_back(
+                        FhirCodeableConcept("http://hl7.no/fhir/NamingSystem/FNR", "FNR-nummer", ""),
+                        "official", "urn:oid:2.16.578.1.12.4.1.4.1",
+                        this->patientInformation->GetPatientId());
+                patient->SetIdentifiers(identifiers);
+            } else if (patientIdType == PatientIdType::DNUMMER) {
+                identifiers.emplace_back(
+                        FhirCodeableConcept("http://hl7.no/fhir/NamingSystem/DNR", "Dnummer", ""),
+                        "official", "urn:oid:2.16.578.1.12.4.1.4.2",
+                        this->patientInformation->GetPatientId());
+                patient->SetIdentifiers(identifiers);
+            }
+        }
+        patient->SetActive(true);
+        patient->SetName({{"official", this->patientInformation->GetFamilyName(),
+                           this->patientInformation->GetGivenName()}});
+        {
+            auto dob = this->patientInformation->GetDateOfBirth();
+            if (!dob.empty()) {
+                patient->SetBirthDate(dob);
+            }
+        }
+        patient->SetGender(
+                this->patientInformation->GetGender() == PersonGender::FEMALE ? "female" : "male");
+        auto postCode = this->patientInformation->GetPostCode();
+        auto city = this->patientInformation->GetCity();
+        if (!postCode.empty() && !city.empty()) {
+            FhirAddress address{{}, "home", "physical", city, postCode};
+            patient->SetAddress({address});
+        }
+    }
 
     pplx::task<web::http::http_response> responseTask;
-    {
+    auto accessTokenTask = GetAccessToken();
+    responseTask = accessTokenTask.then([apiUrl, patient] (const std::string &accessToken) {
         web::http::http_request request{web::http::methods::POST};
+        if (!accessToken.empty()) {
+            std::cout << "Access token: " << accessToken << "\n";
+            std::string bearer{"Bearer "};
+            bearer.append(accessToken);
+            request.headers().add("Authorization", bearer);
+        }
         {
             web::json::value requestBody{};
             {
-                auto patient = std::make_shared<FhirPatient>();
-                {
-                    {
-                        boost::uuids::uuid uuid = boost::uuids::random_generator()();
-                        std::string uuid_string = to_string(uuid);
-                        patient->SetId(uuid_string);
-                    }
-                    patient->SetProfile("http://ehelse.no/fhir/StructureDefinition/sfm-Patient");
-                    {
-                        std::vector <FhirIdentifier> identifiers{};
-                        auto patientIdType = this->patientInformation->GetPatientIdType();
-                        if (patientIdType == PatientIdType::FODSELSNUMMER) {
-                            identifiers.emplace_back(
-                                    FhirCodeableConcept("http://hl7.no/fhir/NamingSystem/FNR", "FNR-nummer", ""),
-                                    "official", "urn:oid:2.16.578.1.12.4.1.4.1",
-                                    this->patientInformation->GetPatientId());
-                            patient->SetIdentifiers(identifiers);
-                        } else if (patientIdType == PatientIdType::DNUMMER) {
-                            identifiers.emplace_back(
-                                    FhirCodeableConcept("http://hl7.no/fhir/NamingSystem/DNR", "Dnummer", ""),
-                                    "official", "urn:oid:2.16.578.1.12.4.1.4.2",
-                                    this->patientInformation->GetPatientId());
-                            patient->SetIdentifiers(identifiers);
-                        }
-                    }
-                    patient->SetActive(true);
-                    patient->SetName({{"official", this->patientInformation->GetFamilyName(),
-                                       this->patientInformation->GetGivenName()}});
-                    {
-                        auto dob = this->patientInformation->GetDateOfBirth();
-                        if (!dob.empty()) {
-                            patient->SetBirthDate(dob);
-                        }
-                    }
-                    patient->SetGender(
-                            this->patientInformation->GetGender() == PersonGender::FEMALE ? "female" : "male");
-                    auto postCode = this->patientInformation->GetPostCode();
-                    auto city = this->patientInformation->GetCity();
-                    if (!postCode.empty() && !city.empty()) {
-                        FhirAddress address{{}, "home", "physical", city, postCode};
-                        patient->SetAddress({address});
-                    }
-                }
                 FhirParameters requestParameters{};
                 requestParameters.AddParameter("patient", patient);
                 requestBody = requestParameters.ToJson();
@@ -200,9 +290,9 @@ void TheMasterFrame::OnGetMedication(wxCommandEvent &e) {
             request.set_request_uri("patient/$getMedication");
             request.set_body(requestBody);
         }
-        web::http::client::http_client client{url};
-        responseTask = client.request(request);
-    }
+        web::http::client::http_client client{apiUrl};
+        return client.request(request);
+    });
 
     std::shared_ptr<std::mutex> getMedResponseMtx = std::make_shared<std::mutex>();
     std::shared_ptr<std::unique_ptr<FhirParameters>> getMedResponse = std::make_shared<std::unique_ptr<FhirParameters>>();
@@ -497,10 +587,12 @@ WeakRefUiDispatcherRef<TheMasterFrame> TheMasterFrame::GetWeakRefDispatcher() {
 }
 
 void TheMasterFrame::SetHelseid(const std::string &url, const std::string &clientId, const std::string &secretJwk,
-                                const std::string &refreshToken, long expiresIn) {
+                                const std::vector<std::string> &scopes, const std::string &refreshToken,
+                                long expiresIn) {
     helseidUrl = url;
     helseidClientId = clientId;
     helseidSecretJwk = secretJwk;
+    helseidScopes = scopes;
     helseidRefreshToken = refreshToken;
     helseidRefreshTokenValidTo = std::time(NULL) + expiresIn - 60;
 }

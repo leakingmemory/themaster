@@ -14,6 +14,9 @@ class PatientStore;
 class PatientInformation;
 class MedBundleData;
 class wxListView;
+namespace pplx {
+    template<class ReturnType> class task;
+}
 
 enum {
     TheMaster_Connect_Id = 1,
@@ -33,8 +36,10 @@ private:
     std::string helseidUrl{};
     std::string helseidClientId{};
     std::string helseidSecretJwk{};
+    std::vector<std::string> helseidScopes{};
     std::string helseidRefreshToken{};
     std::time_t helseidRefreshTokenValidTo{0};
+    std::shared_ptr<std::string> accessToken{};
     wxListView *header;
     wxListView *prescriptions;
 public:
@@ -44,10 +49,11 @@ public:
     void OnConnect(wxCommandEvent &e);
     void OnFindPatient(wxCommandEvent &e);
     void OnCreatePatient(wxCommandEvent &e);
+    pplx::task<std::string> GetAccessToken();
     void OnGetMedication(wxCommandEvent &e);
     void OnSendMedication(wxCommandEvent &e);
     WeakRefUiDispatcherRef<TheMasterFrame> GetWeakRefDispatcher();
-    void SetHelseid(const std::string &url, const std::string &clientId, const std::string &secretJwk, const std::string &refreshToken, long expiresIn);
+    void SetHelseid(const std::string &url, const std::string &clientId, const std::string &secretJwk, const std::vector<std::string> &scopes, const std::string &refreshToken, long expiresIn);
     void Connect(const std::string &url);
 };
 
