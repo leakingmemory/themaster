@@ -23,7 +23,8 @@ enum {
     TheMaster_FindPatient_Id = 2,
     TheMaster_CreatePatient_Id = 3,
     TheMaster_GetMedication_Id = 4,
-    TheMaster_SendMedication_Id = 5
+    TheMaster_SendMedication_Id = 5,
+    TheMaster_SaveLast_Id = 6
 };
 
 class TheMasterFrame : public wxFrame {
@@ -32,6 +33,7 @@ private:
     std::shared_ptr<PatientStore> patientStore{};
     std::shared_ptr<PatientInformation> patientInformation;
     std::unique_ptr<MedBundleData> medicationBundle{};
+    std::string lastResponse{};
     std::string url{};
     std::string helseidUrl{};
     std::string helseidClientId{};
@@ -52,6 +54,7 @@ public:
     pplx::task<std::string> GetAccessToken();
     void OnGetMedication(wxCommandEvent &e);
     void OnSendMedication(wxCommandEvent &e);
+    void OnSaveLast(wxCommandEvent &e);
     WeakRefUiDispatcherRef<TheMasterFrame> GetWeakRefDispatcher();
     void SetHelseid(const std::string &url, const std::string &clientId, const std::string &secretJwk, const std::vector<std::string> &scopes, const std::string &refreshToken, long expiresIn);
     void Connect(const std::string &url);

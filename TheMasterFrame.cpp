@@ -42,6 +42,7 @@ TheMasterFrame::TheMasterFrame() : wxFrame(nullptr, wxID_ANY, "The Master"),
     serverMenu->Append(TheMaster_Connect_Id, "Connect");
     serverMenu->Append(TheMaster_GetMedication_Id, "Get medication");
     serverMenu->Append(TheMaster_SendMedication_Id, "Send medication");
+    serverMenu->Append(TheMaster_SaveLast_Id, "Save last response");
     auto *menuBar = new wxMenuBar();
     menuBar->Append(serverMenu, "Server");
     menuBar->Append(patientMenu, "Patient");
@@ -77,6 +78,7 @@ TheMasterFrame::TheMasterFrame() : wxFrame(nullptr, wxID_ANY, "The Master"),
     Bind(wxEVT_MENU, &TheMasterFrame::OnCreatePatient, this, TheMaster_CreatePatient_Id);
     Bind(wxEVT_MENU, &TheMasterFrame::OnGetMedication, this, TheMaster_GetMedication_Id);
     Bind(wxEVT_MENU, &TheMasterFrame::OnSendMedication, this, TheMaster_SendMedication_Id);
+    Bind(wxEVT_MENU, &TheMasterFrame::OnSaveLast, this, TheMaster_SaveLast_Id);
 }
 
 void TheMasterFrame::UpdateHeader() {
@@ -299,8 +301,9 @@ void TheMasterFrame::OnGetMedication(wxCommandEvent &e) {
 
     std::shared_ptr<std::mutex> getMedResponseMtx = std::make_shared<std::mutex>();
     std::shared_ptr<std::unique_ptr<FhirParameters>> getMedResponse = std::make_shared<std::unique_ptr<FhirParameters>>();
+    std::shared_ptr<std::string> rawResponse = std::make_shared<std::string>();
     std::shared_ptr<WaitingForApiDialog> waitingDialog = std::make_shared<WaitingForApiDialog>(this, "Retrieving medication records", "Requested medication bundle...");
-    responseTask.then([waitingDialog, getMedResponse, getMedResponseMtx] (const pplx::task<web::http::http_response> &responseTask) {
+    responseTask.then([waitingDialog, getMedResponse, getMedResponseMtx, rawResponse] (const pplx::task<web::http::http_response> &responseTask) {
         try {
             auto response = responseTask.get();
             try {
@@ -316,14 +319,22 @@ void TheMasterFrame::OnGetMedication(wxCommandEvent &e) {
                         wxMessageBox(msg, "Error", wxICON_ERROR);
                     });
                 } else {
-                    response.extract_json(true).then([waitingDialog, getMedResponse, getMedResponseMtx](
+                    response.extract_json(true).then([waitingDialog, getMedResponse, getMedResponseMtx, rawResponse](
                             const pplx::task<web::json::value> &responseBodyTask) {
                         try {
                             auto responseBody = responseBodyTask.get();
                             try {
-                                wxTheApp->GetTopWindow()->GetEventHandler()->CallAfter([waitingDialog]() {
-                                    waitingDialog->SetMessage("Decoding data...");
-                                });
+                                {
+                                    auto responseBodyStr = responseBody.serialize();
+                                    wxTheApp->GetTopWindow()->GetEventHandler()->CallAfter(
+                                            [waitingDialog, rawResponse, responseBodyStr, getMedResponseMtx]() {
+                                                {
+                                                    std::lock_guard lock{*getMedResponseMtx};
+                                                    *rawResponse = responseBodyStr;
+                                                }
+                                                waitingDialog->SetMessage("Decoding data...");
+                                            });
+                                }
                                 FhirParameters responseParameterBundle = FhirParameters::Parse(responseBody);
                                 {
                                     std::lock_guard lock{*getMedResponseMtx};
@@ -382,6 +393,7 @@ void TheMasterFrame::OnGetMedication(wxCommandEvent &e) {
     {
         std::lock_guard lock{*getMedResponseMtx};
         getMedResp = std::move(*getMedResponse);
+        lastResponse = *rawResponse;
     }
     if (getMedResp) {
         std::shared_ptr<FhirBundle> medBundle{};
@@ -613,6 +625,15 @@ void TheMasterFrame::OnSendMedication(wxCommandEvent &e) {
     str << "Recalled " << recallCount << (recallCount == 1 ? " prescription and prescribed " : " prescriptions and prescribed ")
         << prescriptionCount << (prescriptionCount == 1 ? " prescription." : " prescriptions.");
     wxMessageBox(str.str(), wxT("Successful sending"), wxICON_INFORMATION);
+}
+
+void TheMasterFrame::OnSaveLast(wxCommandEvent &e) {
+    wxFileDialog saveFileDialog(this, _("Save last response"), "", "", "Json files (*.json)|*.json", wxFD_SAVE|wxFD_OVERWRITE_PROMPT);
+    if (saveFileDialog.ShowModal() == wxID_CANCEL)
+        return; // the user changed their mind
+    std::ofstream ofs{saveFileDialog.GetFilename().ToStdString()};
+    ofs << lastResponse;
+    ofs.close();
 }
 
 WeakRefUiDispatcherRef<TheMasterFrame> TheMasterFrame::GetWeakRefDispatcher() {
