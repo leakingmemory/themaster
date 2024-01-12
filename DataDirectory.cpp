@@ -7,6 +7,7 @@
 #include <iostream>
 #include <fstream>
 #include <unistd.h>
+#include <sstream>
 
 DataDirectory::DataDirectory(const std::string &parent, const std::string &name) : path(parent) {
     if (!path.ends_with("/")) {
