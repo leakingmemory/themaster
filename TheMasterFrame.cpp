@@ -304,21 +304,47 @@ void TheMasterFrame::OnGetMedication(wxCommandEvent &e) {
                 wxTheApp->GetTopWindow()->GetEventHandler()->CallAfter([waitingDialog]() {
                     waitingDialog->SetMessage("Downloading data...");
                 });
-                response.extract_json().then([waitingDialog, getMedResponse, getMedResponseMtx](const pplx::task<web::json::value> &responseBodyTask) {
-                    try {
-                        auto responseBody = responseBodyTask.get();
+                auto contentType = response.headers().content_type();
+                if (!contentType.starts_with("application/fhir+json")) {
+                    wxTheApp->GetTopWindow()->GetEventHandler()->CallAfter([waitingDialog, contentType]() {
+                        waitingDialog->Close();
+                        std::string msg{"Wrong content type in response: "};
+                        msg.append(contentType);
+                        wxMessageBox(msg, "Error", wxICON_ERROR);
+                    });
+                } else {
+                    response.extract_json(true).then([waitingDialog, getMedResponse, getMedResponseMtx](
+                            const pplx::task<web::json::value> &responseBodyTask) {
                         try {
-                            wxTheApp->GetTopWindow()->GetEventHandler()->CallAfter([waitingDialog]() {
-                                waitingDialog->SetMessage("Decoding data...");
-                            });
-                            FhirParameters responseParameterBundle = FhirParameters::Parse(responseBody);
-                            {
-                                std::lock_guard lock{*getMedResponseMtx};
-                                *getMedResponse = std::make_unique<FhirParameters>(std::move(responseParameterBundle));
+                            auto responseBody = responseBodyTask.get();
+                            try {
+                                wxTheApp->GetTopWindow()->GetEventHandler()->CallAfter([waitingDialog]() {
+                                    waitingDialog->SetMessage("Decoding data...");
+                                });
+                                FhirParameters responseParameterBundle = FhirParameters::Parse(responseBody);
+                                {
+                                    std::lock_guard lock{*getMedResponseMtx};
+                                    *getMedResponse = std::make_unique<FhirParameters>(
+                                            std::move(responseParameterBundle));
+                                }
+                                wxTheApp->GetTopWindow()->GetEventHandler()->CallAfter(
+                                        [waitingDialog, getMedResponse]() {
+                                            waitingDialog->Close();
+                                        });
+                            } catch (std::exception &e) {
+                                std::string error = e.what();
+                                wxTheApp->GetTopWindow()->GetEventHandler()->CallAfter([waitingDialog, error]() {
+                                    waitingDialog->Close();
+                                    std::string msg{"Error: std::exception: "};
+                                    msg.append(error);
+                                    wxMessageBox(msg, "Error", wxICON_ERROR);
+                                });
+                            } catch (...) {
+                                wxTheApp->GetTopWindow()->GetEventHandler()->CallAfter([waitingDialog]() {
+                                    waitingDialog->Close();
+                                    wxMessageBox("Error: Decoding failed", "Error", wxICON_ERROR);
+                                });
                             }
-                            wxTheApp->GetTopWindow()->GetEventHandler()->CallAfter([waitingDialog, getMedResponse]() {
-                                waitingDialog->Close();
-                            });
                         } catch (std::exception &e) {
                             std::string error = e.what();
                             wxTheApp->GetTopWindow()->GetEventHandler()->CallAfter([waitingDialog, error]() {
@@ -330,24 +356,11 @@ void TheMasterFrame::OnGetMedication(wxCommandEvent &e) {
                         } catch (...) {
                             wxTheApp->GetTopWindow()->GetEventHandler()->CallAfter([waitingDialog]() {
                                 waitingDialog->Close();
-                                wxMessageBox("Error: Decoding failed", "Error", wxICON_ERROR);
+                                wxMessageBox("Error: Downloading failed", "Error", wxICON_ERROR);
                             });
                         }
-                    } catch (std::exception &e) {
-                        std::string error = e.what();
-                        wxTheApp->GetTopWindow()->GetEventHandler()->CallAfter([waitingDialog, error]() {
-                            waitingDialog->Close();
-                            std::string msg{"Error: std::exception: "};
-                            msg.append(error);
-                            wxMessageBox(msg, "Error", wxICON_ERROR);
-                        });
-                    } catch (...) {
-                        wxTheApp->GetTopWindow()->GetEventHandler()->CallAfter([waitingDialog]() {
-                            waitingDialog->Close();
-                            wxMessageBox("Error: Downloading failed", "Error", wxICON_ERROR);
-                        });
-                    }
-                });
+                    });
+                }
             } catch (...) {
                 wxTheApp->GetTopWindow()->GetEventHandler()->CallAfter([waitingDialog]() {
                     waitingDialog->Close();
