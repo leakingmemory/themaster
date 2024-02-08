@@ -262,11 +262,12 @@ void ConnectDialog::OnConnect(wxCommandEvent &) {
                                         if (json.has_string_field("refresh_token") && json.has_number_field("rt_expires_in")) {
                                             std::string refresh_token = json.at("refresh_token").as_string();
                                             long rt_expires = json.at("rt_expires_in").as_number().to_int64();
+                                            std::string id_token = json.at("id_token").as_string();
                                             std::cout << "Refresh token: " << refresh_token << "\n";
                                             std::cout << "Expires: " << rt_expires << "\n";
-                                            wxTheApp->GetTopWindow()->GetEventHandler()->CallAfter([frameWeakRefDispatcher, helseidUrl, helseidClientId, helseidSecretJwk, helseidScopes, refresh_token, rt_expires]() {
-                                                frameWeakRefDispatcher.Invoke([helseidUrl, helseidClientId, helseidSecretJwk, helseidScopes, refresh_token, rt_expires] (TheMasterFrame *frame) {
-                                                    frame->SetHelseid(helseidUrl.ToStdString(), helseidClientId.ToStdString(), helseidSecretJwk.ToStdString(), helseidScopes, refresh_token, rt_expires);
+                                            wxTheApp->GetTopWindow()->GetEventHandler()->CallAfter([frameWeakRefDispatcher, helseidUrl, helseidClientId, helseidSecretJwk, helseidScopes, refresh_token, rt_expires, id_token]() {
+                                                frameWeakRefDispatcher.Invoke([helseidUrl, helseidClientId, helseidSecretJwk, helseidScopes, refresh_token, rt_expires, id_token] (TheMasterFrame *frame) {
+                                                    frame->SetHelseid(helseidUrl.ToStdString(), helseidClientId.ToStdString(), helseidSecretJwk.ToStdString(), helseidScopes, refresh_token, rt_expires, id_token);
                                                 });
                                             });
                                         } else {

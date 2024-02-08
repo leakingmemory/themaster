@@ -9,6 +9,7 @@
 #include <memory>
 #include <ctime>
 #include "WeakRefUiDispatcher.h"
+#include "PrescriptionData.h"
 
 class PatientStore;
 class PatientInformation;
@@ -24,7 +25,9 @@ enum {
     TheMaster_CreatePatient_Id = 3,
     TheMaster_GetMedication_Id = 4,
     TheMaster_SendMedication_Id = 5,
-    TheMaster_SaveLast_Id = 6
+    TheMaster_SaveLast_Id = 6,
+    TheMaster_SaveBundle_Id = 7,
+    TheMaster_PrescribeMagistral_Id = 8
 };
 
 class TheMasterFrame : public wxFrame {
@@ -41,6 +44,7 @@ private:
     std::vector<std::string> helseidScopes{};
     std::string helseidRefreshToken{};
     std::time_t helseidRefreshTokenValidTo{0};
+    std::string helseidIdToken{};
     std::shared_ptr<std::string> accessToken{};
     wxListView *header;
     wxListView *prescriptions;
@@ -55,8 +59,12 @@ public:
     void OnGetMedication(wxCommandEvent &e);
     void OnSendMedication(wxCommandEvent &e);
     void OnSaveLast(wxCommandEvent &e);
+    void OnSaveBundle(wxCommandEvent &e);
+    void SetPrescriber(PrescriptionData &prescriptionData) const ;
+    //pplx::task<PrescriptionData> SetPrescriber(const PrescriptionData &prescriptionData);
+    void OnPrescribeMagistral(wxCommandEvent &e);
     WeakRefUiDispatcherRef<TheMasterFrame> GetWeakRefDispatcher();
-    void SetHelseid(const std::string &url, const std::string &clientId, const std::string &secretJwk, const std::vector<std::string> &scopes, const std::string &refreshToken, long expiresIn);
+    void SetHelseid(const std::string &url, const std::string &clientId, const std::string &secretJwk, const std::vector<std::string> &scopes, const std::string &refreshToken, long expiresIn, const std::string &idToken);
     void Connect(const std::string &url);
 };
 

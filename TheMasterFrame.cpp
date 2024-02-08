@@ -8,6 +8,8 @@
 #include "CreatePatientDialog.h"
 #include "PatientStoreInMemoryWithPersistence.h"
 #include "WaitingForApiDialog.h"
+#include "MagistralBuilderDialog.h"
+#include "PrescriptionDialog.h"
 #include <boost/uuid/uuid.hpp>
 #include <boost/uuid/uuid_generators.hpp>
 #include <boost/uuid/uuid_io.hpp>
@@ -23,6 +25,8 @@
 #include <wx/listctrl.h>
 #include "MedBundleData.h"
 #include <InstallPrefix.h>
+#include <sfmbasisapi/fhir/medication.h>
+#include <sfmbasisapi/fhir/composition.h>
 
 TheMasterFrame::TheMasterFrame() : wxFrame(nullptr, wxID_ANY, "The Master"),
                                    weakRefDispatcher(std::make_shared<WeakRefUiDispatcher<TheMasterFrame>>(this)),
@@ -35,6 +39,8 @@ TheMasterFrame::TheMasterFrame() : wxFrame(nullptr, wxID_ANY, "The Master"),
     iconPath.append("share/themaster/TheMasterLogo.png");
     wxIcon icon{iconPath, wxBITMAP_TYPE_PNG};
     SetIcon(icon);
+    auto *medicationMenu = new wxMenu();
+    medicationMenu->Append(TheMaster_PrescribeMagistral_Id, "Prescribe magistral");
     auto *patientMenu = new wxMenu();
     patientMenu->Append(TheMaster_FindPatient_Id, "Find patient");
     patientMenu->Append(TheMaster_CreatePatient_Id, "Create patient");
@@ -43,9 +49,11 @@ TheMasterFrame::TheMasterFrame() : wxFrame(nullptr, wxID_ANY, "The Master"),
     serverMenu->Append(TheMaster_GetMedication_Id, "Get medication");
     serverMenu->Append(TheMaster_SendMedication_Id, "Send medication");
     serverMenu->Append(TheMaster_SaveLast_Id, "Save last response");
+    serverMenu->Append(TheMaster_SaveBundle_Id, "Save bundle");
     auto *menuBar = new wxMenuBar();
     menuBar->Append(serverMenu, "Server");
     menuBar->Append(patientMenu, "Patient");
+    menuBar->Append(medicationMenu, "Medication");
     SetMenuBar(menuBar);
 
     wxBoxSizer* sizer = new wxBoxSizer(wxVERTICAL);
@@ -79,6 +87,8 @@ TheMasterFrame::TheMasterFrame() : wxFrame(nullptr, wxID_ANY, "The Master"),
     Bind(wxEVT_MENU, &TheMasterFrame::OnGetMedication, this, TheMaster_GetMedication_Id);
     Bind(wxEVT_MENU, &TheMasterFrame::OnSendMedication, this, TheMaster_SendMedication_Id);
     Bind(wxEVT_MENU, &TheMasterFrame::OnSaveLast, this, TheMaster_SaveLast_Id);
+    Bind(wxEVT_MENU, &TheMasterFrame::OnSaveBundle, this, TheMaster_SaveBundle_Id);
+    Bind(wxEVT_MENU, &TheMasterFrame::OnPrescribeMagistral, this, TheMaster_PrescribeMagistral_Id);
 }
 
 void TheMasterFrame::UpdateHeader() {
@@ -631,9 +641,231 @@ void TheMasterFrame::OnSaveLast(wxCommandEvent &e) {
     wxFileDialog saveFileDialog(this, _("Save last response"), "", "", "Json files (*.json)|*.json", wxFD_SAVE|wxFD_OVERWRITE_PROMPT);
     if (saveFileDialog.ShowModal() == wxID_CANCEL)
         return; // the user changed their mind
-    std::ofstream ofs{saveFileDialog.GetFilename().ToStdString()};
+    std::ofstream ofs{saveFileDialog.GetPath().ToStdString()};
     ofs << lastResponse;
     ofs.close();
+}
+
+void TheMasterFrame::OnSaveBundle(wxCommandEvent &e) {
+    std::string jsonStr{};
+    {
+        auto json = medicationBundle->medBundle->ToJson();
+        jsonStr = json.serialize();
+    }
+    wxFileDialog saveFileDialog(this, _("Save bundle"), "", "", "Json files (*.json)|*.json", wxFD_SAVE|wxFD_OVERWRITE_PROMPT);
+    if (saveFileDialog.ShowModal() == wxID_CANCEL)
+        return; // the user changed their mind
+    std::ofstream ofs{saveFileDialog.GetPath().ToStdString()};
+    ofs << jsonStr;
+    ofs.close();
+}
+
+void TheMasterFrame::SetPrescriber(PrescriptionData &prescriptionData) const {
+    Jwt jwt{helseidIdToken};
+    JwtPart jwtBody{jwt.GetUnverifiedBody()};
+    std::string pid = jwtBody.GetString("helseid://claims/identity/pid");
+    std::string hpr = jwtBody.GetString("helseid://claims/hpr/hpr_number");
+    std::string name = jwtBody.GetString("name");
+    std::string given_name = jwtBody.GetString("given_name");
+    std::string middle_name = jwtBody.GetString("middle_name");
+    std::string family_name = jwtBody.GetString("family_name");
+    std::string dateOfBirth{};
+    bool female{true};
+    if (pid.size() == 11) {
+        std::string sd = pid.substr(0, 2);
+        std::string sm = pid.substr(2, 2);
+        std::string sy2 = pid.substr(4, 2);
+        std::string sc = pid.substr(6, 1);
+        std::string sg = pid.substr(8, 1);
+        std::size_t ccd;
+        std::size_t ccm;
+        std::size_t ccy;
+        std::size_t ccc;
+        std::size_t ccg;
+        auto d = std::stoi(sd, &ccd);
+        auto m = std::stoi(sm, &ccm);
+        auto y = std::stoi(sy2, &ccy);
+        auto c = std::stoi(sc, &ccc);
+        auto g = std::stoi(sg, &ccg);
+        if (ccd == 2 && ccm == 2 && ccy == 2 && ccc == 1 && ccg == 1 && y >= 0 && m > 0 && d > 0) {
+            if (c <= 4) {
+                if (y < 40) {
+                    y += 2000;
+                } else {
+                    y += 1900;
+                }
+            } else if (c == 8) {
+                y += 2000;
+            } else if (c < 8) {
+                if (y < 55) {
+                    y += 2000;
+                } else {
+                    y += 1800;
+                }
+            } else {
+                if (y < 40) {
+                    y += 1900;
+                } else {
+                    y += 2000;
+                }
+            }
+        }
+        if ((g & 1) == 1) {
+            female = false;
+        }
+        std::stringstream dob{};
+        dob << y << "-";
+        if (m < 10) {
+            dob << "0";
+        }
+        dob << m << "-";
+        if ( d < 10) {
+            dob << "0";
+        }
+        dob << d;
+        dateOfBirth = dob.str();
+    }
+    if (!medicationBundle) {
+        return;
+    }
+    auto bundle = medicationBundle->medBundle;
+    if (!bundle) {
+        return;
+    }
+    for (const auto &entry : bundle->GetEntries()) {
+        auto resource = entry.GetResource();
+        auto practitioner = std::dynamic_pointer_cast<FhirPractitioner>(resource);
+
+        if (practitioner &&
+            practitioner->IsActive()) {
+            std::string ppid{};
+            std::string phpr{};
+            for (const auto &identifier : practitioner->GetIdentifiers()) {
+                if (identifier.GetSystem() == "urn:oid:2.16.578.1.12.4.1.4.1") {
+                    ppid = identifier.GetValue();
+                } else if (identifier.GetSystem() == "urn:oid:2.16.578.1.12.4.1.4.4") {
+                    phpr = identifier.GetValue();
+                }
+            }
+            bool matching{false};
+            if (!pid.empty()) {
+                if (!hpr.empty()) {
+                    if (ppid == pid && phpr == hpr) {
+                        matching = true;
+                    }
+                } else {
+                    if (ppid == pid) {
+                        matching = true;
+                    }
+                }
+            } else if (!hpr.empty()) {
+                if (phpr == hpr) {
+                    matching = true;
+                }
+            }
+            if (matching) {
+                prescriptionData.prescribedByReference = entry.GetFullUrl();
+                prescriptionData.prescribedByDisplay = practitioner->GetDisplay();
+                return;
+            }
+        }
+    }
+    std::shared_ptr<FhirPractitioner> practitioner = std::make_shared<FhirPractitioner>();
+    practitioner->SetProfile("http://ehelse.no/fhir/StructureDefinition/sfm-Practitioner");
+    {
+        boost::uuids::random_generator generator;
+        boost::uuids::uuid randomUUID = generator();
+        std::string uuidStr = boost::uuids::to_string(randomUUID);
+        practitioner->SetId(uuidStr);
+    }
+    practitioner->SetStatus(FhirStatus::ACTIVE);
+    {
+        std::vector<FhirIdentifier> identifiers{};
+        if (!hpr.empty()) {
+            identifiers.emplace_back(FhirCodeableConcept("http://hl7.no/fhir/NamingSystem/HPR", "HPR-nummer", ""), "official", "urn:oid:2.16.578.1.12.4.1.4.4", hpr);
+        }
+        if (!pid.empty()) {
+            identifiers.emplace_back(FhirCodeableConcept("http://hl7.no/fhir/NamingSystem/FNR", "FNR-nummer", ""), "official", "urn:oid:2.16.578.1.12.4.1.4.1", pid);
+        }
+        practitioner->SetIdentifiers(identifiers);
+    }
+    practitioner->SetActive(true);
+    practitioner->SetBirthDate(dateOfBirth);
+    practitioner->SetGender(female ? "female" : "male");
+    {
+        std::vector<FhirName> setName{};
+        std::string name{given_name};
+        if (!name.empty()) {
+            if (!middle_name.empty()) {
+                name.append(" ");
+                name.append(middle_name);
+            }
+        } else {
+            name = middle_name;
+        }
+        setName.emplace_back("official", family_name, name);
+        practitioner->SetName(setName);
+    }
+    std::string fullUrl{"urn:uuid:"};
+    fullUrl.append(practitioner->GetId());
+    FhirBundleEntry bundleEntry{fullUrl, practitioner};
+    bundle->AddEntry(bundleEntry);
+    prescriptionData.prescribedByReference = fullUrl;
+    prescriptionData.prescribedByDisplay = practitioner->GetDisplay();
+}
+
+void TheMasterFrame::OnPrescribeMagistral(wxCommandEvent &e) {
+    PrescriptionData prescriptionData{};
+    MagistralBuilderDialog magistralBuilderDialog{this};
+    if (magistralBuilderDialog.ShowModal() == wxID_OK) {
+        PrescriptionDialog prescriptionDialog{this};
+        auto res = prescriptionDialog.ShowModal();
+        if (res != wxID_OK) {
+            return;
+        }
+        prescriptionData = prescriptionDialog.GetPrescriptionData();
+    }
+    SetPrescriber(prescriptionData);
+    std::shared_ptr<FhirMedication> magistralMedicament = std::make_shared<FhirMedication>(magistralBuilderDialog.GetMagistralMedicament().ToFhir());
+    std::string magistralMedicamentFullUrl{"urn:uuid:"};
+    magistralMedicamentFullUrl.append(magistralMedicament->GetId());
+    FhirBundleEntry magistralMedicamentEntry{magistralMedicamentFullUrl, magistralMedicament};
+    std::shared_ptr<FhirMedicationStatement> medicationStatement = std::make_shared<FhirMedicationStatement>(prescriptionData.ToFhir());
+    {
+        auto medicationProfile = magistralMedicament->GetProfile();
+        FhirReference medicationReference{magistralMedicamentFullUrl, medicationProfile.size() == 1 ? medicationProfile[0] : "", magistralMedicament->GetDisplay()};
+        medicationStatement->SetMedicationReference(medicationReference);
+    }
+    std::string medicationStatementFullUrl{"urn:uuid:"};
+    medicationStatementFullUrl.append(medicationStatement->GetId());
+    FhirBundleEntry medicationStatementEntry{medicationStatementFullUrl, medicationStatement};
+    medicationBundle->medBundle->AddEntry(magistralMedicamentEntry);
+    medicationBundle->medBundle->AddEntry(medicationStatementEntry);
+    for (const auto &entry : medicationBundle->medBundle->GetEntries()) {
+        auto composition = std::dynamic_pointer_cast<FhirComposition>(entry.GetResource());
+        if (composition) {
+            auto profile = composition->GetProfile();
+            if (profile.size() == 1 && profile[0] == "http://ehelse.no/fhir/StructureDefinition/sfm-MedicationComposition") {
+                auto sections = composition->GetSections();
+                for (auto &section : sections) {
+                    auto coding = section.GetCode().GetCoding();
+                    if (coding.size() == 1 && coding[0].GetCode() == "sectionMedication") {
+                        auto entries = section.GetEntries();
+                        if (entries.empty()) {
+                            section.SetTextStatus("generated");
+                            section.SetTextXhtml("<xhtml:div xmlns:xhtml=\"http://www.w3.org/1999/xhtml\">List of medications</xhtml:div>");
+                            section.SetEmptyReason({});
+                        }
+                        entries.emplace_back(medicationStatementFullUrl,
+                                             "http://ehelse.no/fhir/StructureDefinition/sfm-MedicationStatement",
+                                             medicationStatement->GetDisplay());
+                        section.SetEntries(entries);
+                    }
+                }
+                composition->SetSections(sections);
+            }
+        }
+    }
 }
 
 WeakRefUiDispatcherRef<TheMasterFrame> TheMasterFrame::GetWeakRefDispatcher() {
@@ -642,13 +874,14 @@ WeakRefUiDispatcherRef<TheMasterFrame> TheMasterFrame::GetWeakRefDispatcher() {
 
 void TheMasterFrame::SetHelseid(const std::string &url, const std::string &clientId, const std::string &secretJwk,
                                 const std::vector<std::string> &scopes, const std::string &refreshToken,
-                                long expiresIn) {
+                                long expiresIn, const std::string &idToken) {
     helseidUrl = url;
     helseidClientId = clientId;
     helseidSecretJwk = secretJwk;
     helseidScopes = scopes;
     helseidRefreshToken = refreshToken;
     helseidRefreshTokenValidTo = std::time(NULL) + expiresIn - 60;
+    helseidIdToken = idToken;
 }
 
 void TheMasterFrame::Connect(const std::string &url) {

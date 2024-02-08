@@ -8,6 +8,8 @@
 #include <string>
 #include <vector>
 
+class FhirCodeableConcept;
+
 class MedicalCodedValue {
 private:
     std::string system;
@@ -21,6 +23,7 @@ public:
     [[nodiscard]] std::string GetCode() const { return code; }
     [[nodiscard]] std::string GetDisplay() const { return display; }
     [[nodiscard]] std::string GetShortDisplay() const { return shortDisplay; }
+    [[nodiscard]] FhirCodeableConcept ToCodeableConcept() const;
     static std::vector<MedicalCodedValue> GetVolvenMedicamentForm();
 };
 

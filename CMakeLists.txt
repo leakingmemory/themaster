@@ -21,7 +21,8 @@ add_executable(themaster TheMasterApp.cpp TheMasterApp.h TheMasterFrame.cpp TheM
     HelseidLoginDialog.cpp HelseidLoginDialog.h HelseidAuthorization.cpp HelseidAuthorization.h
     DataDirectory.cpp DataDirectory.h PatientStoreInMemoryWithPersistence.cpp PatientStoreInMemoryWithPersistence.h
     MagistralBuilderDialog.cpp MagistralBuilderDialog.h  UnitsOfMeasure.cpp UnitsOfMeasure.h
-    MedicalCodedValue.cpp MedicalCodedValue.h PrescriptionDialog.cpp PrescriptionDialog.h)
+    MedicalCodedValue.cpp MedicalCodedValue.h PrescriptionDialog.cpp PrescriptionDialog.h
+    MagistralMedicament.cpp MagistralMedicament.h PrescriptionData.cpp PrescriptionData.h)
 target_link_libraries(themaster PRIVATE -lsfmbasisapi -ljjwtid)
 target_link_libraries(themaster PRIVATE cpprestsdk::cpprest -lcrypto)
 target_link_libraries(themaster PRIVATE ${wxWidgets_LIBRARIES})

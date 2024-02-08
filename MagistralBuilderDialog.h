@@ -8,34 +8,11 @@
 #include <wx/wx.h>
 #include <map>
 #include "MedicalCodedValue.h"
+#include "MagistralMedicament.h"
 
 class TheMasterFrame;
 class wxListView;
 class wxSpinCtrlDouble;
-
-enum class DilutionType {
-    AD, QS
-};
-
-struct Dilution {
-    std::string name;
-    DilutionType dilution;
-};
-
-struct Substance {
-    std::string name;
-    double strength;
-    std::string strengthUnit;
-};
-
-struct MagistralMedicament {
-    std::vector<Dilution> dilutions{};
-    std::vector<Substance> substances{};
-    MedicalCodedValue form{};
-    double amount;
-    std::string amountUnit;
-    std::string instructions;
-};
 
 class MagistralBuilderDialog : public wxDialog {
 private:
@@ -58,6 +35,9 @@ public:
     void OnAddSubstance(wxCommandEvent &e);
     void OnCancel(wxCommandEvent &e);
     void OnProceed(wxCommandEvent &e);
+    [[nodiscard]] MagistralMedicament GetMagistralMedicament() const {
+        return magistralMedicament;
+    }
 };
 
 

@@ -3,6 +3,28 @@
 //
 
 #include "MedicalCodedValue.h"
+#include <sfmbasisapi/fhir/value.h>
+
+FhirCodeableConcept MedicalCodedValue::ToCodeableConcept() const {
+    if (code.empty()) {
+        if (!display.empty()) {
+            FhirCodeableConcept codeableConcept{display};
+            return codeableConcept;
+        } else if (!shortDisplay.empty()) {
+            FhirCodeableConcept codeableConcept{shortDisplay};
+            return codeableConcept;
+        } else {
+            return {};
+        }
+    }
+    if (!shortDisplay.empty()) {
+        FhirCodeableConcept codeableConcept{system, code, shortDisplay};
+        return codeableConcept;
+    } else {
+        FhirCodeableConcept codeableConcept{system, code, display};
+        return codeableConcept;
+    }
+}
 
 class VolvenMedicamentForm {
     friend MedicalCodedValue;
