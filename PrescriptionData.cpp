@@ -141,7 +141,6 @@ FhirMedicationStatement PrescriptionData::ToFhir() {
                 std::make_shared<FhirString>(nowString)
             ));
         }
-        // TODO - provider
         fhir.AddExtension(regInfo);
     }
     {
@@ -151,6 +150,10 @@ FhirMedicationStatement PrescriptionData::ToFhir() {
             std::make_shared<FhirBooleanValue>(genericSubstitutionAccepted)
         ));
         fhir.AddExtension(genSubst);
+    }
+    {
+        FhirReference ref{subjectReference, "http://ehelse.no/fhir/StructureDefinition/sfm-Patient", subjectDisplay};
+        fhir.SetSubject(ref);
     }
     return fhir;
 }

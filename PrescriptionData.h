@@ -32,6 +32,8 @@ struct PrescriptionData {
     bool genericSubstitutionAccepted{true};
     std::string prescribedByDisplay{};
     std::string prescribedByReference{};
+    std::string subjectDisplay{};
+    std::string subjectReference{};
     FhirMedicationStatement ToFhir();
 };
 

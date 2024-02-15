@@ -61,6 +61,7 @@ public:
     void OnSaveLast(wxCommandEvent &e);
     void OnSaveBundle(wxCommandEvent &e);
     void SetPrescriber(PrescriptionData &prescriptionData) const ;
+    void SetPatient(PrescriptionData &prescriptionData) const ;
     //pplx::task<PrescriptionData> SetPrescriber(const PrescriptionData &prescriptionData);
     void OnPrescribeMagistral(wxCommandEvent &e);
     WeakRefUiDispatcherRef<TheMasterFrame> GetWeakRefDispatcher();

@@ -814,6 +814,69 @@ void TheMasterFrame::SetPrescriber(PrescriptionData &prescriptionData) const {
     prescriptionData.prescribedByDisplay = practitioner->GetDisplay();
 }
 
+void TheMasterFrame::SetPatient(PrescriptionData &prescriptionData) const {
+    std::string pid{};
+    auto patientInformation = this->patientInformation;
+    if (patientInformation && patientInformation->GetPatientIdType() == PatientIdType::FODSELSNUMMER) {
+        pid = patientInformation->GetPatientId();
+    }
+    auto bundle = medicationBundle->medBundle;
+    if (!bundle) {
+        return;
+    }
+    if (!pid.empty()) {
+        for (const auto &entry: bundle->GetEntries()) {
+            auto resource = entry.GetResource();
+            auto patient = std::dynamic_pointer_cast<FhirPatient>(resource);
+
+            if (patient &&
+                patient->IsActive()) {
+                std::string ppid{};
+                for (const auto &identifier: patient->GetIdentifiers()) {
+                    if (identifier.GetSystem() == "urn:oid:2.16.578.1.12.4.1.4.1") {
+                        ppid = identifier.GetValue();
+                    }
+                }
+                if (ppid == pid) {
+                    prescriptionData.subjectReference = entry.GetFullUrl();
+                    prescriptionData.subjectDisplay = patient->GetDisplay();
+                    return;
+                }
+            }
+        }
+    }
+    std::shared_ptr<FhirPatient> patient = std::make_shared<FhirPatient>();
+    patient->SetProfile("http://ehelse.no/fhir/StructureDefinition/sfm-Patient");
+    {
+        boost::uuids::random_generator generator;
+        boost::uuids::uuid randomUUID = generator();
+        std::string uuidStr = boost::uuids::to_string(randomUUID);
+        patient->SetId(uuidStr);
+    }
+    patient->SetStatus(FhirStatus::NOT_SET);
+    {
+        std::vector<FhirIdentifier> identifiers{};
+        if (!pid.empty()) {
+            identifiers.emplace_back(FhirCodeableConcept("http://hl7.no/fhir/NamingSystem/FNR", "FNR-nummer", ""), "official", "urn:oid:2.16.578.1.12.4.1.4.1", pid);
+        }
+        patient->SetIdentifiers(identifiers);
+    }
+    patient->SetActive(true);
+    patient->SetBirthDate(patientInformation->GetDateOfBirth());
+    patient->SetGender(patientInformation->GetGender() == PersonGender::FEMALE ? "female" : "male");
+    {
+        std::vector<FhirName> setName{};
+        setName.emplace_back("official", patientInformation->GetFamilyName(), patientInformation->GetGivenName());
+        patient->SetName(setName);
+    }
+    std::string fullUrl{"urn:uuid:"};
+    fullUrl.append(patient->GetId());
+    FhirBundleEntry bundleEntry{fullUrl, patient};
+    bundle->AddEntry(bundleEntry);
+    prescriptionData.subjectReference = fullUrl;
+    prescriptionData.subjectDisplay = patient->GetDisplay();
+}
+
 void TheMasterFrame::OnPrescribeMagistral(wxCommandEvent &e) {
     PrescriptionData prescriptionData{};
     MagistralBuilderDialog magistralBuilderDialog{this};
@@ -826,6 +889,7 @@ void TheMasterFrame::OnPrescribeMagistral(wxCommandEvent &e) {
         prescriptionData = prescriptionDialog.GetPrescriptionData();
     }
     SetPrescriber(prescriptionData);
+    SetPatient(prescriptionData);
     std::shared_ptr<FhirMedication> magistralMedicament = std::make_shared<FhirMedication>(magistralBuilderDialog.GetMagistralMedicament().ToFhir());
     std::string magistralMedicamentFullUrl{"urn:uuid:"};
     magistralMedicamentFullUrl.append(magistralMedicament->GetId());
