@@ -498,24 +498,32 @@ void TheMasterFrame::OnSendMedication(wxCommandEvent &e) {
         wxMessageBox("Error: Not connected", "Error", wxICON_ERROR);
         return;
     }
+    std::string apiUrl = url;
+    std::shared_ptr<FhirBundle> bundle{};
+    if (medicationBundle) {
+        bundle = medicationBundle->medBundle;
+    }
+    if (!bundle) {
+        wxMessageBox("Error: Get medications first please", "Error", wxICON_ERROR);
+        return;
+    }
 
     pplx::task<web::http::http_response> responseTask{};
-    {
+    auto accessTokenTask = GetAccessToken();
+    responseTask = accessTokenTask.then([apiUrl, bundle] (const std::string &accessToken) {
         web::http::http_request request{web::http::methods::POST};
-        request.set_request_uri("patient/$sendMedication");
+        if (!accessToken.empty()) {
+            std::cout << "Access token: " << accessToken << "\n";
+            std::string bearer{"Bearer "};
+            bearer.append(accessToken);
+            request.headers().add("Authorization", bearer);
+        }
+        request.set_request_uri("Patient/$sendMedication");
         {
             FhirParameters sendMedicationParameters{};
             {
                 std::shared_ptr<FhirBundle> medBundle = std::make_shared<FhirBundle>();
                 {
-                    std::shared_ptr<FhirBundle> bundle{};
-                    if (medicationBundle) {
-                        bundle = medicationBundle->medBundle;
-                    }
-                    if (!bundle) {
-                        wxMessageBox("Error: Get medications first please", "Error", wxICON_ERROR);
-                        return;
-                    }
                     *medBundle = FhirBundle::Parse(bundle->ToJson());
                 }
                 sendMedicationParameters.AddParameter("medication", medBundle);
@@ -526,13 +534,14 @@ void TheMasterFrame::OnSendMedication(wxCommandEvent &e) {
                 request.set_body(jsonString, "application/fhir+json; charset=utf-8");
             }
         }
-        web::http::client::http_client client{url};
-        responseTask = client.request(request);
-    }
+        web::http::client::http_client client{apiUrl};
+        return client.request(request);
+    });
     std::shared_ptr<std::mutex> sendMedResponseMtx = std::make_shared<std::mutex>();
     std::shared_ptr<std::unique_ptr<FhirParameters>> sendMedResponse = std::make_shared<std::unique_ptr<FhirParameters>>();
+    std::shared_ptr<std::string> rawResponse = std::make_shared<std::string>();
     std::shared_ptr<WaitingForApiDialog> waitingDialog = std::make_shared<WaitingForApiDialog>(this, "Sending medication records", "Sent medication bundle...");
-    responseTask.then([waitingDialog, sendMedResponse, sendMedResponseMtx] (const pplx::task<web::http::http_response> &responseTask) {
+    responseTask.then([waitingDialog, sendMedResponse, rawResponse, sendMedResponseMtx] (const pplx::task<web::http::http_response> &responseTask) {
         try {
             auto response = responseTask.get();
             try {
@@ -548,7 +557,7 @@ void TheMasterFrame::OnSendMedication(wxCommandEvent &e) {
                         wxMessageBox(msg, "Error", wxICON_ERROR);
                     });
                 } else {
-                    response.extract_json(true).then([waitingDialog, sendMedResponse, sendMedResponseMtx](
+                    response.extract_json(true).then([waitingDialog, sendMedResponse, rawResponse, sendMedResponseMtx](
                             const pplx::task<web::json::value> &responseBodyTask) {
                         try {
                             auto responseBody = responseBodyTask.get();
@@ -561,6 +570,7 @@ void TheMasterFrame::OnSendMedication(wxCommandEvent &e) {
                                     std::lock_guard lock{*sendMedResponseMtx};
                                     *sendMedResponse = std::make_unique<FhirParameters>(
                                             std::move(responseParameterBundle));
+                                    *rawResponse = responseBody.serialize();
                                 }
                                 wxTheApp->GetTopWindow()->GetEventHandler()->CallAfter(
                                         [waitingDialog, sendMedResponse]() {
@@ -614,6 +624,7 @@ void TheMasterFrame::OnSendMedication(wxCommandEvent &e) {
     {
         std::lock_guard lock{*sendMedResponseMtx};
         sendMedResp = std::move(*sendMedResponse);
+        lastResponse = std::move(*rawResponse);
     }
     if (!sendMedResp) {
         wxMessageBox("Error: Server did not respond properly to sending medications.", "Error", wxICON_ERROR);
