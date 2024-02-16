@@ -87,6 +87,17 @@ FhirMedicationStatement PrescriptionData::ToFhir() {
                 "lastchanged",
                 std::make_shared<FhirString>(lastChanged)
         ));
+        auto typeresept = std::make_shared<FhirCodeableConceptValue>(this->typeresept.ToCodeableConcept());
+        if (typeresept->IsSet()) {
+            reseptAmendment->AddExtension(std::make_shared<FhirValueExtension>(
+                "typeresept",
+                typeresept
+            ));
+        }
+        reseptAmendment->AddExtension(std::make_shared<FhirValueExtension>(
+            "createeresept",
+            std::make_shared<FhirBooleanValue>(true)
+        ));
         fhir.AddExtension(reseptAmendment);
     }
     {
@@ -154,6 +165,14 @@ FhirMedicationStatement PrescriptionData::ToFhir() {
     {
         FhirReference ref{subjectReference, "http://ehelse.no/fhir/StructureDefinition/sfm-Patient", subjectDisplay};
         fhir.SetSubject(ref);
+    }
+    {
+        FhirCodeableConcept identifierType{"ReseptId"};
+        boost::uuids::random_generator generator;
+        boost::uuids::uuid randomUUID = generator();
+        std::string uuidStr = boost::uuids::to_string(randomUUID);
+        FhirIdentifier identifier{identifierType, "usual", uuidStr};
+        fhir.AddIdentifier(identifier);
     }
     return fhir;
 }
