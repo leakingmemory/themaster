@@ -526,6 +526,21 @@ void TheMasterFrame::OnSendMedication(wxCommandEvent &e) {
                 {
                     *medBundle = FhirBundle::Parse(bundle->ToJson());
                 }
+
+                for (const auto &entry : medBundle->GetEntries()) {
+                    auto composition = std::dynamic_pointer_cast<FhirComposition>(entry.GetResource());
+                    if (composition) {
+                        auto relatesTo = composition->GetRelatesTo();
+                        if (!relatesTo.IsSet()) {
+                            relatesTo = composition->GetIdentifier();
+                            if (relatesTo.IsSet()) {
+                                composition->SetRelatesToCode("replaces");
+                                composition->SetRelatesTo(relatesTo);
+                            }
+                        }
+                    }
+                }
+
                 sendMedicationParameters.AddParameter("medication", medBundle);
             }
             {
