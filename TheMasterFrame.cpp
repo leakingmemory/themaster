@@ -580,12 +580,15 @@ void TheMasterFrame::OnSendMedication(wxCommandEvent &e) {
                                 wxTheApp->GetTopWindow()->GetEventHandler()->CallAfter([waitingDialog]() {
                                     waitingDialog->SetMessage("Decoding response...");
                                 });
+                                {
+                                    std::lock_guard lock{*sendMedResponseMtx};
+                                    *rawResponse = responseBody.serialize();
+                                }
                                 FhirParameters responseParameterBundle = FhirParameters::Parse(responseBody);
                                 {
                                     std::lock_guard lock{*sendMedResponseMtx};
                                     *sendMedResponse = std::make_unique<FhirParameters>(
                                             std::move(responseParameterBundle));
-                                    *rawResponse = responseBody.serialize();
                                 }
                                 wxTheApp->GetTopWindow()->GetEventHandler()->CallAfter(
                                         [waitingDialog, sendMedResponse]() {
