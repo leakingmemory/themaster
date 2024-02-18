@@ -27,10 +27,14 @@ FhirMedicationStatement PrescriptionData::ToFhir() {
             dosage.AddExtension(useExt);
         }
         {
-            std::shared_ptr<FhirValueExtension> applicationAreaExt = std::make_shared<FhirValueExtension>(
-                    "http://ehelse.no/fhir/StructureDefinition/sfm-application-area",
+            std::shared_ptr<FhirValueExtension> applicationAreaTextExt = std::make_shared<FhirValueExtension>(
+                    "text",
                     std::make_shared<FhirString>(applicationArea)
             );
+            std::shared_ptr<FhirExtension> applicationAreaExt = std::make_shared<FhirExtension>(
+                    "http://ehelse.no/fhir/StructureDefinition/sfm-application-area"
+            );
+            applicationAreaExt->AddExtension(applicationAreaTextExt);
             dosage.AddExtension(applicationAreaExt);
         }
         fhir.AddDosage(dosage);
@@ -39,11 +43,11 @@ FhirMedicationStatement PrescriptionData::ToFhir() {
         std::shared_ptr<FhirExtension> reseptAmendment = std::make_shared<FhirExtension>("http://ehelse.no/fhir/StructureDefinition/sfm-reseptamendment");
         reseptAmendment->AddExtension(std::make_shared<FhirValueExtension>(
                 "reseptdate",
-                std::make_shared<FhirDateTimeValue>(reseptdate)
+                std::make_shared<FhirDateValue>(reseptdate)
         ));
         reseptAmendment->AddExtension(std::make_shared<FhirValueExtension>(
                 "expirationdate",
-                std::make_shared<FhirDateTimeValue>(expirationdate)
+                std::make_shared<FhirDateValue>(expirationdate)
         ));
         reseptAmendment->AddExtension(std::make_shared<FhirValueExtension>(
                 "festUpdate",
@@ -85,7 +89,7 @@ FhirMedicationStatement PrescriptionData::ToFhir() {
         }
         reseptAmendment->AddExtension(std::make_shared<FhirValueExtension>(
                 "lastchanged",
-                std::make_shared<FhirString>(lastChanged)
+                std::make_shared<FhirDateTimeValue>(lastChanged)
         ));
         auto typeresept = std::make_shared<FhirCodeableConceptValue>(this->typeresept.ToCodeableConcept());
         if (typeresept->IsSet()) {
@@ -149,7 +153,7 @@ FhirMedicationStatement PrescriptionData::ToFhir() {
 
             regInfo->AddExtension(std::make_shared<FhirValueExtension>(
                 "timestamp",
-                std::make_shared<FhirString>(nowString)
+                std::make_shared<FhirDateTimeValue>(nowString)
             ));
         }
         fhir.AddExtension(regInfo);
