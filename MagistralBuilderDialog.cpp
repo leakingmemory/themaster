@@ -54,7 +54,8 @@ MagistralBuilderDialog::MagistralBuilderDialog(TheMasterFrame *masterFrame) : wx
     auto *medicamentFormLabel = new wxStaticText(this, wxID_ANY, wxT("Form:"));
     medicamentFormCtrl = new wxComboBox(this, wxID_ANY);
     for (const auto &form : MedicalCodedValue::GetVolvenMedicamentForm()) {
-        medicamentFormCtrl->Append(wxString::FromUTF8(form.GetShortDisplay()));
+        auto shortDisplay = form.GetShortDisplay();
+        medicamentFormCtrl->Append(wxString::FromUTF8(shortDisplay.c_str()));
     }
     medicamentFormSizer->Add(medicamentFormLabel, 0, wxEXPAND | wxALL, 5);
     medicamentFormSizer->Add(medicamentFormCtrl, 1, wxEXPAND | wxALL, 5);
