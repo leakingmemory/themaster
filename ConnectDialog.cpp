@@ -271,7 +271,7 @@ void ConnectDialog::OnConnect(wxCommandEvent &) {
                                                 });
                                             });
                                         } else {
-                                            std::cout << json.to_string() << "\n";
+                                            std::cout << json.serialize() << "\n";
                                             std::cerr << "Missing refresh_token and rt_expires\n";
                                             wxTheApp->GetTopWindow()->GetEventHandler()->CallAfter([]() {
                                                 wxMessageBox(
