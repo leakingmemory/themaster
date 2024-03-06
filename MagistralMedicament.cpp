@@ -53,6 +53,7 @@ FhirMedication MagistralMedicament::ToFhir() {
             sstr << " " << amount << " " << amountUnit;
             name = sstr.str();
         }
+        fhir.SetName(name);
         std::shared_ptr<FhirString> fhirName = std::make_shared<FhirString>(name);
         std::shared_ptr<FhirValueExtension> fhirExtName = std::make_shared<FhirValueExtension>("http://ehelse.no/fhir/StructureDefinition/sfm-name", fhirName);
         fhir.AddExtension(fhirExtName);
