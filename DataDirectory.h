@@ -18,6 +18,7 @@ public:
     DataDirectory Sub(const std::string &name) const;
     std::string ReadFile(const std::string &filename) const;
     void WriteFile(const std::string &filename, const std::string &content) const;
+    std::string GetPath(const std::string &filename) const;
 };
 
 

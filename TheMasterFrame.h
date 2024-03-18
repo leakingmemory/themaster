@@ -27,7 +27,8 @@ enum {
     TheMaster_SendMedication_Id = 5,
     TheMaster_SaveLast_Id = 6,
     TheMaster_SaveBundle_Id = 7,
-    TheMaster_PrescribeMagistral_Id = 8
+    TheMaster_PrescribeMagistral_Id = 8,
+    TheMaster_UpdateFest_Id = 9
 };
 
 class TheMasterFrame : public wxFrame {
@@ -67,6 +68,7 @@ public:
     WeakRefUiDispatcherRef<TheMasterFrame> GetWeakRefDispatcher();
     void SetHelseid(const std::string &url, const std::string &clientId, const std::string &secretJwk, const std::vector<std::string> &scopes, const std::string &refreshToken, long expiresIn, const std::string &idToken);
     void Connect(const std::string &url);
+    void OnUpdateFest(wxCommandEvent &e);
 };
 
 

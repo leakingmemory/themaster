@@ -27,6 +27,7 @@
 #include <InstallPrefix.h>
 #include <sfmbasisapi/fhir/medication.h>
 #include <sfmbasisapi/fhir/composition.h>
+#include "FestDbUi.h"
 
 TheMasterFrame::TheMasterFrame() : wxFrame(nullptr, wxID_ANY, "The Master"),
                                    weakRefDispatcher(std::make_shared<WeakRefUiDispatcher<TheMasterFrame>>(this)),
@@ -39,6 +40,8 @@ TheMasterFrame::TheMasterFrame() : wxFrame(nullptr, wxID_ANY, "The Master"),
     iconPath.append("share/themaster/TheMasterLogo.png");
     wxIcon icon{iconPath, wxBITMAP_TYPE_PNG};
     SetIcon(icon);
+    auto *festMenu = new wxMenu();
+    festMenu->Append(TheMaster_UpdateFest_Id, "Update FEST");
     auto *medicationMenu = new wxMenu();
     medicationMenu->Append(TheMaster_PrescribeMagistral_Id, "Prescribe magistral");
     auto *patientMenu = new wxMenu();
@@ -54,6 +57,7 @@ TheMasterFrame::TheMasterFrame() : wxFrame(nullptr, wxID_ANY, "The Master"),
     menuBar->Append(serverMenu, "Server");
     menuBar->Append(patientMenu, "Patient");
     menuBar->Append(medicationMenu, "Medication");
+    menuBar->Append(festMenu, "FEST");
     SetMenuBar(menuBar);
 
     wxBoxSizer* sizer = new wxBoxSizer(wxVERTICAL);
@@ -89,6 +93,7 @@ TheMasterFrame::TheMasterFrame() : wxFrame(nullptr, wxID_ANY, "The Master"),
     Bind(wxEVT_MENU, &TheMasterFrame::OnSaveLast, this, TheMaster_SaveLast_Id);
     Bind(wxEVT_MENU, &TheMasterFrame::OnSaveBundle, this, TheMaster_SaveBundle_Id);
     Bind(wxEVT_MENU, &TheMasterFrame::OnPrescribeMagistral, this, TheMaster_PrescribeMagistral_Id);
+    Bind(wxEVT_MENU, &TheMasterFrame::OnUpdateFest, this, TheMaster_UpdateFest_Id);
 }
 
 void TheMasterFrame::UpdateHeader() {
@@ -979,4 +984,9 @@ void TheMasterFrame::SetHelseid(const std::string &url, const std::string &clien
 
 void TheMasterFrame::Connect(const std::string &url) {
     this->url = url;
+}
+
+void TheMasterFrame::OnUpdateFest(wxCommandEvent &e) {
+    FestDbUi festDbUi{this};
+    festDbUi.Update();
 }

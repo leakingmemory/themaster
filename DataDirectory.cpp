@@ -83,3 +83,12 @@ void DataDirectory::WriteFile(const std::string &filename, const std::string &co
 
     std::filesystem::rename(tmpfilename, fpath);
 }
+
+std::string DataDirectory::GetPath(const std::string &filename) const {
+    std::string fpath{path};
+    if (!fpath.ends_with("/")) {
+        fpath.append("/");
+    }
+    fpath.append(filename);
+    return fpath;
+}
