@@ -115,7 +115,7 @@ void FestDbUi::Update() {
                     wxTheApp->GetTopWindow()->GetEventHandler()->CallAfter(
                             [offset, contentLength, &downloadFestDialog]() {
                                 auto prcnt = (offset * 100) / contentLength;
-                                downloadFestDialog.SetDownloadProgress(prcnt);
+                                downloadFestDialog->SetDownloadProgress(prcnt);
                             });
                 }
                 outfile.close();
@@ -124,7 +124,7 @@ void FestDbUi::Update() {
                 if (rename(tmpdownload.c_str(), festfile.c_str()) != 0) {
                     throw FestUpdateException("Fest zip insert new downloaded failed");
                 }
-                UpdateFromFile(downloadFestDialog, festfile);
+                self->UpdateFromFile(*downloadFestDialog, festfile);
                 if (!lastModified.empty()) {
                     DataDirectory::Data("themaster").Sub("FEST").WriteFile("lastmod", lastModified);
                 }
@@ -146,8 +146,8 @@ void FestDbUi::Update() {
             });
         }
         wxTheApp->GetTopWindow()->GetEventHandler()->CallAfter([&downloadFestDialog]() {
-            downloadFestDialog.EndModal(0);
+            downloadFestDialog->EndModal(0);
         });
     });
-    downloadFestDialog.ShowModal();
+    downloadFestDialog->ShowModal();
 }

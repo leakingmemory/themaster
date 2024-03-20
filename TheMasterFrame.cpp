@@ -28,6 +28,7 @@
 #include <sfmbasisapi/fhir/medication.h>
 #include <sfmbasisapi/fhir/composition.h>
 #include "FestDbUi.h"
+#include "FindMedicamentDialog.h"
 
 TheMasterFrame::TheMasterFrame() : wxFrame(nullptr, wxID_ANY, "The Master"),
                                    weakRefDispatcher(std::make_shared<WeakRefUiDispatcher<TheMasterFrame>>(this)),
@@ -44,6 +45,7 @@ TheMasterFrame::TheMasterFrame() : wxFrame(nullptr, wxID_ANY, "The Master"),
     festMenu->Append(TheMaster_UpdateFest_Id, "Update FEST");
     auto *medicationMenu = new wxMenu();
     medicationMenu->Append(TheMaster_PrescribeMagistral_Id, "Prescribe magistral");
+    medicationMenu->Append(TheMaster_PrescribeMedicament_Id, "Prescribe medicament");
     auto *patientMenu = new wxMenu();
     patientMenu->Append(TheMaster_FindPatient_Id, "Find patient");
     patientMenu->Append(TheMaster_CreatePatient_Id, "Create patient");
@@ -93,6 +95,7 @@ TheMasterFrame::TheMasterFrame() : wxFrame(nullptr, wxID_ANY, "The Master"),
     Bind(wxEVT_MENU, &TheMasterFrame::OnSaveLast, this, TheMaster_SaveLast_Id);
     Bind(wxEVT_MENU, &TheMasterFrame::OnSaveBundle, this, TheMaster_SaveBundle_Id);
     Bind(wxEVT_MENU, &TheMasterFrame::OnPrescribeMagistral, this, TheMaster_PrescribeMagistral_Id);
+    Bind(wxEVT_MENU, &TheMasterFrame::OnPrescribeMedicament, this, TheMaster_PrescribeMedicament_Id);
     Bind(wxEVT_MENU, &TheMasterFrame::OnUpdateFest, this, TheMaster_UpdateFest_Id);
 }
 
@@ -966,6 +969,15 @@ void TheMasterFrame::OnPrescribeMagistral(wxCommandEvent &e) {
     }
 }
 
+void TheMasterFrame::OnPrescribeMedicament(wxCommandEvent &e) {
+    FindMedicamentDialog findMedicamentDialog{this};
+    if (!findMedicamentDialog.CanOpen()) {
+        wxMessageBox(wxT("Prescribe medicament requires a FEST DB. Please update FEST and try again."), wxT("No FEST DB"), wxICON_ERROR);
+        return;
+    }
+    findMedicamentDialog.ShowModal();
+}
+
 WeakRefUiDispatcherRef<TheMasterFrame> TheMasterFrame::GetWeakRefDispatcher() {
     return weakRefDispatcher->GetRef();
 }
@@ -987,6 +999,6 @@ void TheMasterFrame::Connect(const std::string &url) {
 }
 
 void TheMasterFrame::OnUpdateFest(wxCommandEvent &e) {
-    FestDbUi festDbUi{this};
-    festDbUi.Update();
+    std::shared_ptr<FestDbUi> festDbUi = std::make_shared<FestDbUi>(this);
+    festDbUi->Update();
 }

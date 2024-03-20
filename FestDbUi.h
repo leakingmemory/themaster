@@ -6,11 +6,12 @@
 #define DRWHATSNOT_FESTDBUI_H
 
 #include <string>
+#include <memory>
 
 class wxWindow;
 class DownloadFestDialog;
 
-class FestDbUi {
+class FestDbUi : public std::enable_shared_from_this<FestDbUi> {
 private:
     wxWindow *parent;
 public:
