@@ -75,7 +75,6 @@ void FestDbUi::Update() {
             auto response = responseTask.get();
             auto statusCode = response.status_code();
             if (statusCode != web::http::status_codes::NotModified) {
-                std::cout << statusCode << "\n";
                 std::string lastModified{};
                 uint64_t contentLength{0};
                 {
