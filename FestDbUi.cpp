@@ -49,6 +49,7 @@ void FestDbUi::UpdateFromFile(DownloadFestDialog &dialog, const std::string &fil
         festDeserializer.Preload(festSerializer);
     }
     festSerializer.Serialize(*fest);
+    festSerializer.Write();
     if (rename(tmpfile.c_str(), dbfile.c_str()) != 0) {
         throw FestUpdateException("Replace/insert db-file failed");
     }
