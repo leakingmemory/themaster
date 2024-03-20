@@ -60,13 +60,17 @@ void FestDbUi::Update() {
     web::http::http_request request{web::http::methods::GET};
     request.set_request_uri("/_layouts/15/FESTmelding/fest251.zip");
     {
-        std::string lastMod = DataDirectory::Data("themaster").Sub("FEST").ReadFile("lastmod");
-        if (!lastMod.empty()) {
-            request.headers().add("If-Modified-Since", lastMod);
+        auto dbfile = DataDirectory::Data("themaster").Sub("FEST").GetPath("fest.db");
+        if (std::filesystem::exists(dbfile)) {
+            std::string lastMod = DataDirectory::Data("themaster").Sub("FEST").ReadFile("lastmod");
+            if (!lastMod.empty()) {
+                request.headers().add("If-Modified-Since", lastMod);
+            }
         }
     }
-    DownloadFestDialog downloadFestDialog{parent};
-    httpClient.request(request).then([this, &downloadFestDialog] (const pplx::task<web::http::http_response> &responseTask) {
+    std::shared_ptr<DownloadFestDialog> downloadFestDialog = std::make_shared<DownloadFestDialog>(parent);
+    auto self = shared_from_this();
+    httpClient.request(request).then([self, downloadFestDialog] (const pplx::task<web::http::http_response> &responseTask) {
         try {
             auto response = responseTask.get();
             auto statusCode = response.status_code();
