@@ -4,6 +4,7 @@
 
 #include "FindMedicamentDialog.h"
 #include <wx/listctrl.h>
+#include <medfest/Struct/Decoded/LegemiddelVirkestoff.h>
 
 FindMedicamentDialog::FindMedicamentDialog(wxWindow *parent) : wxDialog(parent, wxID_ANY, wxT("Find medicament")) {
     // Add a sizer to handle the layout
@@ -46,7 +47,19 @@ bool FindMedicamentDialog::CanOpen() const {
 }
 
 void FindMedicamentDialog::OnText(wxCommandEvent &e) {
-
+    auto term = searchInput->GetValue().ToStdString();
+    if (term.size() > 2) {
+        auto legemiddelVirkestoffList = festDb.FindLegemiddelVirkestoff(term);
+        listView->ClearAll();
+        listView->AppendColumn(wxT("Name form strength"));
+        listView->SetColumnWidth(0, 400);
+        int i = 0;
+        for (const auto &legemiddelVirkestoff : legemiddelVirkestoffList) {
+            std::string navnFormStyrke = legemiddelVirkestoff.GetNavnFormStyrke();
+            wxString navnFormStyrkeWx = wxString::FromUTF8(navnFormStyrke.c_str());
+            listView->InsertItem(i++, navnFormStyrkeWx);
+        }
+    }
 }
 
 void FindMedicamentDialog::OnSelect(wxCommandEvent &e) {

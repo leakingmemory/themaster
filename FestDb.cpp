@@ -3,6 +3,7 @@
 //
 
 #include "FestDb.h"
+#include <medfest/FestVectors.h>
 #include <medfest/FestDeserializer.h>
 #include <medfest/Struct/Decoded/OppfLegemiddelVirkestoff.h>
 #include "DataDirectory.h"
@@ -39,12 +40,34 @@ std::vector<LegemiddelVirkestoff> FestDb::FindLegemiddelVirkestoff(const std::st
         return {};
     }
     std::vector<LegemiddelVirkestoff> results{};
-    festDeserializer->ForEachLegemiddelVirkestoff([this, &results, &term] (const auto &poppf) {
-        LegemiddelVirkestoff legemiddelVirkestoff = festDeserializer->Unpack(poppf).GetLegemiddelVirkestoff();
-        auto nfs = legemiddelVirkestoff.GetNavnFormStyrke();
-        if (nfs.contains(term)) {
-            results.emplace_back(legemiddelVirkestoff);
+    {
+        std::unique_ptr<FestVectors> latestVersion{};
+        {
+            std::map<std::string, std::unique_ptr<FestVectors>> festVersions{};
+            festDeserializer->ForEachFests([this, &festVersions](const PFest &pfest) {
+                auto fest = std::make_unique<FestVectors>(std::move(festDeserializer->Unpack(pfest)));
+                festVersions.insert_or_assign(fest->GetDato(), std::move(fest));
+            });
+            std::vector<std::string> versions{};
+            for (const auto &pair: festVersions) {
+                versions.emplace_back(pair.first);
+            }
+            std::sort(versions.begin(), versions.end(), std::greater<>());
+            if (!versions.empty()) {
+                latestVersion = std::move(festVersions[versions[0]]);
+            }
         }
-    });
+        if (latestVersion) {
+            auto oppfs = latestVersion->GetLegemiddelVirkestoff(*festDeserializer);
+            for (const auto &poppf : oppfs) {
+                PString pnavnFormStyrke = poppf.GetNavnFormStyrke();
+                std::string navnFormStyrke = festDeserializer->Unpack(pnavnFormStyrke);
+                if (navnFormStyrke.contains(term)) {
+                    PLegemiddelVirkestoff pLegemiddelVirkestoff = poppf;
+                    results.emplace_back(festDeserializer->Unpack(pLegemiddelVirkestoff));
+                }
+            }
+        }
+    }
     return results;
 }
