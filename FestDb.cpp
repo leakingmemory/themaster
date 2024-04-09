@@ -62,16 +62,14 @@ FestDbContainer FestDb::GetActiveFestDb() const {
     return container;
 }
 
-std::vector<LegemiddelVirkestoff> FestDb::FindLegemiddelVirkestoff(const std::string &term) const {
+std::vector<LegemiddelVirkestoff> FestDb::FindLegemiddelVirkestoff(const std::vector<POppfLegemiddelVirkestoff> &oppfs, const std::string &i_term) const {
     std::vector<LegemiddelVirkestoff> results{};
-    FestDbContainer festDbContainer = GetActiveFestDb();
-    if (!festDbContainer.festVectors) {
-        return {};
-    }
-    auto oppfs = festDbContainer.festVectors->GetLegemiddelVirkestoff(*festDeserializer);
+    std::string term{i_term};
+    std::transform(term.begin(), term.end(), term.begin(), [] (auto c) { return std::tolower(c); });
     for (const auto &poppf : oppfs) {
         PString pnavnFormStyrke = poppf.GetNavnFormStyrke();
         std::string navnFormStyrke = festDeserializer->Unpack(pnavnFormStyrke);
+        std::transform(navnFormStyrke.begin(), navnFormStyrke.end(), navnFormStyrke.begin(), [] (auto c) { return std::tolower(c); });
         if (navnFormStyrke.contains(term)) {
             PLegemiddelVirkestoff pLegemiddelVirkestoff = poppf;
             results.emplace_back(festDeserializer->Unpack(pLegemiddelVirkestoff));
@@ -80,8 +78,20 @@ std::vector<LegemiddelVirkestoff> FestDb::FindLegemiddelVirkestoff(const std::st
     return results;
 }
 
-std::vector<LegemiddelMerkevare> FestDb::FindLegemiddelMerkevare(const std::string &term) const {
+std::vector<LegemiddelVirkestoff> FestDb::FindLegemiddelVirkestoff(const std::string &term) const {
+    std::vector<LegemiddelVirkestoff> results{};
+    FestDbContainer festDbContainer = GetActiveFestDb();
+    if (!festDbContainer.festVectors) {
+        return {};
+    }
+    auto oppfs = festDbContainer.festVectors->GetLegemiddelVirkestoff(*festDeserializer);
+    return FindLegemiddelVirkestoff(oppfs, term);
+}
+
+std::vector<LegemiddelMerkevare> FestDb::FindLegemiddelMerkevare(const std::string &i_term) const {
     std::vector<LegemiddelMerkevare> results{};
+    std::string term{i_term};
+    std::transform(term.begin(), term.end(), term.begin(), [] (auto c) { return std::tolower(c); });
     FestDbContainer festDbContainer = GetActiveFestDb();
     if (!festDbContainer.festVectors) {
         return {};
@@ -90,6 +100,7 @@ std::vector<LegemiddelMerkevare> FestDb::FindLegemiddelMerkevare(const std::stri
     for (const auto &poppf : oppfs) {
         PString pnavnFormStyrke = poppf.GetNavnFormStyrke();
         std::string navnFormStyrke = festDeserializer->Unpack(pnavnFormStyrke);
+        std::transform(navnFormStyrke.begin(), navnFormStyrke.end(), navnFormStyrke.begin(), [] (auto c) { return std::tolower(c); });
         if (navnFormStyrke.contains(term)) {
             PLegemiddelMerkevare pLegemiddelMerkevare = poppf;
             results.emplace_back(festDeserializer->Unpack(pLegemiddelMerkevare));
@@ -98,8 +109,10 @@ std::vector<LegemiddelMerkevare> FestDb::FindLegemiddelMerkevare(const std::stri
     return results;
 }
 
-std::vector<Legemiddelpakning> FestDb::FindLegemiddelpakning(const std::string &term) const {
+std::vector<Legemiddelpakning> FestDb::FindLegemiddelpakning(const std::string &i_term) const {
     std::vector<Legemiddelpakning> results{};
+    std::string term{i_term};
+    std::transform(term.begin(), term.end(), term.begin(), [] (auto c) { return std::tolower(c); });
     FestDbContainer festDbContainer = GetActiveFestDb();
     if (!festDbContainer.festVectors) {
         return {};
@@ -108,10 +121,148 @@ std::vector<Legemiddelpakning> FestDb::FindLegemiddelpakning(const std::string &
     for (const auto &poppf : oppfs) {
         PString pnavnFormStyrke = poppf.GetNavnFormStyrke();
         std::string navnFormStyrke = festDeserializer->Unpack(pnavnFormStyrke);
+        std::transform(navnFormStyrke.begin(), navnFormStyrke.end(), navnFormStyrke.begin(), [] (auto c) { return std::tolower(c); });
         if (navnFormStyrke.contains(term)) {
             PLegemiddelpakning pLegemiddelPakning = poppf;
             results.emplace_back(festDeserializer->Unpack(pLegemiddelPakning));
         }
     }
     return results;
+}
+
+LegemiddelVirkestoff FestDb::GetLegemiddelVirkestoff(FestUuid id) const {
+    FestDbContainer festDbContainer = GetActiveFestDb();
+    if (!festDbContainer.festVectors) {
+        return {};
+    }
+    auto oppfs = festDbContainer.festVectors->GetLegemiddelVirkestoff(*festDeserializer);
+    for (const auto &poppf : oppfs) {
+        PFestId pId = poppf.GetId();
+        FestUuid legemiddelVirkestoffId = festDeserializer->Unpack(pId);
+        if (legemiddelVirkestoffId == id) {
+            PLegemiddelVirkestoff pLegemiddelVirkestoff = poppf;
+            return festDeserializer->Unpack(pLegemiddelVirkestoff);
+        }
+    }
+    return {};
+}
+
+LegemiddelVirkestoff FestDb::GetLegemiddelVirkestoff(const PLegemiddelVirkestoff &packed) const {
+    return festDeserializer->Unpack(packed);
+}
+
+LegemiddelMerkevare FestDb::GetLegemiddelMerkevare(FestUuid id) const {
+    FestDbContainer festDbContainer = GetActiveFestDb();
+    if (!festDbContainer.festVectors) {
+        return {};
+    }
+    auto oppfs = festDbContainer.festVectors->GetLegemiddelMerkevare(*festDeserializer);
+    for (const auto &poppf : oppfs) {
+        PFestId pId = poppf.GetId();
+        FestUuid legemiddelMerkevareId = festDeserializer->Unpack(pId);
+        if (legemiddelMerkevareId == id) {
+            PLegemiddelMerkevare pLegemiddelMerkevare = poppf;
+            return festDeserializer->Unpack(pLegemiddelMerkevare);
+        }
+    }
+    return {};
+}
+
+Legemiddelpakning FestDb::GetLegemiddelpakning(FestUuid id) const {
+    FestDbContainer festDbContainer = GetActiveFestDb();
+    if (!festDbContainer.festVectors) {
+        return {};
+    }
+    auto oppfs = festDbContainer.festVectors->GetLegemiddelPakning(*festDeserializer);
+    for (const auto &poppf : oppfs) {
+        PFestId pId = poppf.GetId();
+        FestUuid legemiddelpakningId = festDeserializer->Unpack(pId);
+        if (legemiddelpakningId == id) {
+            PLegemiddelpakning pLegemiddelpakning = poppf;
+            return festDeserializer->Unpack(pLegemiddelpakning);
+        }
+    }
+    return {};
+}
+
+FestUuid FestDb::GetVirkestoffForVirkestoffMedStyrkeId(FestUuid virkestoffMedStyrkeId) const {
+    FestDbContainer festDbContainer = GetActiveFestDb();
+    if (!festDbContainer.festVectors) {
+        return {};
+    }
+    auto oppfs = festDbContainer.festVectors->GetVirkestoffMedStyrke(*festDeserializer);
+    for (const auto &poppf: oppfs) {
+        PFestId pVMSId = poppf.GetId();
+        FestUuid iteratingVirkestoffMedStyrkeId = festDeserializer->Unpack(pVMSId);
+        if (iteratingVirkestoffMedStyrkeId == virkestoffMedStyrkeId) {
+            auto pId = poppf.GetRefVirkestoff();
+            return festDeserializer->Unpack(pId);
+        }
+    }
+    return {};
+}
+
+std::vector<FestUuid> FestDb::GetVirkestoffMedStyrkeForVirkestoffId(FestUuid virkestoffId) {
+    std::vector<FestUuid> virkestoffMedStyrkeId{};
+    FestDbContainer festDbContainer = GetActiveFestDb();
+    if (!festDbContainer.festVectors) {
+        return {};
+    }
+    auto oppfs = festDbContainer.festVectors->GetVirkestoffMedStyrke(*festDeserializer);
+    for (const auto &poppf: oppfs) {
+        PFestId pVId = poppf.GetRefVirkestoff();
+        auto vId = festDeserializer->Unpack(pVId);
+        if (vId == virkestoffId) {
+            auto pId = poppf.GetId();
+            auto id = festDeserializer->Unpack(pId);
+            virkestoffMedStyrkeId.push_back(id);
+        }
+    }
+    return virkestoffMedStyrkeId;
+}
+
+std::vector<POppfLegemiddelVirkestoff> FestDb::GetAllPLegemiddelVirkestoff() const {
+    std::vector<FestUuid> virkestoffMedStyrkeId{};
+    FestDbContainer festDbContainer = GetActiveFestDb();
+    if (!festDbContainer.festVectors) {
+        return {};
+    }
+    return festDbContainer.festVectors->GetLegemiddelVirkestoff(*festDeserializer);
+}
+
+bool FestDb::PLegemiddelVirkestoffHasOneOfMerkevare(const PLegemiddelVirkestoff &pLegemiddelVirkestoff,
+                                                    const std::vector<FestUuid> &merkevareId) {
+    FestDbContainer festDbContainer = GetActiveFestDb();
+    if (!festDbContainer.festVectors) {
+        return false;
+    }
+    auto ids = festDeserializer->GetFestUuids(pLegemiddelVirkestoff.GetRefLegemiddelMerkevare());
+    for (const auto &mId : ids) {
+        for (const auto &id : merkevareId) {
+            if (mId == id) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+bool FestDb::PLegemiddelVirkestoffHasOneOfPakning(const PLegemiddelVirkestoff &pLegemiddelVirkestoff, const std::vector<FestUuid> &pakningId) {
+    FestDbContainer festDbContainer = GetActiveFestDb();
+    if (!festDbContainer.festVectors) {
+        return false;
+    }
+    auto ids = festDeserializer->GetFestUuids(pLegemiddelVirkestoff.GetRefPakning());
+    for (const auto &mId : ids) {
+        for (const auto &id : pakningId) {
+            if (mId == id) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+FestUuid FestDb::GetLegemiddelVirkestoffId(const PLegemiddelVirkestoff &packed) {
+    return festDeserializer->Unpack(packed.GetId());
 }
