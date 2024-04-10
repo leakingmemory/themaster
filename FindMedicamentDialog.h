@@ -12,21 +12,28 @@
 class wxListView;
 
 struct FindMedicamentDialogSearchResult;
+class LegemiddelCore;
 
 class FindMedicamentDialog : public wxDialog {
 private:
     FestDb festDb{};
     WxDebouncer searchDebouncer;
+    std::shared_ptr<FindMedicamentDialogSearchResult> medicamentLists{};
+    std::shared_ptr<LegemiddelCore> selected{};
     wxTextCtrl *searchInput;
     wxListView *listView;
     wxButton *okButton;
 public:
     FindMedicamentDialog(wxWindow *frame);
     bool CanOpen() const;
-    FindMedicamentDialogSearchResult PerformSearch();
-    void ShowSearchResult(const FindMedicamentDialogSearchResult &);
+    std::shared_ptr<FindMedicamentDialogSearchResult> PerformSearch();
+    void ShowSearchResult(const std::shared_ptr<FindMedicamentDialogSearchResult> &);
     void OnText(wxCommandEvent &e);
+    void UpdateSelected();
     void OnSelect(wxCommandEvent &e);
+    [[nodiscard]] std::shared_ptr<LegemiddelCore> GetSelected() const {
+        return selected;
+    }
 };
 
 

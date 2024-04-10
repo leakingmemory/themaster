@@ -29,6 +29,7 @@
 #include <sfmbasisapi/fhir/composition.h>
 #include "FestDbUi.h"
 #include "FindMedicamentDialog.h"
+#include <medfest/Struct/Decoded/LegemiddelCore.h>
 
 TheMasterFrame::TheMasterFrame() : wxFrame(nullptr, wxID_ANY, "The Master"),
                                    weakRefDispatcher(std::make_shared<WeakRefUiDispatcher<TheMasterFrame>>(this)),
@@ -976,6 +977,14 @@ void TheMasterFrame::OnPrescribeMedicament(wxCommandEvent &e) {
         return;
     }
     findMedicamentDialog.ShowModal();
+    auto medicament = findMedicamentDialog.GetSelected();
+    if (medicament) {
+        PrescriptionDialog prescriptionDialog{this};
+        auto res = prescriptionDialog.ShowModal();
+        if (res != wxID_OK) {
+            return;
+        }
+    }
 }
 
 WeakRefUiDispatcherRef<TheMasterFrame> TheMasterFrame::GetWeakRefDispatcher() {
