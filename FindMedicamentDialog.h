@@ -7,18 +7,24 @@
 
 #include <wx/wx.h>
 #include "FestDb.h"
+#include "WxDebouncer.h"
 
 class wxListView;
+
+struct FindMedicamentDialogSearchResult;
 
 class FindMedicamentDialog : public wxDialog {
 private:
     FestDb festDb{};
+    WxDebouncer searchDebouncer;
     wxTextCtrl *searchInput;
     wxListView *listView;
     wxButton *okButton;
 public:
     FindMedicamentDialog(wxWindow *frame);
     bool CanOpen() const;
+    FindMedicamentDialogSearchResult PerformSearch();
+    void ShowSearchResult(const FindMedicamentDialogSearchResult &);
     void OnText(wxCommandEvent &e);
     void OnSelect(wxCommandEvent &e);
 };

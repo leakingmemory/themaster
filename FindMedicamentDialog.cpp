@@ -10,7 +10,17 @@
 #include <medfest/Struct/Packed/FestUuid.h>
 #include <medfest/Struct/Packed/POppfLegemiddelVirkestoff.h>
 
-FindMedicamentDialog::FindMedicamentDialog(wxWindow *parent) : wxDialog(parent, wxID_ANY, wxT("Find medicament")) {
+struct FindMedicamentDialogSearchResult {
+    std::vector<LegemiddelVirkestoff> legemiddelVirkestoffList{};
+    std::vector<LegemiddelMerkevare> legemiddelMerkevareList{};
+    std::vector<Legemiddelpakning> legemiddelpakningList{};
+};
+
+FindMedicamentDialog::FindMedicamentDialog(wxWindow *parent) :
+    wxDialog(parent, wxID_ANY, wxT("Find medicament")),
+    searchDebouncer() {
+    searchDebouncer.Func<FindMedicamentDialogSearchResult>([this] () { return PerformSearch(); }, [this] (const FindMedicamentDialogSearchResult &result) { ShowSearchResult(result); });
+
     // Add a sizer to handle the layout
     wxBoxSizer* sizer = new wxBoxSizer(wxVERTICAL);
 
@@ -50,40 +60,38 @@ bool FindMedicamentDialog::CanOpen() const {
     return festDb.IsOpen();
 }
 
-void FindMedicamentDialog::OnText(wxCommandEvent &e) {
+FindMedicamentDialogSearchResult FindMedicamentDialog::PerformSearch() {
+    FindMedicamentDialogSearchResult result{};
     auto term = searchInput->GetValue().ToStdString();
     if (term.size() > 2) {
         auto legemiddelVirkestoffOppfs = festDb.GetAllPLegemiddelVirkestoff();
-        std::vector<LegemiddelVirkestoff> legemiddelVirkestoffList{};
-        std::vector<LegemiddelMerkevare> legemiddelMerkevareList{};
-        std::vector<Legemiddelpakning> legemiddelpakningList{};
         {
             std::vector<FestUuid> legemiddelVirkestoffIds{};
             std::vector<FestUuid> legemiddelMerkevareIds{};
             std::vector<FestUuid> legemiddelpakningIds{};
-            legemiddelVirkestoffList = festDb.FindLegemiddelVirkestoff(legemiddelVirkestoffOppfs, term);
-            for (const auto &legemiddelVirkestoff : legemiddelVirkestoffList) {
+            result.legemiddelVirkestoffList = festDb.FindLegemiddelVirkestoff(legemiddelVirkestoffOppfs, term);
+            for (const auto &legemiddelVirkestoff: result.legemiddelVirkestoffList) {
                 legemiddelVirkestoffIds.emplace_back(legemiddelVirkestoff.GetId());
                 auto refMerkevare = legemiddelVirkestoff.GetRefLegemiddelMerkevare();
-                for (const auto &merkevareId : refMerkevare) {
+                for (const auto &merkevareId: refMerkevare) {
                     FestUuid festId{merkevareId};
                     auto merkevare = festDb.GetLegemiddelMerkevare(festId);
                     legemiddelMerkevareIds.emplace_back(festId);
-                    legemiddelMerkevareList.emplace_back(merkevare);
+                    result.legemiddelMerkevareList.emplace_back(merkevare);
                 }
                 auto refPakning = legemiddelVirkestoff.GetRefPakning();
-                for (const auto &pakningId : refPakning) {
+                for (const auto &pakningId: refPakning) {
                     FestUuid festId{pakningId};
                     auto pakning = festDb.GetLegemiddelpakning(festId);
                     legemiddelpakningIds.emplace_back(festId);
-                    legemiddelpakningList.emplace_back(pakning);
+                    result.legemiddelpakningList.emplace_back(pakning);
                 }
             }
             auto legemiddelMerkevareSearchList = festDb.FindLegemiddelMerkevare(term);
             for (const auto &legemiddelMerkevare: legemiddelMerkevareSearchList) {
                 FestUuid festId{legemiddelMerkevare.GetId()};
                 bool found{false};
-                for (const auto eid : legemiddelMerkevareIds) {
+                for (const auto eid: legemiddelMerkevareIds) {
                     if (festId == eid) {
                         found = true;
                         continue;
@@ -91,31 +99,31 @@ void FindMedicamentDialog::OnText(wxCommandEvent &e) {
                 }
                 if (!found) {
                     legemiddelMerkevareIds.emplace_back(festId);
-                    legemiddelMerkevareList.emplace_back(legemiddelMerkevare);
+                    result.legemiddelMerkevareList.emplace_back(legemiddelMerkevare);
                 }
             }
             auto legemiddelpakningSearchList = festDb.FindLegemiddelpakning(term);
-            for (const auto &legemiddelpakning : legemiddelpakningSearchList) {
+            for (const auto &legemiddelpakning: legemiddelpakningSearchList) {
                 FestUuid festId{legemiddelpakning.GetId()};
                 bool found{false};
-                for (const auto eid : legemiddelMerkevareIds) {
+                for (const auto eid: legemiddelMerkevareIds) {
                     if (festId == eid) {
                         found = true;
                         continue;
                     }
                 }
                 if (!found) {
-                    legemiddelpakningList.emplace_back(legemiddelpakning);
+                    result.legemiddelpakningList.emplace_back(legemiddelpakning);
                     legemiddelpakningIds.emplace_back(legemiddelpakning.GetId());
                 }
             }
-            for (const auto &plv : legemiddelVirkestoffOppfs) {
+            for (const auto &plv: legemiddelVirkestoffOppfs) {
                 auto unpacked = festDb.GetLegemiddelVirkestoff(plv);
                 if (festDb.PLegemiddelVirkestoffHasOneOfMerkevare(plv, legemiddelMerkevareIds) ||
                     festDb.PLegemiddelVirkestoffHasOneOfPakning(plv, legemiddelpakningIds)) {
                     auto id = festDb.GetLegemiddelVirkestoffId(plv);
                     bool found{false};
-                    for (const auto &eid : legemiddelVirkestoffIds) {
+                    for (const auto &eid: legemiddelVirkestoffIds) {
                         if (id == eid) {
                             found = true;
                             break;
@@ -124,12 +132,12 @@ void FindMedicamentDialog::OnText(wxCommandEvent &e) {
                     if (!found) {
                         legemiddelVirkestoffIds.emplace_back(id);
                         auto legemiddelVirkestoff = festDb.GetLegemiddelVirkestoff(id);
-                        legemiddelVirkestoffList.emplace_back(legemiddelVirkestoff);
+                        result.legemiddelVirkestoffList.emplace_back(legemiddelVirkestoff);
                         auto refMerkevare = legemiddelVirkestoff.GetRefLegemiddelMerkevare();
-                        for (auto merkevareId : refMerkevare) {
+                        for (auto merkevareId: refMerkevare) {
                             FestUuid festId{merkevareId};
                             bool found{false};
-                            for (const auto &eid : legemiddelMerkevareIds) {
+                            for (const auto &eid: legemiddelMerkevareIds) {
                                 if (eid == festId) {
                                     found = true;
                                     break;
@@ -137,14 +145,14 @@ void FindMedicamentDialog::OnText(wxCommandEvent &e) {
                             }
                             if (!found) {
                                 legemiddelMerkevareIds.emplace_back(festId);
-                                legemiddelMerkevareList.emplace_back(festDb.GetLegemiddelMerkevare(festId));
+                                result.legemiddelMerkevareList.emplace_back(festDb.GetLegemiddelMerkevare(festId));
                             }
                         }
                         auto refPakning = legemiddelVirkestoff.GetRefPakning();
-                        for (auto pakningId : refPakning) {
+                        for (auto pakningId: refPakning) {
                             FestUuid festId{pakningId};
                             bool found{false};
-                            for (const auto &eid : legemiddelpakningIds) {
+                            for (const auto &eid: legemiddelpakningIds) {
                                 if (eid == festId) {
                                     found = true;
                                     break;
@@ -152,33 +160,41 @@ void FindMedicamentDialog::OnText(wxCommandEvent &e) {
                             }
                             if (!found) {
                                 legemiddelpakningIds.emplace_back(festId);
-                                legemiddelpakningList.emplace_back(festDb.GetLegemiddelpakning(festId));
+                                result.legemiddelpakningList.emplace_back(festDb.GetLegemiddelpakning(festId));
                             }
                         }
                     }
                 }
             }
         }
-        listView->ClearAll();
-        listView->AppendColumn(wxT("Name form strength"));
-        listView->SetColumnWidth(0, 400);
-        int i = 0;
-        for (const auto &legemiddelVirkestoff : legemiddelVirkestoffList) {
-            std::string navnFormStyrke = legemiddelVirkestoff.GetNavnFormStyrke();
-            wxString navnFormStyrkeWx = wxString::FromUTF8(navnFormStyrke.c_str());
-            listView->InsertItem(i++, navnFormStyrkeWx);
-        }
-        for (const auto &legemiddelMerkevare : legemiddelMerkevareList) {
-            std::string navnFormStyrke = legemiddelMerkevare.GetNavnFormStyrke();
-            wxString navnFormStyrkeWx = wxString::FromUTF8(navnFormStyrke.c_str());
-            listView->InsertItem(i++, navnFormStyrkeWx);
-        }
-        for (const auto &legemiddelpakning : legemiddelpakningList) {
-            std::string navnFormStyrke = legemiddelpakning.GetNavnFormStyrke();
-            wxString navnFormStyrkeWx = wxString::FromUTF8(navnFormStyrke.c_str());
-            listView->InsertItem(i++, navnFormStyrkeWx);
-        }
     }
+    return result;
+}
+
+void FindMedicamentDialog::ShowSearchResult(const FindMedicamentDialogSearchResult &result) {
+    listView->ClearAll();
+    listView->AppendColumn(wxT("Name form strength"));
+    listView->SetColumnWidth(0, 400);
+    int i = 0;
+    for (const auto &legemiddelVirkestoff : result.legemiddelVirkestoffList) {
+        std::string navnFormStyrke = legemiddelVirkestoff.GetNavnFormStyrke();
+        wxString navnFormStyrkeWx = wxString::FromUTF8(navnFormStyrke.c_str());
+        listView->InsertItem(i++, navnFormStyrkeWx);
+    }
+    for (const auto &legemiddelMerkevare : result.legemiddelMerkevareList) {
+        std::string navnFormStyrke = legemiddelMerkevare.GetNavnFormStyrke();
+        wxString navnFormStyrkeWx = wxString::FromUTF8(navnFormStyrke.c_str());
+        listView->InsertItem(i++, navnFormStyrkeWx);
+    }
+    for (const auto &legemiddelpakning : result.legemiddelpakningList) {
+        std::string navnFormStyrke = legemiddelpakning.GetNavnFormStyrke();
+        wxString navnFormStyrkeWx = wxString::FromUTF8(navnFormStyrke.c_str());
+        listView->InsertItem(i++, navnFormStyrkeWx);
+    }
+}
+
+void FindMedicamentDialog::OnText(wxCommandEvent &e) {
+    searchDebouncer.Schedule();
 }
 
 void FindMedicamentDialog::OnSelect(wxCommandEvent &e) {
