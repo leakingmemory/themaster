@@ -30,6 +30,7 @@
 #include "FestDbUi.h"
 #include "FindMedicamentDialog.h"
 #include <medfest/Struct/Decoded/LegemiddelCore.h>
+#include "SfmMedicamentMapper.h"
 
 TheMasterFrame::TheMasterFrame() : wxFrame(nullptr, wxID_ANY, "The Master"),
                                    weakRefDispatcher(std::make_shared<WeakRefUiDispatcher<TheMasterFrame>>(this)),
@@ -915,20 +916,11 @@ void TheMasterFrame::SetPatient(PrescriptionData &prescriptionData) const {
     prescriptionData.subjectDisplay = patient->GetDisplay();
 }
 
-void TheMasterFrame::OnPrescribeMagistral(wxCommandEvent &e) {
-    PrescriptionData prescriptionData{};
-    MagistralBuilderDialog magistralBuilderDialog{this};
-    if (magistralBuilderDialog.ShowModal() == wxID_OK) {
-        PrescriptionDialog prescriptionDialog{this};
-        auto res = prescriptionDialog.ShowModal();
-        if (res != wxID_OK) {
-            return;
-        }
-        prescriptionData = prescriptionDialog.GetPrescriptionData();
-    }
+void TheMasterFrame::PrescribeMedicament(const PrescriptionDialog &prescriptionDialog) const {
+    PrescriptionData prescriptionData = prescriptionDialog.GetPrescriptionData();
+    std::shared_ptr<FhirMedication> magistralMedicament = prescriptionDialog.GetMedication();
     SetPrescriber(prescriptionData);
     SetPatient(prescriptionData);
-    std::shared_ptr<FhirMedication> magistralMedicament = std::make_shared<FhirMedication>(magistralBuilderDialog.GetMagistralMedicament().ToFhir());
     std::string magistralMedicamentFullUrl{"urn:uuid:"};
     magistralMedicamentFullUrl.append(magistralMedicament->GetId());
     FhirBundleEntry magistralMedicamentEntry{magistralMedicamentFullUrl, magistralMedicament};
@@ -970,6 +962,18 @@ void TheMasterFrame::OnPrescribeMagistral(wxCommandEvent &e) {
     }
 }
 
+void TheMasterFrame::OnPrescribeMagistral(wxCommandEvent &e) {
+    MagistralBuilderDialog magistralBuilderDialog{this};
+    if (magistralBuilderDialog.ShowModal() == wxID_OK) {
+        PrescriptionDialog prescriptionDialog{this, std::make_shared<FhirMedication>(magistralBuilderDialog.GetMagistralMedicament().ToFhir()), {}, true};
+        auto res = prescriptionDialog.ShowModal();
+        if (res != wxID_OK) {
+            return;
+        }
+        PrescribeMedicament(prescriptionDialog);
+    }
+}
+
 void TheMasterFrame::OnPrescribeMedicament(wxCommandEvent &e) {
     FindMedicamentDialog findMedicamentDialog{this};
     if (!findMedicamentDialog.CanOpen()) {
@@ -979,11 +983,17 @@ void TheMasterFrame::OnPrescribeMedicament(wxCommandEvent &e) {
     findMedicamentDialog.ShowModal();
     auto medicament = findMedicamentDialog.GetSelected();
     if (medicament) {
-        PrescriptionDialog prescriptionDialog{this};
+        std::shared_ptr<FestDb> festDb = std::make_shared<FestDb>();
+        if (!festDb->IsOpen()) {
+            return;
+        }
+        SfmMedicamentMapper medicamentMapper{festDb, medicament};
+        PrescriptionDialog prescriptionDialog{this, std::make_shared<FhirMedication>(medicamentMapper.GetMedication()), medicamentMapper.GetPrescriptionUnit(), medicamentMapper.IsPackage()};
         auto res = prescriptionDialog.ShowModal();
         if (res != wxID_OK) {
             return;
         }
+        PrescribeMedicament(prescriptionDialog);
     }
 }
 

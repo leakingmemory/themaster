@@ -8,6 +8,7 @@
 #include <medfest/Struct/Decoded/OppfLegemiddelVirkestoff.h>
 #include <medfest/Struct/Decoded/OppfLegemiddelMerkevare.h>
 #include <medfest/Struct/Decoded/OppfLegemiddelpakning.h>
+#include <medfest/Struct/Packed/PPakningsinfo.h>
 #include "DataDirectory.h"
 #include <filesystem>
 #include <wx/wx.h>
@@ -151,6 +152,25 @@ LegemiddelVirkestoff FestDb::GetLegemiddelVirkestoff(const PLegemiddelVirkestoff
     return festDeserializer->Unpack(packed);
 }
 
+LegemiddelVirkestoff FestDb::GetLegemiddelVirkestoffForMerkevare(FestUuid uuid) const {
+    FestDbContainer festDbContainer = GetActiveFestDb();
+    if (!festDbContainer.festVectors) {
+        return {};
+    }
+    auto oppfs = festDbContainer.festVectors->GetLegemiddelVirkestoff(*festDeserializer);
+    for (const auto &poppf : oppfs) {
+        GenericListItems refList = poppf.GetRefLegemiddelMerkevare();
+        auto ids = festDeserializer->GetFestUuids(refList);
+        for (auto id : ids) {
+            if (uuid == id) {
+                PLegemiddelVirkestoff pLegemiddelVirkestoff = poppf;
+                return festDeserializer->Unpack(pLegemiddelVirkestoff);
+            }
+        }
+    }
+    return {};
+}
+
 LegemiddelMerkevare FestDb::GetLegemiddelMerkevare(FestUuid id) const {
     FestDbContainer festDbContainer = GetActiveFestDb();
     if (!festDbContainer.festVectors) {
@@ -183,6 +203,28 @@ Legemiddelpakning FestDb::GetLegemiddelpakning(FestUuid id) const {
         }
     }
     return {};
+}
+
+std::vector<Legemiddelpakning> FestDb::GetLegemiddelpakningForMerkevare(FestUuid merkevareId) const {
+    FestDbContainer festDbContainer = GetActiveFestDb();
+    std::vector<Legemiddelpakning> list{};
+    if (!festDbContainer.festVectors) {
+        return list;
+    }
+    auto oppfs = festDbContainer.festVectors->GetLegemiddelPakning(*festDeserializer);
+    for (const auto &poppf : oppfs) {
+        auto pList = festDeserializer->GetPakningsinfoList(poppf);
+        for (const auto &ppakningsinfo : pList) {
+            auto pId = ppakningsinfo.GetMerkevareId();
+            auto id = festDeserializer->Unpack(pId);
+            if (id == merkevareId) {
+                auto unpacked = festDeserializer->Unpack(static_cast<const PLegemiddelpakning &>(poppf));
+                list.emplace_back(std::move(unpacked));
+                break;
+            }
+        }
+    }
+    return list;
 }
 
 FestUuid FestDb::GetVirkestoffForVirkestoffMedStyrkeId(FestUuid virkestoffMedStyrkeId) const {

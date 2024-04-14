@@ -20,6 +20,9 @@ struct PrescriptionData {
     std::string dssn{};
     bool numberOfPackagesSet{false};
     double numberOfPackages{};
+    bool amountIsSet{false};
+    double amount{};
+    MedicalCodedValue amountUnit{};
     int reit{0};
     MedicalCodedValue itemGroup{};
     MedicalCodedValue reimbursementCode{};

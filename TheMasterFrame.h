@@ -18,6 +18,7 @@ class wxListView;
 namespace pplx {
     template<class ReturnType> class task;
 }
+class PrescriptionDialog;
 
 enum {
     TheMaster_Connect_Id = 1,
@@ -65,6 +66,7 @@ public:
     void SetPrescriber(PrescriptionData &prescriptionData) const ;
     void SetPatient(PrescriptionData &prescriptionData) const ;
     //pplx::task<PrescriptionData> SetPrescriber(const PrescriptionData &prescriptionData);
+    void PrescribeMedicament(const PrescriptionDialog &prescriptionDialog) const;
     void OnPrescribeMagistral(wxCommandEvent &e);
     void OnPrescribeMedicament(wxCommandEvent &e);
     WeakRefUiDispatcherRef<TheMasterFrame> GetWeakRefDispatcher();

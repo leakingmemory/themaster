@@ -62,6 +62,11 @@ FhirMedicationStatement PrescriptionData::ToFhir() {
                     "numberofpackages",
                     std::make_shared<FhirDecimalValue>(numberOfPackages)
             ));
+        } else if (amountIsSet) {
+            reseptAmendment->AddExtension(std::make_shared<FhirValueExtension>(
+                    "amount",
+                    std::make_shared<FhirQuantityValue>(FhirQuantity(amount, amountUnit.GetDisplay()))
+            ));
         }
         {
             std::string reitStr{};
