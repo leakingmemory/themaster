@@ -73,6 +73,7 @@ SfmMedicamentMapper::SfmMedicamentMapper(const std::shared_ptr<FestDb> &festDb, 
         }
         medication.SetProfile("http://ehelse.no/fhir/StructureDefinition/sfm-Medication");
         medication.SetStatus(FhirStatus::ACTIVE);
+        medication.SetName(legemiddelCore->GetNavnFormStyrke());
     }
 }
 
