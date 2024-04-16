@@ -111,6 +111,7 @@ void SfmMedicamentMapper::Map(const LegemiddelMerkevare &legemiddelMerkevare) {
     {
         auto medicationDetails = std::make_shared<FhirExtension>("http://ehelse.no/fhir/StructureDefinition/sfm-medicationdetails");
         medicationDetails->AddExtension(std::make_shared<FhirValueExtension>("registreringstype", std::make_shared<FhirCodeableConceptValue>(FhirCodeableConcept("http://ehelse.no/fhir/CodeSystem/sfm-festregistrationtype", "2", "Legemiddelmerkevare"))));
+        medicationDetails->AddExtension(std::make_shared<FhirValueExtension>("name", std::make_shared<FhirString>(legemiddelMerkevare.GetNavnFormStyrke())));
         medication.AddExtension(medicationDetails);
     }
 }
