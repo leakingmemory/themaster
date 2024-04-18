@@ -918,22 +918,22 @@ void TheMasterFrame::SetPatient(PrescriptionData &prescriptionData) const {
 
 void TheMasterFrame::PrescribeMedicament(const PrescriptionDialog &prescriptionDialog) const {
     PrescriptionData prescriptionData = prescriptionDialog.GetPrescriptionData();
-    std::shared_ptr<FhirMedication> magistralMedicament = prescriptionDialog.GetMedication();
+    std::shared_ptr<FhirMedication> medicament = prescriptionDialog.GetMedication();
     SetPrescriber(prescriptionData);
     SetPatient(prescriptionData);
-    std::string magistralMedicamentFullUrl{"urn:uuid:"};
-    magistralMedicamentFullUrl.append(magistralMedicament->GetId());
-    FhirBundleEntry magistralMedicamentEntry{magistralMedicamentFullUrl, magistralMedicament};
+    std::string medicamentFullUrl{"urn:uuid:"};
+    medicamentFullUrl.append(medicament->GetId());
+    FhirBundleEntry medicamentEntry{medicamentFullUrl, medicament};
     std::shared_ptr<FhirMedicationStatement> medicationStatement = std::make_shared<FhirMedicationStatement>(prescriptionData.ToFhir());
     {
-        auto medicationProfile = magistralMedicament->GetProfile();
-        FhirReference medicationReference{magistralMedicamentFullUrl, medicationProfile.size() == 1 ? medicationProfile[0] : "", magistralMedicament->GetDisplay()};
+        auto medicationProfile = medicament->GetProfile();
+        FhirReference medicationReference{medicamentFullUrl, medicationProfile.size() == 1 ? medicationProfile[0] : "", medicament->GetDisplay()};
         medicationStatement->SetMedicationReference(medicationReference);
     }
     std::string medicationStatementFullUrl{"urn:uuid:"};
     medicationStatementFullUrl.append(medicationStatement->GetId());
     FhirBundleEntry medicationStatementEntry{medicationStatementFullUrl, medicationStatement};
-    medicationBundle->medBundle->AddEntry(magistralMedicamentEntry);
+    medicationBundle->medBundle->AddEntry(medicamentEntry);
     medicationBundle->medBundle->AddEntry(medicationStatementEntry);
     for (const auto &entry : medicationBundle->medBundle->GetEntries()) {
         auto composition = std::dynamic_pointer_cast<FhirComposition>(entry.GetResource());
@@ -988,7 +988,16 @@ void TheMasterFrame::OnPrescribeMedicament(wxCommandEvent &e) {
             return;
         }
         SfmMedicamentMapper medicamentMapper{festDb, medicament};
-        PrescriptionDialog prescriptionDialog{this, std::make_shared<FhirMedication>(medicamentMapper.GetMedication()), medicamentMapper.GetPrescriptionUnit(), medicamentMapper.IsPackage()};
+        std::vector<MedicamentPackage> packages{};
+        {
+            auto packageMappers = medicamentMapper.GetPackages();
+            packages.reserve(packageMappers.size());
+            for (const auto &packageMapper : packageMappers) {
+                auto description = packageMapper.GetPackageDescription();
+                packages.emplace_back(std::make_shared<FhirMedication>(packageMapper.GetMedication()), description);
+            }
+        }
+        PrescriptionDialog prescriptionDialog{this, std::make_shared<FhirMedication>(medicamentMapper.GetMedication()), medicamentMapper.GetPrescriptionUnit(), medicamentMapper.IsPackage(), packages};
         auto res = prescriptionDialog.ShowModal();
         if (res != wxID_OK) {
             return;

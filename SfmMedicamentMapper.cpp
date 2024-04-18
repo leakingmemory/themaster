@@ -180,6 +180,10 @@ void SfmMedicamentMapper::Map(const Legemiddelpakning &legemiddelpakning) {
                                                                                                enhetPakning.GetDistinguishedName()))));
             }
             medicationDetails->AddExtension(packinginfo);
+            if (!packageDescription.empty()) {
+                packageDescription.append(", ");
+            }
+            packageDescription.append(pi.GetPakningsstr());
         }
         medication.AddExtension(medicationDetails);
     }

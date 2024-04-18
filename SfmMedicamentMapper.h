@@ -20,6 +20,7 @@ private:
     FhirMedication medication{};
     std::vector<SfmMedicamentMapper> packages{};
     std::vector<MedicalCodedValue> prescriptionUnit{};
+    std::string packageDescription{};
     std::shared_ptr<FestDb> festDb;
     bool isPackage{false};
 public:
@@ -37,6 +38,12 @@ public:
     }
     [[nodiscard]] bool IsPackage() const {
         return isPackage;
+    }
+    [[nodiscard]] std::vector<SfmMedicamentMapper> GetPackages() const {
+        return packages;
+    }
+    [[nodiscard]] std::string GetPackageDescription() const {
+        return packageDescription;
     }
 };
 
