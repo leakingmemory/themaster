@@ -66,7 +66,7 @@ public:
     void SetPrescriber(PrescriptionData &prescriptionData) const ;
     void SetPatient(PrescriptionData &prescriptionData) const ;
     //pplx::task<PrescriptionData> SetPrescriber(const PrescriptionData &prescriptionData);
-    void PrescribeMedicament(const PrescriptionDialog &prescriptionDialog) const;
+    void PrescribeMedicament(const PrescriptionDialog &prescriptionDialog);
     void OnPrescribeMagistral(wxCommandEvent &e);
     void OnPrescribeMedicament(wxCommandEvent &e);
     WeakRefUiDispatcherRef<TheMasterFrame> GetWeakRefDispatcher();

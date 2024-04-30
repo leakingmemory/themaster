@@ -32,6 +32,9 @@
 #include <medfest/Struct/Decoded/LegemiddelCore.h>
 #include "SfmMedicamentMapper.h"
 
+constexpr int PrescriptionNameColumnWidth = 250;
+constexpr int PrescriptionRemoteColumnWidth = 75;
+
 TheMasterFrame::TheMasterFrame() : wxFrame(nullptr, wxID_ANY, "The Master"),
                                    weakRefDispatcher(std::make_shared<WeakRefUiDispatcher<TheMasterFrame>>(this)),
                                    patientStore(std::make_shared<PatientStoreInMemoryWithPersistence>())
@@ -85,6 +88,9 @@ TheMasterFrame::TheMasterFrame() : wxFrame(nullptr, wxID_ANY, "The Master"),
 
     prescriptions = new wxListView(this, wxID_ANY);
     prescriptions->AppendColumn(wxT("Name"));
+    prescriptions->AppendColumn(wxT("Published"));
+    prescriptions->SetColumnWidth(0, PrescriptionNameColumnWidth);
+    prescriptions->SetColumnWidth(1, PrescriptionRemoteColumnWidth);
     sizer->Add(prescriptions, 1, wxEXPAND | wxALL, 5);
 
     SetSizerAndFit(sizer);
@@ -126,13 +132,42 @@ void TheMasterFrame::UpdateHeader() {
 void TheMasterFrame::UpdateMedications() {
     prescriptions->ClearAll();
     prescriptions->AppendColumn(wxT("Name"));
+    prescriptions->AppendColumn(wxT("Published"));
+    prescriptions->SetColumnWidth(0, PrescriptionNameColumnWidth);
+    prescriptions->SetColumnWidth(1, PrescriptionRemoteColumnWidth);
     auto pos = 0;
     for (const auto &bundleEntry : medicationBundle->medBundle->GetEntries()) {
         auto resource = bundleEntry.GetResource();
         auto resourceType = resource->GetResourceType();
         auto medicationStatement = std::dynamic_pointer_cast<FhirMedicationStatement>(resource);
         if (medicationStatement) {
-            prescriptions->InsertItem(pos++, medicationStatement->GetMedicationReference().GetDisplay());
+            auto row = pos++;
+            prescriptions->InsertItem(row, medicationStatement->GetMedicationReference().GetDisplay());
+            bool createeresept{false};
+            auto statementExtensions = medicationStatement->GetExtensions();
+            for (const auto &statementExtension : statementExtensions) {
+                auto url = statementExtension->GetUrl();
+                if (url == "http://ehelse.no/fhir/StructureDefinition/sfm-reseptamendment") {
+                    auto reseptAmendmentExtensions = statementExtension->GetExtensions();
+                    for (const auto &reseptAmendmentExtension : reseptAmendmentExtensions) {
+                        auto url = reseptAmendmentExtension->GetUrl();
+                        if (url == "createeresept") {
+                            auto valueExt = std::dynamic_pointer_cast<FhirValueExtension>(reseptAmendmentExtension);
+                            if (valueExt) {
+                                auto value = std::dynamic_pointer_cast<FhirBooleanValue>(valueExt->GetValue());
+                                if (value && value->IsTrue()) {
+                                    createeresept = true;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            if (createeresept) {
+                prescriptions->SetItem(row, 1, wxT("Draft"));
+            } else {
+                prescriptions->SetItem(row, 1, wxT("Published"));
+            }
         }
     }
 }
@@ -668,8 +703,70 @@ void TheMasterFrame::OnSendMedication(wxCommandEvent &e) {
         } else if (name == "prescriptionCount") {
             auto value = std::dynamic_pointer_cast<FhirIntegerValue>(param.GetFhirValue());
             prescriptionCount = (int) value->GetValue();
+        } else if (name == "prescriptionOperationResult") {
+            std::string reseptId{};
+            FhirCoding resultCode{};
+            {
+                auto subparams = param.GetPart();
+                for (const auto &subparam : subparams) {
+                    auto name = subparam->GetName();
+                    if (name == "reseptID") {
+                        auto value = std::dynamic_pointer_cast<FhirString>(subparam->GetFhirValue());
+                        if (value) {
+                            reseptId = value->GetValue();
+                        }
+                    } else if (name == "resultCode") {
+                        auto value = std::dynamic_pointer_cast<FhirCodingValue>(subparam->GetFhirValue());
+                        if (value) {
+                            resultCode = *value;
+                        }
+                    }
+                }
+            }
+            if (!reseptId.empty() && resultCode.GetCode() == "0") {
+                auto bundleEntries = bundle->GetEntries();
+                for (auto &bundleEntry : bundleEntries) {
+                    auto medicationStatement = std::dynamic_pointer_cast<FhirMedicationStatement>(bundleEntry.GetResource());
+                    if (medicationStatement) {
+                        std::string reseptid{};
+                        {
+                            auto identifiers = medicationStatement->GetIdentifiers();
+                            for (const auto &identifier: identifiers) {
+                                auto type = identifier.GetType().GetText();
+                                std::transform(type.begin(), type.end(), type.begin(),
+                                               [](char ch) { return std::tolower(ch); });
+                                if (type == "reseptid") {
+                                    reseptid = identifier.GetValue();
+                                }
+                            }
+                        }
+                        if (reseptid != reseptId) {
+                            continue;
+                        }
+                        auto extensions = medicationStatement->GetExtensions();
+                        for (const auto &ext : extensions) {
+                            auto url = ext->GetUrl();
+                            if (url == "http://ehelse.no/fhir/StructureDefinition/sfm-reseptamendment") {
+                                auto extensions = ext->GetExtensions();
+                                auto iterator = extensions.begin();
+                                while (iterator != extensions.end()) {
+                                    auto ext = *iterator;
+                                    if (ext->GetUrl() == "createeresept") {
+                                        iterator = extensions.erase(iterator);
+                                    } else {
+                                        ++iterator;
+                                    }
+                                }
+                                ext->SetExtensions(std::move(extensions));
+                            }
+                        }
+                    }
+                }
+                bundle->SetEntries(bundleEntries);
+            }
         }
     }
+    UpdateMedications();
     std::stringstream str{};
     str << "Recalled " << recallCount << (recallCount == 1 ? " prescription and prescribed " : " prescriptions and prescribed ")
         << prescriptionCount << (prescriptionCount == 1 ? " prescription." : " prescriptions.");
@@ -916,7 +1013,7 @@ void TheMasterFrame::SetPatient(PrescriptionData &prescriptionData) const {
     prescriptionData.subjectDisplay = patient->GetDisplay();
 }
 
-void TheMasterFrame::PrescribeMedicament(const PrescriptionDialog &prescriptionDialog) const {
+void TheMasterFrame::PrescribeMedicament(const PrescriptionDialog &prescriptionDialog) {
     PrescriptionData prescriptionData = prescriptionDialog.GetPrescriptionData();
     std::shared_ptr<FhirMedication> medicament = prescriptionDialog.GetMedication();
     SetPrescriber(prescriptionData);
@@ -960,6 +1057,7 @@ void TheMasterFrame::PrescribeMedicament(const PrescriptionDialog &prescriptionD
             }
         }
     }
+    UpdateMedications();
 }
 
 void TheMasterFrame::OnPrescribeMagistral(wxCommandEvent &e) {

@@ -6,6 +6,8 @@
 #include "TheMasterFrame.h"
 #include <wx/listctrl.h>
 
+constexpr int PatientListPatientColumnWidth = 300;
+
 FindPatientDialog::FindPatientDialog(const std::shared_ptr<PatientStore> &patientStore, TheMasterFrame *frame) : wxDialog(frame, wxID_ANY, wxT("Find patient")), patientStore(patientStore) {
     // Add a sizer to handle the layout
     wxBoxSizer* sizer = new wxBoxSizer(wxVERTICAL);
@@ -17,6 +19,7 @@ FindPatientDialog::FindPatientDialog(const std::shared_ptr<PatientStore> &patien
     // Add a list view for potential matches
     listView = new wxListView(this, wxID_ANY);
     listView->AppendColumn(wxT("Patient"));
+    listView->SetColumnWidth(0, PatientListPatientColumnWidth);
     sizer->Add(listView, 1, wxEXPAND | wxALL, 5);
 
     wxBoxSizer* sizerButtons = new wxBoxSizer(wxHORIZONTAL);
@@ -46,6 +49,7 @@ void FindPatientDialog::OnText(wxCommandEvent &e) {
     patients = patientStore->FindPatients(searchTerm);
     listView->ClearAll();
     listView->AppendColumn(wxT("Patient"));
+    listView->SetColumnWidth(0, PatientListPatientColumnWidth);
     auto i = 0;
     for (auto patient : patients) {
         std::string patientDesc{};
