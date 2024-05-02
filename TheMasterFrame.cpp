@@ -31,6 +31,7 @@
 #include "FindMedicamentDialog.h"
 #include <medfest/Struct/Decoded/LegemiddelCore.h>
 #include "SfmMedicamentMapper.h"
+#include "FestVersionsDialog.h"
 
 constexpr int PrescriptionNameColumnWidth = 250;
 constexpr int PrescriptionRemoteColumnWidth = 75;
@@ -48,6 +49,7 @@ TheMasterFrame::TheMasterFrame() : wxFrame(nullptr, wxID_ANY, "The Master"),
     SetIcon(icon);
     auto *festMenu = new wxMenu();
     festMenu->Append(TheMaster_UpdateFest_Id, "Update FEST");
+    festMenu->Append(TheMaster_ShowFestVersions_Id, "FEST versions");
     auto *medicationMenu = new wxMenu();
     medicationMenu->Append(TheMaster_PrescribeMagistral_Id, "Prescribe magistral");
     medicationMenu->Append(TheMaster_PrescribeMedicament_Id, "Prescribe medicament");
@@ -105,6 +107,7 @@ TheMasterFrame::TheMasterFrame() : wxFrame(nullptr, wxID_ANY, "The Master"),
     Bind(wxEVT_MENU, &TheMasterFrame::OnPrescribeMagistral, this, TheMaster_PrescribeMagistral_Id);
     Bind(wxEVT_MENU, &TheMasterFrame::OnPrescribeMedicament, this, TheMaster_PrescribeMedicament_Id);
     Bind(wxEVT_MENU, &TheMasterFrame::OnUpdateFest, this, TheMaster_UpdateFest_Id);
+    Bind(wxEVT_MENU, &TheMasterFrame::OnShowFestVersions, this, TheMaster_ShowFestVersions_Id);
 }
 
 void TheMasterFrame::UpdateHeader() {
@@ -1127,4 +1130,9 @@ void TheMasterFrame::Connect(const std::string &url) {
 void TheMasterFrame::OnUpdateFest(wxCommandEvent &e) {
     std::shared_ptr<FestDbUi> festDbUi = std::make_shared<FestDbUi>(this);
     festDbUi->Update();
+}
+
+void TheMasterFrame::OnShowFestVersions(wxCommandEvent &e) {
+    FestVersionsDialog festVersionsDialog{this};
+    festVersionsDialog.ShowModal();
 }

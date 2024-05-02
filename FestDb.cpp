@@ -42,7 +42,7 @@ bool FestDb::IsOpen() const {
     return festDeserializer.operator bool();
 }
 
-FestDbContainer FestDb::GetActiveFestDb() const {
+std::map<std::string, std::unique_ptr<FestVectors>> FestDb::GetFestVersionMap() const {
     if (!festDeserializer) {
         return {};
     }
@@ -52,15 +52,31 @@ FestDbContainer FestDb::GetActiveFestDb() const {
         auto fest = std::make_unique<FestVectors>(std::move(festDeserializer->Unpack(pfest)));
         festVersions.insert_or_assign(fest->GetDato(), std::move(fest));
     });
+    return festVersions;
+}
+
+static std::vector<std::string> GetFestVersionsFromMap(const std::map<std::string, std::unique_ptr<FestVectors>> &festVersions) {
     std::vector<std::string> versions{};
     for (const auto &pair: festVersions) {
         versions.emplace_back(pair.first);
     }
     std::sort(versions.begin(), versions.end(), std::greater<>());
+    return versions;
+}
+
+FestDbContainer FestDb::GetActiveFestDb() const {
+    FestDbContainer container{};
+    std::map<std::string, std::unique_ptr<FestVectors>> festVersions = GetFestVersionMap();
+    std::vector<std::string> versions = GetFestVersionsFromMap(festVersions);
     if (!versions.empty()) {
         container.festVectors = std::move(festVersions[versions[0]]);
     }
     return container;
+}
+
+std::vector<std::string> FestDb::GetFestVersions() const {
+    std::map<std::string, std::unique_ptr<FestVectors>> festVersions = GetFestVersionMap();
+    return GetFestVersionsFromMap(festVersions);
 }
 
 std::vector<LegemiddelVirkestoff> FestDb::FindLegemiddelVirkestoff(const std::vector<POppfLegemiddelVirkestoff> &oppfs, const std::string &i_term) const {

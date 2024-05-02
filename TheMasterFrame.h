@@ -30,7 +30,8 @@ enum {
     TheMaster_SaveBundle_Id = 7,
     TheMaster_PrescribeMagistral_Id = 8,
     TheMaster_PrescribeMedicament_Id = 9,
-    TheMaster_UpdateFest_Id = 10
+    TheMaster_UpdateFest_Id = 10,
+    TheMaster_ShowFestVersions_Id = 11
 };
 
 class TheMasterFrame : public wxFrame {
@@ -73,6 +74,7 @@ public:
     void SetHelseid(const std::string &url, const std::string &clientId, const std::string &secretJwk, const std::vector<std::string> &scopes, const std::string &refreshToken, long expiresIn, const std::string &idToken);
     void Connect(const std::string &url);
     void OnUpdateFest(wxCommandEvent &e);
+    void OnShowFestVersions(wxCommandEvent &e);
 };
 
 

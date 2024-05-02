@@ -8,9 +8,11 @@
 #include <string>
 #include <vector>
 #include <memory>
+#include <map>
 
 class FestDeserializer;
 struct FestDbContainer;
+class FestVectors;
 class LegemiddelVirkestoff;
 class LegemiddelMerkevare;
 class Legemiddelpakning;
@@ -24,8 +26,10 @@ public:
     FestDb();
     bool IsOpen() const;
 private:
-    FestDbContainer GetActiveFestDb() const;
+    [[nodiscard]] std::map<std::string, std::unique_ptr<FestVectors>> GetFestVersionMap() const;
+    [[nodiscard]] FestDbContainer GetActiveFestDb() const;
 public:
+    [[nodiscard]] std::vector<std::string> GetFestVersions() const;
     [[nodiscard]] std::vector<LegemiddelVirkestoff> FindLegemiddelVirkestoff(const std::vector<POppfLegemiddelVirkestoff> &oppfs, const std::string &term) const;
     [[nodiscard]] std::vector<LegemiddelVirkestoff> FindLegemiddelVirkestoff(const std::string &term) const;
     [[nodiscard]] std::vector<LegemiddelMerkevare> FindLegemiddelMerkevare(const std::string &term) const;
