@@ -1,0 +1,238 @@
+//
+// Created by sigsegv on 5/2/24.
+//
+
+#include "PrescriptionDetailsDialog.h"
+#include <wx/listctrl.h>
+#include <sfmbasisapi/fhir/medstatement.h>
+
+PrescriptionDetailsDialog::PrescriptionDetailsDialog(wxWindow *parent,
+                                                     const std::shared_ptr<FhirMedicationStatement> &statement) :
+        wxDialog(parent, wxID_ANY, wxT("Prescription details")) {
+    auto *sizer = new wxBoxSizer(wxVERTICAL);
+    auto *listView = new wxListView(this, wxID_ANY);
+    listView->AppendColumn(wxT(""));
+    listView->AppendColumn(wxT(""));
+    int rowNum = 0;
+    {
+        wxString display = wxString::FromUTF8(statement->GetDisplay());
+        auto row = rowNum++;
+        listView->InsertItem(row, wxT("Display: "));
+        listView->SetItem(row, 1, display);
+    }
+    wxString ePrescriptionId{};
+    wxString dssn{};
+    wxString prescriptionDate{};
+    wxString expirationDate{};
+    wxString festUpdate{};
+    wxString reit{};
+    std::string amountUnit{};
+    FhirCodeableConceptValue rfstatus{};
+    double amount;
+    bool guardianTransparencyReservation{false};
+    bool inDoctorsName{false};
+    bool lockedPrescription{false};
+    std::vector<std::shared_ptr<FhirExtension>> regInfos{};
+    {
+        auto extensions = statement->GetExtensions();
+        for (const auto &extension : extensions) {
+            auto url = extension->GetUrl();
+            if (url == "http://ehelse.no/fhir/StructureDefinition/sfm-reseptamendment") {
+                auto extensions = extension->GetExtensions();
+                for (const auto &extension : extensions) {
+                    auto url = extension->GetUrl();
+                    if (url == "dssn") {
+                        auto valueExtension = std::dynamic_pointer_cast<FhirValueExtension>(extension);
+                        auto value = valueExtension.operator bool() ? std::dynamic_pointer_cast<FhirString>(valueExtension->GetValue()) : std::shared_ptr<FhirString>();
+                        if (value) {
+                            dssn = wxString::FromUTF8(value->GetValue());
+                        }
+                    } else if (url == "rfstatus") {
+                        auto extensions = extension->GetExtensions();
+                        for (const auto &extension : extensions) {
+                            auto url = extension->GetUrl();
+                            if (url == "status") {
+                                auto valueExtension = std::dynamic_pointer_cast<FhirValueExtension>(extension);
+                                auto value = valueExtension.operator bool() ? std::dynamic_pointer_cast<FhirCodeableConceptValue>(valueExtension->GetValue()) : std::shared_ptr<FhirCodeableConceptValue>();
+                                if (value) {
+                                    rfstatus = *value;
+                                }
+                            }
+                        }
+                    } else if (url == "reseptdate") {
+                        auto valueExtension = std::dynamic_pointer_cast<FhirValueExtension>(extension);
+                        auto value = valueExtension.operator bool() ? std::dynamic_pointer_cast<FhirString>(valueExtension->GetValue()) : std::shared_ptr<FhirString>();
+                        if (value) {
+                            prescriptionDate = wxString::FromUTF8(value->GetValue());
+                        }
+                    } else if (url == "expirationdate") {
+                        auto valueExtension = std::dynamic_pointer_cast<FhirValueExtension>(extension);
+                        auto value = valueExtension.operator bool() ? std::dynamic_pointer_cast<FhirString>(valueExtension->GetValue()) : std::shared_ptr<FhirString>();
+                        if (value) {
+                            expirationDate = wxString::FromUTF8(value->GetValue());
+                        }
+                    } else if (url == "festUpdate") {
+                        auto valueExtension = std::dynamic_pointer_cast<FhirValueExtension>(extension);
+                        auto value = valueExtension.operator bool() ? std::dynamic_pointer_cast<FhirString>(valueExtension->GetValue()) : std::shared_ptr<FhirString>();
+                        if (value) {
+                            festUpdate = wxString::FromUTF8(value->GetValue());
+                        }
+                    } else if (url == "guardiantransparencyreservation") {
+                        auto valueExtension = std::dynamic_pointer_cast<FhirValueExtension>(extension);
+                        auto value = valueExtension.operator bool() ? std::dynamic_pointer_cast<FhirBooleanValue>(valueExtension->GetValue()) : std::shared_ptr<FhirBooleanValue>();
+                        if (value) {
+                            guardianTransparencyReservation = value->IsTrue();
+                        }
+                    } else if (url == "indoctorsname") {
+                        auto valueExtension = std::dynamic_pointer_cast<FhirValueExtension>(extension);
+                        auto value = valueExtension.operator bool() ? std::dynamic_pointer_cast<FhirBooleanValue>(valueExtension->GetValue()) : std::shared_ptr<FhirBooleanValue>();
+                        if (value) {
+                            inDoctorsName = value->IsTrue();
+                        }
+                    } else if (url == "lockedresept") {
+                        auto valueExtension = std::dynamic_pointer_cast<FhirValueExtension>(extension);
+                        auto value = valueExtension.operator bool() ? std::dynamic_pointer_cast<FhirBooleanValue>(valueExtension->GetValue()) : std::shared_ptr<FhirBooleanValue>();
+                        if (value) {
+                            lockedPrescription = value->IsTrue();
+                        }
+                    } else if (url == "reit") {
+                        auto valueExtension = std::dynamic_pointer_cast<FhirValueExtension>(extension);
+                        auto value = valueExtension.operator bool() ? std::dynamic_pointer_cast<FhirString>(valueExtension->GetValue()) : std::shared_ptr<FhirString>();
+                        if (value) {
+                            reit = wxString::FromUTF8(value->GetValue());
+                        }
+                    } else if (url == "amount") {
+                        auto valueExtension = std::dynamic_pointer_cast<FhirValueExtension>(extension);
+                        auto value = valueExtension.operator bool() ? std::dynamic_pointer_cast<FhirQuantityValue>(valueExtension->GetValue()) : std::shared_ptr<FhirQuantityValue>();
+                        if (value) {
+                            amount = value->GetValue();
+                            amountUnit = value->GetUnit();
+                        }
+                    }
+                }
+            } else if (url == "http://ehelse.no/fhir/StructureDefinition/sfm-regInfo") {
+                regInfos.emplace_back(extension);
+            }
+        }
+    }
+    {
+        auto identifiers = statement->GetIdentifiers();
+        for (const auto &identifier : identifiers) {
+            auto typeText = identifier.GetType().GetText();
+            std::transform(typeText.begin(), typeText.end(), typeText.begin(), [] (char ch) { return std::tolower(ch); });
+            if (typeText == "reseptid") {
+                ePrescriptionId = wxString::FromUTF8(identifier.GetValue());
+            }
+        }
+    }
+    {
+        auto row = rowNum++;
+        listView->InsertItem(row, wxT("EPrescriptionId:"));
+        listView->SetItem(row, 1, ePrescriptionId);
+    }
+    {
+        auto row = rowNum++;
+        listView->InsertItem(row, wxT("DSSN:"));
+        listView->SetItem(row, 1, dssn);
+    }
+    {
+        wxString status{};
+        auto coding = rfstatus.GetCoding();
+        if (!coding.empty()) {
+            status = wxString::FromUTF8(coding[0].GetDisplay());
+        }
+        auto row = rowNum++;
+        listView->InsertItem(row, wxT("RFStatus:"));
+        listView->SetItem(row, 1, status);
+    }
+    {
+        auto dosages = statement->GetDosage();
+        for (const auto &dosage : dosages) {
+            auto extensions = dosage.GetExtensions();
+            for (const auto &extension : extensions) {
+                auto url = extension->GetUrl();
+                if (url == "http://ehelse.no/fhir/StructureDefinition/sfm-use") {
+                    auto valueExt = std::dynamic_pointer_cast<FhirValueExtension>(extension);
+                    auto value = valueExt.operator bool() ? std::dynamic_pointer_cast<FhirCodeableConceptValue>(valueExt->GetValue()) : std::shared_ptr<FhirCodeableConceptValue>();
+                    if (value) {
+                        std::vector<FhirCoding> codings = value->GetCoding();
+                        for (const auto &coding : codings) {
+                            auto text = wxString::FromUTF8(coding.GetDisplay());
+                            if (!text.empty()) {
+                                int row = rowNum++;
+                                listView->InsertItem(row, wxT("Type of usage:"));
+                                listView->SetItem(row, 1, text);
+                            }
+                        }
+                    }
+                } else if (url == "http://ehelse.no/fhir/StructureDefinition/sfm-application-area") {
+                    auto extensions = extension->GetExtensions();
+                    for (const auto &extension : extensions) {
+                        auto url = extension->GetUrl();
+                        if (url == "text") {
+                            auto valueExt = std::dynamic_pointer_cast<FhirValueExtension>(extension);
+                            auto value = valueExt.operator bool() ? std::dynamic_pointer_cast<FhirString>(valueExt->GetValue()) : std::shared_ptr<FhirString>();
+                            wxString applicationArea = value.operator bool() ? wxString::FromUTF8(value->GetValue()) : wxString();
+                            if (!applicationArea.empty()) {
+                                auto row = rowNum++;
+                                listView->InsertItem(row, wxT("Application area:"));
+                                listView->SetItem(row, 1, applicationArea);
+                            }
+                        }
+                    }
+                }
+            }
+            auto dosageText = wxString::FromUTF8(dosage.GetText());
+            auto row = rowNum++;
+            listView->InsertItem(row, wxT("Dosage: "));
+            listView->SetItem(row, 1, dosageText);
+        }
+    }
+    {
+        auto row = rowNum++;
+        listView->InsertItem(row, wxT("Prescription date: "));
+        listView->SetItem(row, 1, prescriptionDate);
+    }
+    {
+        auto row = rowNum++;
+        listView->InsertItem(row, wxT("Expiration date: "));
+        listView->SetItem(row, 1, expirationDate);
+    }
+    {
+        auto row = rowNum++;
+        listView->InsertItem(row, wxT("Fest update: "));
+        listView->SetItem(row, 1, festUpdate);
+    }
+    {
+        auto row = rowNum++;
+        listView->InsertItem(row, wxT("Guardian transparency reservation: "));
+        listView->SetItem(row, 1, guardianTransparencyReservation ? wxT("Yes") : wxT("No"));
+    }
+    {
+        auto row = rowNum++;
+        listView->InsertItem(row, wxT("Locked prescription: "));
+        listView->SetItem(row, 1, lockedPrescription ? wxT("Yes") : wxT("No"));
+    }
+    {
+        auto row = rowNum++;
+        listView->InsertItem(row, wxT("In doctors name: "));
+        listView->SetItem(row, 1, inDoctorsName ? wxT("Yes") : wxT("No"));
+    }
+    {
+        auto row = rowNum++;
+        listView->InsertItem(row, wxT("Reit: "));
+        listView->SetItem(row, 1, reit);
+    }
+    if (!amountUnit.empty()) {
+        std::stringstream ss{};
+        ss << amount << " " << amountUnit;
+        auto amountStr = wxString::FromUTF8(ss.str());
+        auto row = rowNum++;
+        listView->InsertItem(row, wxT("Amount: "));
+        listView->SetItem(row, 1, amountStr);
+    }
+    listView->SetColumnWidth(0, 250);
+    listView->SetColumnWidth(1, 300);
+    sizer->Add(listView, 1, wxEXPAND | wxALL, 5);
+    SetSizerAndFit(sizer);
+}

@@ -32,6 +32,7 @@
 #include <medfest/Struct/Decoded/LegemiddelCore.h>
 #include "SfmMedicamentMapper.h"
 #include "FestVersionsDialog.h"
+#include "PrescriptionDetailsDialog.h"
 
 constexpr int PrescriptionNameColumnWidth = 250;
 constexpr int PrescriptionRemoteColumnWidth = 75;
@@ -93,6 +94,7 @@ TheMasterFrame::TheMasterFrame() : wxFrame(nullptr, wxID_ANY, "The Master"),
     prescriptions->AppendColumn(wxT("Published"));
     prescriptions->SetColumnWidth(0, PrescriptionNameColumnWidth);
     prescriptions->SetColumnWidth(1, PrescriptionRemoteColumnWidth);
+    prescriptions->Bind(wxEVT_CONTEXT_MENU, &TheMasterFrame::OnPrescriptionContextMenu, this, wxID_ANY);
     sizer->Add(prescriptions, 1, wxEXPAND | wxALL, 5);
 
     SetSizerAndFit(sizer);
@@ -108,6 +110,8 @@ TheMasterFrame::TheMasterFrame() : wxFrame(nullptr, wxID_ANY, "The Master"),
     Bind(wxEVT_MENU, &TheMasterFrame::OnPrescribeMedicament, this, TheMaster_PrescribeMedicament_Id);
     Bind(wxEVT_MENU, &TheMasterFrame::OnUpdateFest, this, TheMaster_UpdateFest_Id);
     Bind(wxEVT_MENU, &TheMasterFrame::OnShowFestVersions, this, TheMaster_ShowFestVersions_Id);
+
+    Bind(wxEVT_MENU, &TheMasterFrame::OnPrescriptionDetails, this, TheMaster_PrescriptionDetails_Id);
 }
 
 void TheMasterFrame::UpdateHeader() {
@@ -138,6 +142,7 @@ void TheMasterFrame::UpdateMedications() {
     prescriptions->AppendColumn(wxT("Published"));
     prescriptions->SetColumnWidth(0, PrescriptionNameColumnWidth);
     prescriptions->SetColumnWidth(1, PrescriptionRemoteColumnWidth);
+    std::vector<std::shared_ptr<FhirMedicationStatement>> displayedMedicationStatements{};
     auto pos = 0;
     for (const auto &bundleEntry : medicationBundle->medBundle->GetEntries()) {
         auto resource = bundleEntry.GetResource();
@@ -145,6 +150,7 @@ void TheMasterFrame::UpdateMedications() {
         auto medicationStatement = std::dynamic_pointer_cast<FhirMedicationStatement>(resource);
         if (medicationStatement) {
             auto row = pos++;
+            displayedMedicationStatements.emplace_back(medicationStatement);
             prescriptions->InsertItem(row, medicationStatement->GetMedicationReference().GetDisplay());
             bool createeresept{false};
             auto statementExtensions = medicationStatement->GetExtensions();
@@ -173,6 +179,7 @@ void TheMasterFrame::UpdateMedications() {
             }
         }
     }
+    this->displayedMedicationStatements = displayedMedicationStatements;
 }
 
 void TheMasterFrame::OnConnect(wxCommandEvent( &e)) {
@@ -1135,4 +1142,32 @@ void TheMasterFrame::OnUpdateFest(wxCommandEvent &e) {
 void TheMasterFrame::OnShowFestVersions(wxCommandEvent &e) {
     FestVersionsDialog festVersionsDialog{this};
     festVersionsDialog.ShowModal();
+}
+
+void TheMasterFrame::OnPrescriptionContextMenu(wxContextMenuEvent &e) {
+    if (prescriptions->GetSelectedItemCount() != 1) {
+        return;
+    }
+    auto selected = prescriptions->GetFirstSelected();
+    if (selected < 0 || selected >= displayedMedicationStatements.size()) {
+        return;
+    }
+    auto medicationStatement = displayedMedicationStatements[selected];
+    auto display = medicationStatement->GetDisplay();
+    wxMenu menu(wxString::FromUTF8(display));
+    menu.Append(TheMaster_PrescriptionDetails_Id, wxT("Details"));
+    PopupMenu(&menu);
+}
+
+void TheMasterFrame::OnPrescriptionDetails(wxCommandEvent &e) {
+    if (prescriptions->GetSelectedItemCount() != 1) {
+        return;
+    }
+    auto selected = prescriptions->GetFirstSelected();
+    if (selected < 0 || selected >= displayedMedicationStatements.size()) {
+        return;
+    }
+    auto medicationStatement = displayedMedicationStatements[selected];
+    PrescriptionDetailsDialog dialog{this, medicationStatement};
+    dialog.ShowModal();
 }

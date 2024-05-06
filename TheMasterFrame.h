@@ -31,7 +31,8 @@ enum {
     TheMaster_PrescribeMagistral_Id = 8,
     TheMaster_PrescribeMedicament_Id = 9,
     TheMaster_UpdateFest_Id = 10,
-    TheMaster_ShowFestVersions_Id = 11
+    TheMaster_ShowFestVersions_Id = 11,
+    TheMaster_PrescriptionDetails_Id = 12
 };
 
 class TheMasterFrame : public wxFrame {
@@ -40,6 +41,7 @@ private:
     std::shared_ptr<PatientStore> patientStore{};
     std::shared_ptr<PatientInformation> patientInformation;
     std::unique_ptr<MedBundleData> medicationBundle{};
+    std::vector<std::shared_ptr<FhirMedicationStatement>> displayedMedicationStatements{};
     std::string lastResponse{};
     std::string url{};
     std::string helseidUrl{};
@@ -75,6 +77,8 @@ public:
     void Connect(const std::string &url);
     void OnUpdateFest(wxCommandEvent &e);
     void OnShowFestVersions(wxCommandEvent &e);
+    void OnPrescriptionContextMenu(wxContextMenuEvent &e);
+    void OnPrescriptionDetails(wxCommandEvent &e);
 };
 
 
