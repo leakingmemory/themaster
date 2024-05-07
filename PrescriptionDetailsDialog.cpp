@@ -27,8 +27,11 @@ PrescriptionDetailsDialog::PrescriptionDetailsDialog(wxWindow *parent,
     wxString festUpdate{};
     wxString reit{};
     std::string amountUnit{};
-    FhirCodeableConceptValue rfstatus{};
+    FhirCodeableConcept rfstatus{};
+    FhirCodeableConcept itemGroup{};
+    FhirCodeableConcept typeOfPrescription{};
     double amount;
+    double numberOfPackages{0.000};
     bool guardianTransparencyReservation{false};
     bool inDoctorsName{false};
     bool lockedPrescription{false};
@@ -107,6 +110,24 @@ PrescriptionDetailsDialog::PrescriptionDetailsDialog(wxWindow *parent,
                         if (value) {
                             amount = value->GetValue();
                             amountUnit = value->GetUnit();
+                        }
+                    } else if (url == "numberofpackages") {
+                        auto valueExtension = std::dynamic_pointer_cast<FhirValueExtension>(extension);
+                        auto value = valueExtension.operator bool() ? std::dynamic_pointer_cast<FhirDecimalValue>(valueExtension->GetValue()) : std::shared_ptr<FhirDecimalValue>();
+                        if (value) {
+                            numberOfPackages = value->GetValue();
+                        }
+                    } else if (url == "itemgroup") {
+                        auto valueExtension = std::dynamic_pointer_cast<FhirValueExtension>(extension);
+                        auto value = valueExtension.operator bool() ? std::dynamic_pointer_cast<FhirCodeableConceptValue>(valueExtension->GetValue()) : std::shared_ptr<FhirCodeableConceptValue>();
+                        if (value) {
+                            itemGroup = *value;
+                        }
+                    } else if (url == "typeresept") {
+                        auto valueExtension = std::dynamic_pointer_cast<FhirValueExtension>(extension);
+                        auto value = valueExtension.operator bool() ? std::dynamic_pointer_cast<FhirCodeableConceptValue>(valueExtension->GetValue()) : std::shared_ptr<FhirCodeableConceptValue>();
+                        if (value) {
+                            typeOfPrescription = *value;
                         }
                     }
                 }
@@ -230,6 +251,106 @@ PrescriptionDetailsDialog::PrescriptionDetailsDialog(wxWindow *parent,
         auto row = rowNum++;
         listView->InsertItem(row, wxT("Amount: "));
         listView->SetItem(row, 1, amountStr);
+    }
+    if (numberOfPackages > 0.0001) {
+        std::stringstream ss{};
+        ss << numberOfPackages;
+        auto numStr = wxString::FromUTF8(ss.str());
+        auto row = rowNum++;
+        listView->InsertItem(row, wxT("Number of packages: "));
+        listView->SetItem(row, 1, numStr);
+    }
+    {
+        auto coding = itemGroup.GetCoding();
+        if (!coding.empty()) {
+            auto row = rowNum++;
+            listView->InsertItem(row, wxT("Item group: "));
+            listView->SetItem(row, 1, wxString::FromUTF8(coding[0].GetDisplay()));
+        }
+    }
+    {
+        auto coding = typeOfPrescription.GetCoding();
+        if (!coding.empty()) {
+            auto row = rowNum++;
+            listView->InsertItem(row, wxT("Type of prescription: "));
+            listView->SetItem(row, 1, wxString::FromUTF8(coding[0].GetDisplay()));
+        }
+    }
+    for (const auto &regInfo : regInfos) {
+        FhirCodeableConcept status{};
+        FhirCodeableConcept type{};
+        FhirReference provider{};
+        std::string timestamp{};
+        {
+            auto extensions = regInfo->GetExtensions();
+            for (const auto &extension: extensions) {
+                auto url = extension->GetUrl();
+                auto valueExtension = std::dynamic_pointer_cast<FhirValueExtension>(extension);
+                if (!valueExtension) {
+                    continue;
+                }
+                if (url == "status") {
+                    auto value = std::dynamic_pointer_cast<FhirCodeableConceptValue>(valueExtension->GetValue());
+                    if (value) {
+                        status = *value;
+                    }
+                } else if (url == "type") {
+                    auto value = std::dynamic_pointer_cast<FhirCodeableConceptValue>(valueExtension->GetValue());
+                    if (value) {
+                        type = *value;
+                    }
+                } else if (url == "provider") {
+                    auto value = std::dynamic_pointer_cast<FhirReference>(valueExtension->GetValue());
+                    if (value) {
+                        provider = *value;
+                    }
+                } else if (url == "timestamp") {
+                    auto value = std::dynamic_pointer_cast<FhirDateTimeValue>(valueExtension->GetValue());
+                    if (value) {
+                        timestamp = value->GetDateTime();
+                    }
+                }
+            }
+        }
+        {
+            std::stringstream ss{};
+            {
+                auto coding = type.GetCoding();
+                if (!coding.empty()) {
+                    ss << coding[0].GetDisplay();
+                }
+            }
+            {
+                auto display = provider.GetDisplay();
+                if (!display.empty()) {
+                    if (!ss.str().empty()) {
+                        ss << " ";
+                    }
+                    ss << display;
+                }
+            }
+            auto row = rowNum++;
+            listView->InsertItem(row, wxT("Change: "));
+            listView->SetItem(row, 1, wxString::FromUTF8(ss.str()));
+        }
+        {
+            std::stringstream ss{};
+            {
+                auto coding = status.GetCoding();
+                if (!coding.empty()) {
+                    ss << coding[0].GetDisplay();
+                }
+            }
+            if (!timestamp.empty()) {
+                if (!ss.str().empty()) {
+                    ss << " ";
+                }
+                ss << timestamp;
+            }
+            auto row = rowNum++;
+            listView->InsertItem(row, wxT("Status: "));
+            listView->SetItem(row, 1, wxString::FromUTF8(ss.str()));
+        }
     }
     listView->SetColumnWidth(0, 250);
     listView->SetColumnWidth(1, 300);
