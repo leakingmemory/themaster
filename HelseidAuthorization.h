@@ -28,19 +28,19 @@ private:
     std::string state;
     std::string verification;
 public:
-    constexpr HelseidAuthorization(const std::string &url, const std::string &clientId) : url(url), clientId(clientId), state() {}
-    constexpr HelseidAuthorization(std::string &&url, std::string &&clientId) : url(std::move(url)), clientId(std::move(clientId)), state() {}
+    HelseidAuthorization(const std::string &url, const std::string &clientId) : url(url), clientId(clientId), state() {}
+    HelseidAuthorization(std::string &&url, std::string &&clientId) : url(std::move(url)), clientId(std::move(clientId)), state() {}
     std::string GetAuthorizeUrl();
-    [[nodiscard]] constexpr std::string GetRedirectUri() const {
+    [[nodiscard]] std::string GetRedirectUri() const {
         return redirectUri;
     }
-    [[nodiscard]] constexpr std::string GetState() const {
+    [[nodiscard]] std::string GetState() const {
         return state;
     }
-    [[nodiscard]] constexpr std::vector<std::string> GetScopes() const {
+    [[nodiscard]] std::vector<std::string> GetScopes() const {
         return scopes;
     }
-    [[nodiscard]] constexpr std::string GetVerfication() const {
+    [[nodiscard]] std::string GetVerfication() const {
         return verification;
     }
 };
