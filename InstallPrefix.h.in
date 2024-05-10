@@ -3,7 +3,7 @@
 
 #include <string>
 
-constexpr std::string GetInstallPrefix() {
+inline std::string GetInstallPrefix() {
     return "PREFIX";
 }
 

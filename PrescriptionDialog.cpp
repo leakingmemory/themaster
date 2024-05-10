@@ -7,6 +7,7 @@
 #include "PrescriptionDialog.h"
 #include "TheMasterFrame.h"
 #include <iomanip>
+#include <sstream>
 
 struct NumPackagesSizers {
     wxBoxSizer *packageSelectorSizer;
