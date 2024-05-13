@@ -33,6 +33,7 @@
 #include "SfmMedicamentMapper.h"
 #include "FestVersionsDialog.h"
 #include "PrescriptionDetailsDialog.h"
+#include "RecallPrescriptionDialog.h"
 
 constexpr int PrescriptionNameColumnWidth = 250;
 constexpr int PrescriptionRemoteColumnWidth = 75;
@@ -112,6 +113,7 @@ TheMasterFrame::TheMasterFrame() : wxFrame(nullptr, wxID_ANY, "The Master"),
     Bind(wxEVT_MENU, &TheMasterFrame::OnShowFestVersions, this, TheMaster_ShowFestVersions_Id);
 
     Bind(wxEVT_MENU, &TheMasterFrame::OnPrescriptionDetails, this, TheMaster_PrescriptionDetails_Id);
+    Bind(wxEVT_MENU, &TheMasterFrame::OnPrescriptionRecall, this, TheMaster_PrescriptionRecall_Id);
 }
 
 void TheMasterFrame::UpdateHeader() {
@@ -153,6 +155,7 @@ void TheMasterFrame::UpdateMedications() {
             displayedMedicationStatements.emplace_back(medicationStatement);
             prescriptions->InsertItem(row, medicationStatement->GetMedicationReference().GetDisplay());
             bool createeresept{false};
+            bool recalled{false};
             auto statementExtensions = medicationStatement->GetExtensions();
             for (const auto &statementExtension : statementExtensions) {
                 auto url = statementExtension->GetUrl();
@@ -169,11 +172,28 @@ void TheMasterFrame::UpdateMedications() {
                                 }
                             }
                         }
+                        if (url == "recallinfo") {
+                            auto extensions = reseptAmendmentExtension->GetExtensions();
+                            for (const auto &extension : extensions) {
+                                auto url = extension->GetUrl();
+                                if (url == "recallcode") {
+                                    auto valueExtension = std::dynamic_pointer_cast<FhirValueExtension>(extension);
+                                    if (valueExtension) {
+                                        auto codeableConceptValue = std::dynamic_pointer_cast<FhirCodeableConceptValue>(valueExtension->GetValue());
+                                        if (codeableConceptValue && codeableConceptValue->IsSet()) {
+                                            recalled = true;
+                                        }
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
             }
             if (createeresept) {
                 prescriptions->SetItem(row, 1, wxT("Draft"));
+            } else if (recalled) {
+                prescriptions->SetItem(row, 1, wxT("Recalled"));
             } else {
                 prescriptions->SetItem(row, 1, wxT("Published"));
             }
@@ -1156,6 +1176,7 @@ void TheMasterFrame::OnPrescriptionContextMenu(wxContextMenuEvent &e) {
     auto display = medicationStatement->GetDisplay();
     wxMenu menu(wxString::FromUTF8(display));
     menu.Append(TheMaster_PrescriptionDetails_Id, wxT("Details"));
+    menu.Append(TheMaster_PrescriptionRecall_Id, wxT("Recall"));
     PopupMenu(&menu);
 }
 
@@ -1170,4 +1191,53 @@ void TheMasterFrame::OnPrescriptionDetails(wxCommandEvent &e) {
     auto medicationStatement = displayedMedicationStatements[selected];
     PrescriptionDetailsDialog dialog{this, medicationStatement};
     dialog.ShowModal();
+}
+
+void TheMasterFrame::OnPrescriptionRecall(wxCommandEvent &e) {
+    if (prescriptions->GetSelectedItemCount() != 1) {
+        return;
+    }
+    auto selected = prescriptions->GetFirstSelected();
+    if (selected < 0 || selected >= displayedMedicationStatements.size()) {
+        return;
+    }
+    auto medicationStatement = displayedMedicationStatements[selected];
+    std::shared_ptr<FhirExtension> reseptAmendment{};
+    {
+        auto extensions = medicationStatement->GetExtensions();
+        for (const auto extension : extensions) {
+            auto url = extension->GetUrl();
+            if (url == "http://ehelse.no/fhir/StructureDefinition/sfm-reseptamendment") {
+                reseptAmendment = extension;
+            }
+        }
+    }
+    if (!reseptAmendment) {
+        wxMessageBox(wxT("The prescription is not valid"), wxT("Can not recall prescription"), wxICON_ERROR);
+        return;
+    }
+    {
+        auto extensions = reseptAmendment->GetExtensions();
+        for (const auto &extension : extensions) {
+            auto url = extension->GetUrl();
+            if (url == "recallinfo") {
+                wxMessageBox(wxT("The prescription is already recalled"), wxT("Can not recall prescription"), wxICON_ERROR);
+                return;
+            }
+        }
+    }
+    RecallPrescriptionDialog dialog{this, medicationStatement};
+    {
+        auto res = dialog.ShowModal();
+        if (res != wxID_OK) {
+            return;
+        }
+    }
+    {
+        auto recallCode = std::make_shared<FhirCodeableConceptValue>(dialog.GetReason().ToCodeableConcept());
+        auto recallInfoExt = std::make_shared<FhirExtension>("recallinfo");
+        recallInfoExt->AddExtension(std::make_shared<FhirValueExtension>("recallcode", recallCode));
+        reseptAmendment->AddExtension(recallInfoExt);
+    }
+    UpdateMedications();
 }

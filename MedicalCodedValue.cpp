@@ -26,18 +26,35 @@ FhirCodeableConcept MedicalCodedValue::ToCodeableConcept() const {
     }
 }
 
-class VolvenMedicamentForm {
+template <const char * const system> class MedicalCodingSystem {
     friend MedicalCodedValue;
-private:
+protected:
     std::vector<MedicalCodedValue> values{};
 public:
-    VolvenMedicamentForm();
-    void Add(const std::string &code, const std::string &display, const std::string &shortDisplay) {
-        values.emplace_back("urn:oid:2.16.578.1.12.4.1.1.7448", code, display, shortDisplay);
+    constexpr MedicalCodingSystem() {
+    }
+    constexpr void Add(const std::string &code, const std::string &display, const std::string &shortDisplay) {
+        values.emplace_back(system, code, display, shortDisplay);
+    }
+    constexpr void Add(const std::string &code, const std::string &display) {
+        values.emplace_back(system, code, display, display);
     }
 };
 
-VolvenMedicamentForm::VolvenMedicamentForm() {
+constexpr const char medicamentForm[] = "urn:oid:2.16.578.1.12.4.1.1.7448";
+constexpr const char recallCode[] = "urn:oid:2.16.578.1.12.4.1.1.7500";
+
+class VolvenMedicamentForm : public MedicalCodingSystem<medicamentForm> {
+public:
+    constexpr VolvenMedicamentForm();
+};
+
+class VolvenRecallCode : public MedicalCodingSystem<recallCode> {
+public:
+    constexpr VolvenRecallCode();
+};
+
+constexpr VolvenMedicamentForm::VolvenMedicamentForm() {
     Add("2", 	"Plaster til provokasjonstest", 	"plaster til provok test");
     Add("3", 	"Brusegranulat", 	"brusegranulat");
     Add("4", 	"Brusepulver", 	"brusepulv");
@@ -679,8 +696,25 @@ VolvenMedicamentForm::VolvenMedicamentForm() {
     Add("918", 	"Øre-/øyedråper, oppløsning", 	"øre/øyedr,oppl");
 }
 
-static VolvenMedicamentForm volvenMedicamentForm{};
+constexpr VolvenRecallCode::VolvenRecallCode() {
+    Add("1", "Fornying");
+    Add("2", "Seponering");
+    Add("3", "Fornying med endring");
+    Add("4", "Annen");
+    Add("5", "Administrativ sletting");
+}
+
+constexpr VolvenMedicamentForm GetVolvenMedicamentFormV() {
+    return {};
+}
+constexpr VolvenRecallCode GetVolvenRecallCodeV() {
+    return {};
+}
 
 std::vector<MedicalCodedValue> MedicalCodedValue::GetVolvenMedicamentForm() {
-    return volvenMedicamentForm.values;
+    return GetVolvenMedicamentFormV().values;
+}
+
+std::vector<MedicalCodedValue> MedicalCodedValue::GetVolvenRecallCode() {
+    return GetVolvenRecallCodeV().values;
 }

@@ -32,7 +32,8 @@ enum {
     TheMaster_PrescribeMedicament_Id = 9,
     TheMaster_UpdateFest_Id = 10,
     TheMaster_ShowFestVersions_Id = 11,
-    TheMaster_PrescriptionDetails_Id = 12
+    TheMaster_PrescriptionDetails_Id = 12,
+    TheMaster_PrescriptionRecall_Id = 13
 };
 
 class TheMasterFrame : public wxFrame {
@@ -79,6 +80,7 @@ public:
     void OnShowFestVersions(wxCommandEvent &e);
     void OnPrescriptionContextMenu(wxContextMenuEvent &e);
     void OnPrescriptionDetails(wxCommandEvent &e);
+    void OnPrescriptionRecall(wxCommandEvent &e);
 };
 
 

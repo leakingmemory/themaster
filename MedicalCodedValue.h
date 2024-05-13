@@ -25,6 +25,7 @@ public:
     [[nodiscard]] std::string GetShortDisplay() const { return shortDisplay; }
     [[nodiscard]] FhirCodeableConcept ToCodeableConcept() const;
     static std::vector<MedicalCodedValue> GetVolvenMedicamentForm();
+    static std::vector<MedicalCodedValue> GetVolvenRecallCode();
 };
 
 #endif //DRWHATSNOT_MEDICALCODEDVALUE_H
