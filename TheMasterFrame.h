@@ -8,12 +8,15 @@
 #include <wx/wx.h>
 #include <memory>
 #include <ctime>
+#include <map>
 #include "WeakRefUiDispatcher.h"
 #include "PrescriptionData.h"
 
 class PatientStore;
 class PatientInformation;
 class MedBundleData;
+class FhirBundle;
+class FhirExtension;
 class wxListView;
 namespace pplx {
     template<class ReturnType> class task;
@@ -64,6 +67,7 @@ public:
     void OnCreatePatient(wxCommandEvent &e);
     pplx::task<std::string> GetAccessToken();
     void OnGetMedication(wxCommandEvent &e);
+    static std::map<std::string,std::shared_ptr<FhirExtension>> GetRecallInfos(FhirBundle &bundle);
     void OnSendMedication(wxCommandEvent &e);
     void OnSaveLast(wxCommandEvent &e);
     void OnSaveBundle(wxCommandEvent &e);
