@@ -26,6 +26,7 @@ const char *FestUpdateException::what() const noexcept {
 
 void FestDbUi::UpdateFromFile(DownloadFestDialog &dialog, const std::string &filename) {
     auto dbfile = DataDirectory::Data("themaster").Sub("FEST").GetPath("fest.db");
+    auto dbBackupFile = DataDirectory::Data("themaster").Sub("FEST").GetPath("fest.db.bak");
     auto tmpfile = dbfile;
     {
         std::stringstream sstr{};
@@ -47,6 +48,7 @@ void FestDbUi::UpdateFromFile(DownloadFestDialog &dialog, const std::string &fil
     if (std::filesystem::exists(dbfile)) {
         FestDeserializer festDeserializer{dbfile};
         festDeserializer.Preload(festSerializer);
+        std::filesystem::copy(dbfile, dbBackupFile);
     }
     festSerializer.Serialize(*fest);
     festSerializer.Write();
