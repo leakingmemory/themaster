@@ -8,6 +8,7 @@
 #include <medfest/Struct/Decoded/OppfLegemiddelVirkestoff.h>
 #include <medfest/Struct/Decoded/OppfLegemiddelMerkevare.h>
 #include <medfest/Struct/Decoded/OppfLegemiddelpakning.h>
+#include <medfest/Struct/Decoded/OppfRefusjon.h>
 #include <medfest/Struct/Packed/PPakningsinfo.h>
 #include "DataDirectory.h"
 #include <filesystem>
@@ -70,6 +71,16 @@ FestDbContainer FestDb::GetActiveFestDb() const {
     std::vector<std::string> versions = GetFestVersionsFromMap(festVersions);
     if (!versions.empty()) {
         container.festVectors = std::move(festVersions[versions[0]]);
+    }
+    return container;
+}
+
+FestDbContainer FestDb::GetFestDb(const std::string &version) const {
+    FestDbContainer container{};
+    std::map<std::string, std::unique_ptr<FestVectors>> festVersions = GetFestVersionMap();
+    auto iterator = festVersions.find(version);
+    if (iterator != festVersions.end()) {
+        container.festVectors = std::move(iterator->second);
     }
     return container;
 }
@@ -323,4 +334,19 @@ bool FestDb::PLegemiddelVirkestoffHasOneOfPakning(const PLegemiddelVirkestoff &p
 
 FestUuid FestDb::GetLegemiddelVirkestoffId(const PLegemiddelVirkestoff &packed) {
     return festDeserializer->Unpack(packed.GetId());
+}
+
+std::vector<OppfRefusjon> FestDb::GetOppfRefusjon(const std::string &festVersion) const {
+    std::vector<OppfRefusjon> oppfs{};
+    {
+        FestDbContainer festDbContainer = GetFestDb(festVersion);
+        if (!festDbContainer.festVectors) {
+            return {};
+        }
+        auto refusjon = festDbContainer.festVectors->GetRefusjon(*festDeserializer);
+        for (const auto &poppf : refusjon) {
+            oppfs.emplace_back(festDeserializer->Unpack(poppf));
+        }
+    }
+    return oppfs;
 }

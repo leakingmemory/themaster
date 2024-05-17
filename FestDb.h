@@ -19,6 +19,7 @@ class Legemiddelpakning;
 class FestUuid;
 class POppfLegemiddelVirkestoff;
 class PLegemiddelVirkestoff;
+class OppfRefusjon;
 
 class FestDb {
     std::shared_ptr<FestDeserializer> festDeserializer{};
@@ -28,6 +29,7 @@ public:
 private:
     [[nodiscard]] std::map<std::string, std::unique_ptr<FestVectors>> GetFestVersionMap() const;
     [[nodiscard]] FestDbContainer GetActiveFestDb() const;
+    [[nodiscard]] FestDbContainer GetFestDb(const std::string &version) const;
 public:
     [[nodiscard]] std::vector<std::string> GetFestVersions() const;
     [[nodiscard]] std::vector<LegemiddelVirkestoff> FindLegemiddelVirkestoff(const std::vector<POppfLegemiddelVirkestoff> &oppfs, const std::string &term) const;
@@ -46,6 +48,7 @@ public:
     bool PLegemiddelVirkestoffHasOneOfMerkevare(const PLegemiddelVirkestoff &, const std::vector<FestUuid> &merkevareId);
     bool PLegemiddelVirkestoffHasOneOfPakning(const PLegemiddelVirkestoff &, const std::vector<FestUuid> &pakningId);
     FestUuid GetLegemiddelVirkestoffId(const PLegemiddelVirkestoff &);
+    [[nodiscard]] std::vector<OppfRefusjon> GetOppfRefusjon(const std::string &festVersion) const;
 };
 
 
