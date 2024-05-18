@@ -10,6 +10,11 @@
 #include <wx/wx.h>
 
 class FestDb;
+class OppfRefusjon;
+class OppfLegemiddelMerkevare;
+class OppfLegemiddelVirkestoff;
+class OppfLegemiddelpakning;
+class OppfLegemiddeldose;
 class wxListView;
 
 class FestExploreItem {
@@ -24,6 +29,11 @@ public:
 class FestExploreVersionDialog : public wxDialog {
 private:
     std::shared_ptr<FestDb> db;
+    std::shared_ptr<std::vector<OppfRefusjon>> refusjon{};
+    std::shared_ptr<std::vector<OppfLegemiddelMerkevare>> legemiddelMerkevare{};
+    std::shared_ptr<std::vector<OppfLegemiddelVirkestoff>> legemiddelVirkestoff{};
+    std::shared_ptr<std::vector<OppfLegemiddelpakning>> legemiddelpakning{};
+    std::shared_ptr<std::vector<OppfLegemiddeldose>> legemiddeldose{};
     std::string version;
     std::vector<std::string> itemFilters{};
     std::string itemFilter{};
@@ -36,6 +46,10 @@ private:
     wxPanel *bottom;
 public:
     FestExploreVersionDialog(wxWindow *parent, const std::shared_ptr<FestDb> &, const std::string &);
+    FestExploreVersionDialog(wxWindow *parent, const std::shared_ptr<std::vector<OppfRefusjon>> &refusjon, const std::shared_ptr<std::vector<OppfLegemiddelMerkevare>> &legemiddelMerkevare, const std::shared_ptr<std::vector<OppfLegemiddelVirkestoff>> &legemiddelVirkestoff, const std::shared_ptr<std::vector<OppfLegemiddelpakning>> &legemiddelpakning, const std::shared_ptr<std::vector<OppfLegemiddeldose>> &legemiddeldose, const std::string &version);
+private:
+    void Init();
+public:
     void ClearItems();
     void UpdateFilters(const std::string &itemType);
     void ShowItemsWithFilter(const std::string &itemType);
@@ -45,6 +59,5 @@ public:
     void OnItemFilterSelection(wxCommandEvent &);
     void OnItemSelection(wxCommandEvent &e);
 };
-
 
 #endif //DRWHATSNOT_EXPLOREVERSIONDIALOG_H

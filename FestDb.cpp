@@ -411,3 +411,359 @@ std::vector<OppfLegemiddeldose> FestDb::GetOppfLegemiddeldose(const std::string 
     }
     return oppfs;
 }
+
+FestDiff<OppfRefusjon> FestDb::GetOppfRefusjonDiff(const std::function<void (int addsAndRemovesDone, int addsAndRemovesMax, int modificationsDone, int modificationsMax)> &progress, const std::string &firstVersion, const std::string &secondVersion) const {
+    FestDiff<OppfRefusjon> oppfs{};
+    {
+        FestDbContainer firstDbContainer = GetFestDb(firstVersion);
+        FestDbContainer secondDbContainer = GetFestDb(secondVersion);
+        if (!firstDbContainer.festVectors || !secondDbContainer.festVectors) {
+            return {};
+        }
+        auto first = firstDbContainer.festVectors->GetRefusjon(*festDeserializer);
+        auto second = secondDbContainer.festVectors->GetRefusjon(*festDeserializer);
+        int max = first.size() + second.size();
+        int counter = 0;
+        progress(counter, max, 0, 1);
+        for (const auto &poppf : first) {
+            bool found{false};
+            for (const auto &po : second) {
+                if (poppf == po) {
+                    found = true;
+                    break;
+                }
+            }
+            if (!found) {
+                oppfs.removed.emplace_back(festDeserializer->Unpack(poppf));
+            }
+            counter++;
+            progress(counter, max, 0, 1);
+        }
+        for (const auto &poppf : second) {
+            bool found{false};
+            for (const auto &po : first) {
+                if (poppf == po) {
+                    found = true;
+                    break;
+                }
+            }
+            if (!found) {
+                oppfs.added.emplace_back(festDeserializer->Unpack(poppf));
+            }
+            counter++;
+            progress(counter, max, 0, 1);
+        }
+    }
+    int max = oppfs.removed.size();
+    int counter = 0;
+    progress(1, 1, counter, max);
+    auto removedIterator = oppfs.removed.begin();
+    while (removedIterator != oppfs.removed.end()) {
+        auto addedIterator = oppfs.added.begin();
+        bool found{false};
+        while (addedIterator != oppfs.added.end()) {
+            if (removedIterator->GetRefusjonshjemmel().GetRefusjonsgruppe().GetId() == addedIterator->GetRefusjonshjemmel().GetRefusjonsgruppe().GetId()) {
+                found = true;
+                FestModified<OppfRefusjon> modified{
+                    .previous = *removedIterator,
+                    .latest = *addedIterator
+                };
+                removedIterator = oppfs.removed.erase(removedIterator);
+                addedIterator = oppfs.added.erase(addedIterator);
+                oppfs.modified.emplace_back(std::move(modified));
+                break;
+            }
+            ++addedIterator;
+        }
+        if (!found) {
+            ++removedIterator;
+        }
+        ++counter;
+        progress(1, 1, counter, max);
+    }
+    return oppfs;
+}
+
+FestDiff<OppfLegemiddelMerkevare> FestDb::GetOppfLegemiddelMerkevareDiff(const std::function<void (int addsAndRemovesDone, int addsAndRemovesMax, int modificationsDone, int modificationsMax)> &progress, const std::string &firstVersion, const std::string &secondVersion) const {
+    FestDiff<OppfLegemiddelMerkevare> oppfs{};
+    {
+        FestDbContainer firstDbContainer = GetFestDb(firstVersion);
+        FestDbContainer secondDbContainer = GetFestDb(secondVersion);
+        if (!firstDbContainer.festVectors || !secondDbContainer.festVectors) {
+            return {};
+        }
+        auto first = firstDbContainer.festVectors->GetLegemiddelMerkevare(*festDeserializer);
+        auto second = secondDbContainer.festVectors->GetLegemiddelMerkevare(*festDeserializer);
+        int max = first.size() + second.size();
+        int counter = 0;
+        progress(counter, max, 0, 1);
+        for (const auto &poppf : first) {
+            bool found{false};
+            for (const auto &po : second) {
+                if (poppf == po) {
+                    found = true;
+                    break;
+                }
+            }
+            if (!found) {
+                oppfs.removed.emplace_back(festDeserializer->Unpack(poppf));
+            }
+            counter++;
+            progress(counter, max, 0, 1);
+        }
+        for (const auto &poppf : second) {
+            bool found{false};
+            for (const auto &po : first) {
+                if (poppf == po) {
+                    found = true;
+                    break;
+                }
+            }
+            if (!found) {
+                oppfs.added.emplace_back(festDeserializer->Unpack(poppf));
+            }
+            counter++;
+            progress(counter, max, 0, 1);
+        }
+    }
+    int max = oppfs.removed.size();
+    int counter = 0;
+    auto removedIterator = oppfs.removed.begin();
+    while (removedIterator != oppfs.removed.end()) {
+        auto addedIterator = oppfs.added.begin();
+        bool found{false};
+        while (addedIterator != oppfs.added.end()) {
+            if (removedIterator->GetLegemiddelMerkevare().GetId() == addedIterator->GetLegemiddelMerkevare().GetId()) {
+                found = true;
+                FestModified<OppfLegemiddelMerkevare> modified{
+                        .previous = *removedIterator,
+                        .latest = *addedIterator
+                };
+                removedIterator = oppfs.removed.erase(removedIterator);
+                addedIterator = oppfs.added.erase(addedIterator);
+                oppfs.modified.emplace_back(std::move(modified));
+                break;
+            }
+            ++addedIterator;
+        }
+        if (!found) {
+            ++removedIterator;
+        }
+        ++counter;
+        progress(1, 1, counter, max);
+    }
+    return oppfs;
+}
+
+FestDiff<OppfLegemiddelVirkestoff> FestDb::GetOppfLegemiddelVirkestoffDiff(const std::function<void (int addsAndRemovesDone, int addsAndRemovesMax, int modificationsDone, int modificationsMax)> &progress, const std::string &firstVersion, const std::string &secondVersion) const {
+    FestDiff<OppfLegemiddelVirkestoff> oppfs{};
+    {
+        FestDbContainer firstDbContainer = GetFestDb(firstVersion);
+        FestDbContainer secondDbContainer = GetFestDb(secondVersion);
+        if (!firstDbContainer.festVectors || !secondDbContainer.festVectors) {
+            return {};
+        }
+        auto first = firstDbContainer.festVectors->GetLegemiddelVirkestoff(*festDeserializer);
+        auto second = secondDbContainer.festVectors->GetLegemiddelVirkestoff(*festDeserializer);
+        int max = first.size() + second.size();
+        int counter = 0;
+        progress(counter, max, 0, 1);
+        for (const auto &poppf : first) {
+            bool found{false};
+            for (const auto &po : second) {
+                if (poppf == po) {
+                    found = true;
+                    break;
+                }
+            }
+            if (!found) {
+                oppfs.removed.emplace_back(festDeserializer->Unpack(poppf));
+            }
+            counter++;
+            progress(counter, max, 0, 1);
+        }
+        for (const auto &poppf : second) {
+            bool found{false};
+            for (const auto &po : first) {
+                if (poppf == po) {
+                    found = true;
+                    break;
+                }
+            }
+            if (!found) {
+                oppfs.added.emplace_back(festDeserializer->Unpack(poppf));
+            }
+            counter++;
+            progress(counter, max, 0, 1);
+        }
+    }
+    int max = oppfs.removed.size();
+    int counter = 0;
+    auto removedIterator = oppfs.removed.begin();
+    while (removedIterator != oppfs.removed.end()) {
+        auto addedIterator = oppfs.added.begin();
+        bool found{false};
+        while (addedIterator != oppfs.added.end()) {
+            if (removedIterator->GetLegemiddelVirkestoff().GetId() == addedIterator->GetLegemiddelVirkestoff().GetId()) {
+                found = true;
+                FestModified<OppfLegemiddelVirkestoff> modified{
+                        .previous = *removedIterator,
+                        .latest = *addedIterator
+                };
+                removedIterator = oppfs.removed.erase(removedIterator);
+                addedIterator = oppfs.added.erase(addedIterator);
+                oppfs.modified.emplace_back(std::move(modified));
+                break;
+            }
+            ++addedIterator;
+        }
+        if (!found) {
+            ++removedIterator;
+        }
+        ++counter;
+        progress(1, 1, counter, max);
+    }
+    return oppfs;
+}
+
+FestDiff<OppfLegemiddelpakning> FestDb::GetOppfLegemiddelpakningDiff(const std::function<void (int addsAndRemovesDone, int addsAndRemovesMax, int modificationsDone, int modificationsMax)> &progress, const std::string &firstVersion, const std::string &secondVersion) const {
+    FestDiff<OppfLegemiddelpakning> oppfs{};
+    {
+        FestDbContainer firstDbContainer = GetFestDb(firstVersion);
+        FestDbContainer secondDbContainer = GetFestDb(secondVersion);
+        if (!firstDbContainer.festVectors || !secondDbContainer.festVectors) {
+            return {};
+        }
+        auto first = firstDbContainer.festVectors->GetLegemiddelPakning(*festDeserializer);
+        auto second = secondDbContainer.festVectors->GetLegemiddelPakning(*festDeserializer);
+        int max = first.size() + second.size();
+        int counter = 0;
+        progress(counter, max, 0, 1);
+        for (const auto &poppf : first) {
+            bool found{false};
+            for (const auto &po : second) {
+                if (poppf == po) {
+                    found = true;
+                    break;
+                }
+            }
+            if (!found) {
+                oppfs.removed.emplace_back(festDeserializer->Unpack(poppf));
+            }
+            counter++;
+            progress(counter, max, 0, 1);
+        }
+        for (const auto &poppf : second) {
+            bool found{false};
+            for (const auto &po : first) {
+                if (poppf == po) {
+                    found = true;
+                    break;
+                }
+            }
+            if (!found) {
+                oppfs.added.emplace_back(festDeserializer->Unpack(poppf));
+            }
+            counter++;
+            progress(counter, max, 0, 1);
+        }
+    }
+    int max = oppfs.removed.size();
+    int counter = 0;
+    auto removedIterator = oppfs.removed.begin();
+    while (removedIterator != oppfs.removed.end()) {
+        auto addedIterator = oppfs.added.begin();
+        bool found{false};
+        while (addedIterator != oppfs.added.end()) {
+            if (removedIterator->GetLegemiddelpakning().GetId() == addedIterator->GetLegemiddelpakning().GetId()) {
+                found = true;
+                FestModified<OppfLegemiddelpakning> modified{
+                        .previous = *removedIterator,
+                        .latest = *addedIterator
+                };
+                removedIterator = oppfs.removed.erase(removedIterator);
+                addedIterator = oppfs.added.erase(addedIterator);
+                oppfs.modified.emplace_back(std::move(modified));
+                break;
+            }
+            ++addedIterator;
+        }
+        if (!found) {
+            ++removedIterator;
+        }
+        ++counter;
+        progress(1, 1, counter, max);
+    }
+    return oppfs;
+}
+
+FestDiff<OppfLegemiddeldose> FestDb::GetOppfLegemiddeldoseDiff(const std::function<void (int addsAndRemovesDone, int addsAndRemovesMax, int modificationsDone, int modificationsMax)> &progress, const std::string &firstVersion, const std::string &secondVersion) const {
+    FestDiff<OppfLegemiddeldose> oppfs{};
+    {
+        FestDbContainer firstDbContainer = GetFestDb(firstVersion);
+        FestDbContainer secondDbContainer = GetFestDb(secondVersion);
+        if (!firstDbContainer.festVectors || !secondDbContainer.festVectors) {
+            return {};
+        }
+        auto first = firstDbContainer.festVectors->GetLegemiddeldose(*festDeserializer);
+        auto second = secondDbContainer.festVectors->GetLegemiddeldose(*festDeserializer);
+        int max = first.size() + second.size();
+        int counter = 0;
+        progress(counter, max, 0, 1);
+        for (const auto &poppf : first) {
+            bool found{false};
+            for (const auto &po : second) {
+                if (poppf == po) {
+                    found = true;
+                    break;
+                }
+            }
+            if (!found) {
+                oppfs.removed.emplace_back(festDeserializer->Unpack(poppf));
+            }
+            counter++;
+            progress(counter, max, 0, 1);
+        }
+        for (const auto &poppf : second) {
+            bool found{false};
+            for (const auto &po : first) {
+                if (poppf == po) {
+                    found = true;
+                    break;
+                }
+            }
+            if (!found) {
+                oppfs.added.emplace_back(festDeserializer->Unpack(poppf));
+            }
+            counter++;
+            progress(counter, max, 0, 1);
+        }
+    }
+    int max = oppfs.removed.size();
+    int counter = 0;
+    auto removedIterator = oppfs.removed.begin();
+    while (removedIterator != oppfs.removed.end()) {
+        auto addedIterator = oppfs.added.begin();
+        bool found{false};
+        while (addedIterator != oppfs.added.end()) {
+            if (removedIterator->GetLegemiddeldose().GetId() == addedIterator->GetLegemiddeldose().GetId()) {
+                found = true;
+                FestModified<OppfLegemiddeldose> modified{
+                        .previous = *removedIterator,
+                        .latest = *addedIterator
+                };
+                removedIterator = oppfs.removed.erase(removedIterator);
+                addedIterator = oppfs.added.erase(addedIterator);
+                oppfs.modified.emplace_back(std::move(modified));
+                break;
+            }
+            ++addedIterator;
+        }
+        if (!found) {
+            ++removedIterator;
+        }
+        ++counter;
+        progress(1, 1, counter, max);
+    }
+    return oppfs;
+}

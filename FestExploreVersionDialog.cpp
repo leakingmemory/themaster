@@ -49,6 +49,17 @@ FestExploreVersionDialog::FestExploreVersionDialog(wxWindow *parent, const std::
     wxDialog(parent, wxID_ANY, wxString::FromUTF8(version)),
     db(db), version(version)
 {
+    Init();
+}
+
+FestExploreVersionDialog::FestExploreVersionDialog(wxWindow *parent, const std::shared_ptr<std::vector<OppfRefusjon>> &refusjon, const std::shared_ptr<std::vector<OppfLegemiddelMerkevare>> &legemiddelMerkevare, const std::shared_ptr<std::vector<OppfLegemiddelVirkestoff>> &legemiddelVirkestoff, const std::shared_ptr<std::vector<OppfLegemiddelpakning>> &legemiddelpakning, const std::shared_ptr<std::vector<OppfLegemiddeldose>> &legemiddeldose, const std::string &version) :
+    wxDialog(parent, wxID_ANY, wxString::FromUTF8(version)),
+    db(), refusjon(refusjon), legemiddelMerkevare(legemiddelMerkevare), legemiddelVirkestoff(legemiddelVirkestoff), legemiddelpakning(legemiddelpakning), legemiddeldose(legemiddeldose), version(version)
+{
+    Init();
+}
+
+void FestExploreVersionDialog::Init() {
     auto *sizer = new wxBoxSizer(wxVERTICAL);
     {
         auto *topSizer = new wxBoxSizer(wxHORIZONTAL);
@@ -1109,27 +1120,27 @@ void FestExploreVersionDialog::UpdateFilters(const std::string &itemType) {
 
 void FestExploreVersionDialog::ShowItemsWithFilter(const std::string &itemType) {
     if (itemType == "Refusjon") {
-        auto oppfRefusjons = db->GetOppfRefusjon(version);
+        auto oppfRefusjons = refusjon ? *refusjon : db->GetOppfRefusjon(version);
         for (const auto &oppfRefusjon : oppfRefusjons) {
             items.emplace_back(std::make_shared<FestExploreOppfRefusjonItem>(oppfRefusjon));
         }
     } else if (itemType == "LegemiddelMerkevare") {
-        auto oppfLegemiddelMerkevares = db->GetOppfLegemiddelMerkevare(version);
+        auto oppfLegemiddelMerkevares = legemiddelMerkevare ? *legemiddelMerkevare : db->GetOppfLegemiddelMerkevare(version);
         for (const auto &oppfLegemiddelMerkevare : oppfLegemiddelMerkevares) {
             items.emplace_back(std::make_shared<FestExploreOppfMerkevareItem>(oppfLegemiddelMerkevare));
         }
     } else if (itemType == "LegemiddelVirkestoff") {
-        auto oppfLegemiddelVirkestoffs = db->GetOppfLegemiddelVirkestoff(version);
+        auto oppfLegemiddelVirkestoffs = legemiddelVirkestoff ? *legemiddelVirkestoff : db->GetOppfLegemiddelVirkestoff(version);
         for (const auto &oppfLegemiddelVirkestoff : oppfLegemiddelVirkestoffs) {
             items.emplace_back(std::make_shared<FestExploreOppfVirkestoffItem>(oppfLegemiddelVirkestoff));
         }
     } else if (itemType == "Legemiddelpakning") {
-        auto oppfLegemiddelpaknings = db->GetOppfLegemiddelpakning(version);
+        auto oppfLegemiddelpaknings = legemiddelpakning ? *legemiddelpakning : db->GetOppfLegemiddelpakning(version);
         for (const auto &oppfLegemiddelpakning : oppfLegemiddelpaknings) {
             items.emplace_back(std::make_shared<FestExploreOppfLegemiddelpakningItem>(oppfLegemiddelpakning));
         }
     } else if (itemType == "Legemiddeldose") {
-        auto oppfLegemiddeldoses = db->GetOppfLegemiddeldose(version);
+        auto oppfLegemiddeldoses = legemiddeldose ? *legemiddeldose : db->GetOppfLegemiddeldose(version);
         for (const auto &oppfLegemiddeldose : oppfLegemiddeldoses) {
             items.emplace_back(std::make_shared<FestExploreOppfLegemiddeldoseItem>(oppfLegemiddeldose));
         }
