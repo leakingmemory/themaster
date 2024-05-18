@@ -8,6 +8,7 @@
 #include <medfest/Struct/Decoded/OppfLegemiddelVirkestoff.h>
 #include <medfest/Struct/Decoded/OppfLegemiddelMerkevare.h>
 #include <medfest/Struct/Decoded/OppfLegemiddelpakning.h>
+#include <medfest/Struct/Decoded/OppfLegemiddeldose.h>
 #include <medfest/Struct/Decoded/OppfRefusjon.h>
 #include <medfest/Struct/Packed/PPakningsinfo.h>
 #include "DataDirectory.h"
@@ -360,6 +361,51 @@ std::vector<OppfLegemiddelMerkevare> FestDb::GetOppfLegemiddelMerkevare(const st
         }
         auto oppfLegemiddelMerkevares = festDbContainer.festVectors->GetLegemiddelMerkevare(*festDeserializer);
         for (const auto &poppf : oppfLegemiddelMerkevares) {
+            oppfs.emplace_back(festDeserializer->Unpack(poppf));
+        }
+    }
+    return oppfs;
+}
+
+std::vector<OppfLegemiddelVirkestoff> FestDb::GetOppfLegemiddelVirkestoff(const std::string &festVersion) const {
+    std::vector<OppfLegemiddelVirkestoff> oppfs{};
+    {
+        FestDbContainer festDbContainer = GetFestDb(festVersion);
+        if (!festDbContainer.festVectors) {
+            return {};
+        }
+        auto oppfLegemiddelVirkestoffs = festDbContainer.festVectors->GetLegemiddelVirkestoff(*festDeserializer);
+        for (const auto &poppf : oppfLegemiddelVirkestoffs) {
+            oppfs.emplace_back(festDeserializer->Unpack(poppf));
+        }
+    }
+    return oppfs;
+}
+
+std::vector<OppfLegemiddelpakning> FestDb::GetOppfLegemiddelpakning(const std::string &festVersion) const {
+    std::vector<OppfLegemiddelpakning> oppfs{};
+    {
+        FestDbContainer festDbContainer = GetFestDb(festVersion);
+        if (!festDbContainer.festVectors) {
+            return {};
+        }
+        auto oppfLegemiddelpaknings = festDbContainer.festVectors->GetLegemiddelPakning(*festDeserializer);
+        for (const auto &poppf : oppfLegemiddelpaknings) {
+            oppfs.emplace_back(festDeserializer->Unpack(poppf));
+        }
+    }
+    return oppfs;
+}
+
+std::vector<OppfLegemiddeldose> FestDb::GetOppfLegemiddeldose(const std::string &festVersion) const {
+    std::vector<OppfLegemiddeldose> oppfs{};
+    {
+        FestDbContainer festDbContainer = GetFestDb(festVersion);
+        if (!festDbContainer.festVectors) {
+            return {};
+        }
+        auto oppfLegemiddeldoses = festDbContainer.festVectors->GetLegemiddeldose(*festDeserializer);
+        for (const auto &poppf : oppfLegemiddeldoses) {
             oppfs.emplace_back(festDeserializer->Unpack(poppf));
         }
     }

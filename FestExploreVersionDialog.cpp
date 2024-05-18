@@ -7,8 +7,12 @@
 #include "FestDb.h"
 #include <medfest/Struct/Decoded/OppfRefusjon.h>
 #include <medfest/Struct/Decoded/OppfLegemiddelMerkevare.h>
+#include <medfest/Struct/Decoded/OppfLegemiddelVirkestoff.h>
+#include <medfest/Struct/Decoded/OppfLegemiddelpakning.h>
+#include <medfest/Struct/Decoded/OppfLegemiddeldose.h>
 #include <vector>
 #include <tuple>
+#include <sstream>
 
 std::string FestExploreItem::GetName() const {
     return "No name";
@@ -32,7 +36,10 @@ template <typename I, typename T> constexpr I LengthOfNullptrTerminated(T * cons
     return rv;
 }
 constexpr const char *itemTypes[] = {
-        "Merkevare",
+        "LegemiddelMerkevare",
+        "LegemiddelVirkestoff",
+        "Legemiddelpakning",
+        "Legemiddeldose",
         "Refusjon",
         nullptr
 };
@@ -796,6 +803,271 @@ public:
     explicit FestExploreOppfMerkevareItem(const OppfLegemiddelMerkevare &oppfLegemiddelMerkevare) : FestExploreLegemiddelMerkevareItem(oppfLegemiddelMerkevare, oppfLegemiddelMerkevare.GetLegemiddelMerkevare()) {}
 };
 
+class FestExploreLegemiddelVirkestoffItem : public FestExploreLegemiddelItem, protected LegemiddelVirkestoff {
+public:
+    FestExploreLegemiddelVirkestoffItem(const class Oppf &oppf, const LegemiddelVirkestoff &legemiddelVirkestoff) : FestExploreLegemiddelItem(oppf, legemiddelVirkestoff), LegemiddelVirkestoff(legemiddelVirkestoff) {}
+    std::vector<std::tuple<std::string, std::string>> GetDetails() override;
+};
+
+std::vector<std::tuple<std::string, std::string>> FestExploreLegemiddelVirkestoffItem::GetDetails() {
+    std::vector<std::tuple<std::string,std::string>> details = {
+            {"Legemiddelvirkestoff", LegemiddelVirkestoff::GetId()}
+    };
+    {
+        auto upstreamDetails = FestExploreLegemiddelItem::GetDetails();
+        for (const auto &tupl : upstreamDetails) {
+            details.emplace_back(tupl);
+        }
+    }
+    {
+        auto refs = LegemiddelVirkestoff::GetRefLegemiddelMerkevare();
+        auto iterator = refs.begin();
+        if (iterator != refs.end()) {
+            std::tuple<std::string,std::string> tupl = {"Ref Merkevare", *iterator};
+            details.emplace_back(tupl);
+            ++iterator;
+        }
+        while (iterator != refs.end()) {
+            std::tuple<std::string,std::string> tupl = {"", *iterator};
+            details.emplace_back(tupl);
+            ++iterator;
+        }
+    }
+    {
+        auto refs = LegemiddelVirkestoff::GetRefPakning();
+        auto iterator = refs.begin();
+        if (iterator != refs.end()) {
+            std::tuple<std::string,std::string> tupl = {"Ref Pakning", *iterator};
+            details.emplace_back(tupl);
+            ++iterator;
+        }
+        while (iterator != refs.end()) {
+            std::tuple<std::string,std::string> tupl = {"", *iterator};
+            details.emplace_back(tupl);
+            ++iterator;
+        }
+    }
+    {
+        auto enhet = LegemiddelVirkestoff::GetForskrivningsenhetResept();
+        std::string str{enhet.GetValue()};
+        if (!str.empty()) {
+            str.append(" (");
+            str.append(enhet.GetDistinguishedName());
+            str.append(")");
+            std::tuple<std::string,std::string> tupl = {"Forskrivningsenhet", str};
+            details.emplace_back(tupl);
+        }
+    }
+    return details;
+}
+
+class FestExploreOppfVirkestoffItem : public FestExploreLegemiddelVirkestoffItem {
+public:
+    explicit FestExploreOppfVirkestoffItem(const OppfLegemiddelVirkestoff &oppfLegemiddelVirkestoff) : FestExploreLegemiddelVirkestoffItem(oppfLegemiddelVirkestoff, oppfLegemiddelVirkestoff.GetLegemiddelVirkestoff()) {}
+};
+
+class FestExploreLegemiddelpakningItem : public FestExploreLegemiddelCoreItem, protected Legemiddelpakning {
+public:
+    FestExploreLegemiddelpakningItem(const class Oppf &oppf, const Legemiddelpakning &legemiddelpakning) : FestExploreLegemiddelCoreItem(oppf, legemiddelpakning), Legemiddelpakning(legemiddelpakning) {}
+    std::vector<std::tuple<std::string, std::string>> GetDetails() override;
+};
+
+std::vector<std::tuple<std::string, std::string>> FestExploreLegemiddelpakningItem::GetDetails() {
+    std::vector<std::tuple<std::string,std::string>> details = {
+            {"Legemiddelpakning", Legemiddelpakning::GetId()}
+    };
+    {
+        auto upstreamDetails = FestExploreLegemiddelCoreItem::GetDetails();
+        for (const auto &tupl : upstreamDetails) {
+            details.emplace_back(tupl);
+        }
+    }
+    {
+        auto preparattype = Legemiddelpakning::GetPreparattype();
+        std::string str{preparattype.GetValue()};
+        str.append(" (");
+        str.append(preparattype.GetDistinguishedName());
+        str.append(")");
+        std::tuple<std::string,std::string> tupl = {"Preparattype", str};
+        details.emplace_back(tupl);
+    }
+    {
+        std::tuple<std::string,std::string> tupl = {"Varenummer", Legemiddelpakning::GetVarenr()};
+        details.emplace_back(tupl);
+    }
+    {
+        auto oppbevaring = Legemiddelpakning::GetOppbevaring();
+        std::string str{oppbevaring.GetValue()};
+        if (!str.empty()) {
+            str.append(" (");
+            str.append(oppbevaring.GetDistinguishedName());
+            str.append(")");
+            std::tuple<std::string, std::string> tupl = {"Oppbevaring", str};
+            details.emplace_back(tupl);
+        }
+    }
+    {
+        auto markedsforingsinfo = Legemiddelpakning::GetMarkedsforingsinfo();
+        auto markedsforingsdato = markedsforingsinfo.GetMarkedsforingsdato();
+        if (!markedsforingsdato.empty()) {
+            std::tuple<std::string, std::string> tupl = {"Markedsføringsdato", markedsforingsdato};
+            details.emplace_back(tupl);
+        }
+        auto midlUtgatt = markedsforingsinfo.GetMidlUtgattDato();
+        if (!midlUtgatt.empty()) {
+            std::tuple<std::string, std::string> tupl = {"Midlertidig utgått", midlUtgatt};
+            details.emplace_back(tupl);
+        }
+        auto varenrUtgaende = markedsforingsinfo.GetVarenrUtgaende();
+        if (!varenrUtgaende.empty()) {
+            std::tuple<std::string, std::string> tupl = {"Varenr utgående", varenrUtgaende};
+            details.emplace_back(tupl);
+        }
+        auto avreg = markedsforingsinfo.GetAvregDato();
+        if (!avreg.empty()) {
+            std::tuple<std::string, std::string> tupl = {"Avreg dato", avreg};
+            details.emplace_back(tupl);
+        }
+    }
+    {
+        std::tuple<std::string,std::string> tupl = {"Ean", Legemiddelpakning::GetEan()};
+        details.emplace_back(tupl);
+    }
+    {
+        auto pakningByttegruppe = Legemiddelpakning::GetPakningByttegruppe();
+        auto byttegruppe = pakningByttegruppe.GetRefByttegruppe();
+        if (!byttegruppe.empty()) {
+            {
+                std::tuple<std::string, std::string> tupl = {"Byttegruppe", byttegruppe};
+                details.emplace_back(tupl);
+            }
+            auto gyldigFra = pakningByttegruppe.GetGyldigFraDato();
+            if (!gyldigFra.empty()) {
+                std::tuple<std::string,std::string> tupl = {"Gyldig fra", gyldigFra};
+                details.emplace_back(tupl);
+            }
+        }
+    }
+    {
+        auto preparatomtaleavsnitt = Legemiddelpakning::GetPreparatomtaleavsnitt();
+        auto lenke = preparatomtaleavsnitt.GetLenke();
+        auto www = lenke.GetWww();
+        if (!www.empty()) {
+            auto overskrift = preparatomtaleavsnitt.GetAvsnittoverskrift();
+            {
+                std::string str{overskrift.GetValue()};
+                str.append(" (");
+                str.append(overskrift.GetDistinguishedName());
+                str.append(")");
+                std::tuple<std::string, std::string> tupl = {"Preparatomtaleavsnitt", str};
+                details.emplace_back(tupl);
+            }
+            {
+                std::tuple<std::string, std::string> tupl = {"", www};
+                details.emplace_back(tupl);
+            }
+            {
+                std::tuple<std::string, std::string> tupl = {"", lenke.GetBeskrivelse()};
+                details.emplace_back(tupl);
+            }
+        }
+    }
+    {
+        auto ikkeKonservering = Legemiddelpakning::GetIkkeKonservering();
+        std::tuple<std::string,std::string> tupl = {"Ikke konservering", ikkeKonservering ? "Yes" : "No"};
+        details.emplace_back(tupl);
+    }
+    return details;
+}
+
+class FestExploreOppfLegemiddelpakningItem : public FestExploreLegemiddelpakningItem {
+public:
+    explicit FestExploreOppfLegemiddelpakningItem(const OppfLegemiddelpakning &oppfLegemiddelpakning) : FestExploreLegemiddelpakningItem(oppfLegemiddelpakning, oppfLegemiddelpakning.GetLegemiddelpakning()) {}
+};
+
+class FestExploreLegemiddeldoseItem : public FestExploreLegemiddelCoreItem, protected Legemiddeldose {
+public:
+    FestExploreLegemiddeldoseItem(const class Oppf &oppf, const Legemiddeldose &legemiddeldose) : FestExploreLegemiddelCoreItem(oppf, legemiddeldose), Legemiddeldose(legemiddeldose) {}
+    std::vector<std::tuple<std::string, std::string>> GetDetails() override;
+};
+
+std::vector<std::tuple<std::string, std::string>> FestExploreLegemiddeldoseItem::GetDetails() {
+    std::vector<std::tuple<std::string,std::string>> details = {
+            {"Legemiddeldose", Legemiddeldose::GetId()}
+    };
+    {
+        auto upstreamDetails = FestExploreLegemiddelCoreItem::GetDetails();
+        for (const auto &tupl : upstreamDetails) {
+            details.emplace_back(tupl);
+        }
+    }
+    {
+        auto preparattype = Legemiddeldose::GetPreparattype();
+        std::string str{preparattype.GetValue()};
+        str.append(" (");
+        str.append(preparattype.GetDistinguishedName());
+        str.append(")");
+        std::tuple<std::string,std::string> tupl = {"Preparattype", str};
+        details.emplace_back(tupl);
+    }
+    {
+        std::tuple<std::string,std::string> tupl = {"Lmr løpenummer", Legemiddeldose::GetLmrLopenr()};
+        details.emplace_back(tupl);
+    }
+    {
+        auto amount = Legemiddeldose::GetMengde();
+        std::stringstream str{};
+        str << amount.GetValue() << " " << amount.GetUnit();
+        std::tuple<std::string,std::string> tupl = {"Mengde", str.str()};
+        details.emplace_back(tupl);
+    }
+    {
+        auto refs = Legemiddeldose::GetRefLegemiddelMerkevare();
+        auto iterator = refs.begin();
+        if (iterator != refs.end()) {
+            std::tuple<std::string,std::string> tupl = {"Ref Merkevare", *iterator};
+            details.emplace_back(tupl);
+            ++iterator;
+        }
+        while (iterator != refs.end()) {
+            std::tuple<std::string,std::string> tupl = {"", *iterator};
+            details.emplace_back(tupl);
+            ++iterator;
+        }
+    }
+    {
+        auto refs = Legemiddeldose::GetRefPakning();
+        auto iterator = refs.begin();
+        if (iterator != refs.end()) {
+            std::tuple<std::string,std::string> tupl = {"Ref Pakning", *iterator};
+            details.emplace_back(tupl);
+            ++iterator;
+        }
+        while (iterator != refs.end()) {
+            std::tuple<std::string,std::string> tupl = {"", *iterator};
+            details.emplace_back(tupl);
+            ++iterator;
+        }
+    }
+    {
+        auto pakningstype = Legemiddeldose::GetPakningstype();
+        std::string str{pakningstype.GetValue()};
+        if (!str.empty()) {
+            str.append(" (");
+            str.append(pakningstype.GetDistinguishedName());
+            str.append(")");
+            std::tuple<std::string,std::string> tupl = {"Pakningstype", str};
+            details.emplace_back(tupl);
+        }
+    }
+    return details;
+}
+
+class FestExploreOppfLegemiddeldoseItem : public FestExploreLegemiddeldoseItem {
+public:
+    explicit FestExploreOppfLegemiddeldoseItem(const OppfLegemiddeldose &oppfLegemiddeldose) : FestExploreLegemiddeldoseItem(oppfLegemiddeldose, oppfLegemiddeldose.GetLegemiddeldose()) {}
+};
+
 void FestExploreOppfRefusjonItem::ShowRefusjonskode(const RefusjonskodeItem &item) {
     auto details = item.GetDetails();
     int rowNum = 0;
@@ -841,10 +1113,25 @@ void FestExploreVersionDialog::ShowItemsWithFilter(const std::string &itemType) 
         for (const auto &oppfRefusjon : oppfRefusjons) {
             items.emplace_back(std::make_shared<FestExploreOppfRefusjonItem>(oppfRefusjon));
         }
-    } else if (itemType == "Merkevare") {
+    } else if (itemType == "LegemiddelMerkevare") {
         auto oppfLegemiddelMerkevares = db->GetOppfLegemiddelMerkevare(version);
         for (const auto &oppfLegemiddelMerkevare : oppfLegemiddelMerkevares) {
             items.emplace_back(std::make_shared<FestExploreOppfMerkevareItem>(oppfLegemiddelMerkevare));
+        }
+    } else if (itemType == "LegemiddelVirkestoff") {
+        auto oppfLegemiddelVirkestoffs = db->GetOppfLegemiddelVirkestoff(version);
+        for (const auto &oppfLegemiddelVirkestoff : oppfLegemiddelVirkestoffs) {
+            items.emplace_back(std::make_shared<FestExploreOppfVirkestoffItem>(oppfLegemiddelVirkestoff));
+        }
+    } else if (itemType == "Legemiddelpakning") {
+        auto oppfLegemiddelpaknings = db->GetOppfLegemiddelpakning(version);
+        for (const auto &oppfLegemiddelpakning : oppfLegemiddelpaknings) {
+            items.emplace_back(std::make_shared<FestExploreOppfLegemiddelpakningItem>(oppfLegemiddelpakning));
+        }
+    } else if (itemType == "Legemiddeldose") {
+        auto oppfLegemiddeldoses = db->GetOppfLegemiddeldose(version);
+        for (const auto &oppfLegemiddeldose : oppfLegemiddeldoses) {
+            items.emplace_back(std::make_shared<FestExploreOppfLegemiddeldoseItem>(oppfLegemiddeldose));
         }
     }
     auto selection = itemFilterSelector->GetSelection();
