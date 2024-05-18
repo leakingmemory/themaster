@@ -20,6 +20,7 @@ class FestUuid;
 class POppfLegemiddelVirkestoff;
 class PLegemiddelVirkestoff;
 class OppfRefusjon;
+class OppfLegemiddelMerkevare;
 
 class FestDb {
     std::shared_ptr<FestDeserializer> festDeserializer{};
@@ -49,6 +50,7 @@ public:
     bool PLegemiddelVirkestoffHasOneOfPakning(const PLegemiddelVirkestoff &, const std::vector<FestUuid> &pakningId);
     FestUuid GetLegemiddelVirkestoffId(const PLegemiddelVirkestoff &);
     [[nodiscard]] std::vector<OppfRefusjon> GetOppfRefusjon(const std::string &festVersion) const;
+    [[nodiscard]] std::vector<OppfLegemiddelMerkevare> GetOppfLegemiddelMerkevare(const std::string &festVersion) const;
 };
 
 

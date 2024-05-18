@@ -350,3 +350,18 @@ std::vector<OppfRefusjon> FestDb::GetOppfRefusjon(const std::string &festVersion
     }
     return oppfs;
 }
+
+std::vector<OppfLegemiddelMerkevare> FestDb::GetOppfLegemiddelMerkevare(const std::string &festVersion) const {
+    std::vector<OppfLegemiddelMerkevare> oppfs{};
+    {
+        FestDbContainer festDbContainer = GetFestDb(festVersion);
+        if (!festDbContainer.festVectors) {
+            return {};
+        }
+        auto oppfLegemiddelMerkevares = festDbContainer.festVectors->GetLegemiddelMerkevare(*festDeserializer);
+        for (const auto &poppf : oppfLegemiddelMerkevares) {
+            oppfs.emplace_back(festDeserializer->Unpack(poppf));
+        }
+    }
+    return oppfs;
+}
