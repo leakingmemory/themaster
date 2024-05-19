@@ -17,9 +17,10 @@ enum {
     TheMaster_PrescribeMedicament_Id = 9,
     TheMaster_UpdateFest_Id = 10,
     TheMaster_ShowFestVersions_Id = 11,
-    TheMaster_PrescriptionDetails_Id = 12,
-    TheMaster_PrescriptionRecall_Id = 13,
-    TheMaster_VersionDialog_Explore = 14
+    TheMaster_ShowFestDbQuotas_Id = 12,
+    TheMaster_PrescriptionDetails_Id = 13,
+    TheMaster_PrescriptionRecall_Id = 14,
+    TheMaster_VersionDialog_Explore = 15
 };
 
 #endif //DRWHATSNOT_THEMASTERIDS_H

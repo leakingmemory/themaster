@@ -67,6 +67,7 @@ public:
     void Connect(const std::string &url);
     void OnUpdateFest(wxCommandEvent &e);
     void OnShowFestVersions(wxCommandEvent &e);
+    void OnShowFestDbQuotas(wxCommandEvent &e);
     void OnPrescriptionContextMenu(wxContextMenuEvent &e);
     void OnPrescriptionDetails(wxCommandEvent &e);
     void OnPrescriptionRecall(wxCommandEvent &e);

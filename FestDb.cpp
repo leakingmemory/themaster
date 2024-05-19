@@ -91,6 +91,14 @@ std::vector<std::string> FestDb::GetFestVersions() const {
     return GetFestVersionsFromMap(festVersions);
 }
 
+std::vector<FestDbQuota> FestDb::GetDbQuotas() const {
+    if (festDeserializer.operator bool()) {
+        return festDeserializer->GetQuotas();
+    } else {
+        return {};
+    }
+}
+
 std::vector<LegemiddelVirkestoff> FestDb::FindLegemiddelVirkestoff(const std::vector<POppfLegemiddelVirkestoff> &oppfs, const std::string &i_term) const {
     std::vector<LegemiddelVirkestoff> results{};
     std::string term{i_term};

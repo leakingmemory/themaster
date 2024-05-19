@@ -28,7 +28,7 @@ add_executable(themaster TheMasterApp.cpp TheMasterApp.h TheMasterFrame.cpp TheM
     WxDebouncer.cpp WxDebouncer.h SfmMedicamentMapper.cpp SfmMedicamentMapper.h
     FestVersionsDialog.cpp FestVersionsDialog.h PrescriptionDetailsDialog.cpp PrescriptionDetailsDialog.h
     RecallPrescriptionDialog.cpp RecallPrescriptionDialog.h FestExploreVersionDialog.cpp FestExploreVersionDialog.h
-    FestDiffVersionsDialog.cpp FestDiffVersionsDialog.h)
+    FestDiffVersionsDialog.cpp FestDiffVersionsDialog.h FestDbQuotasDialog.cpp FestDbQuotasDialog.h)
 target_link_libraries(themaster PRIVATE -lsfmbasisapi -ljjwtid -lmedfest)
 target_link_libraries(themaster PRIVATE cpprestsdk::cpprest -lcrypto)
 target_link_libraries(themaster PRIVATE ${wxWidgets_LIBRARIES})

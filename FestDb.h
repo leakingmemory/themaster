@@ -13,6 +13,7 @@
 
 class FestDeserializer;
 struct FestDbContainer;
+struct FestDbQuota;
 class FestVectors;
 class LegemiddelVirkestoff;
 class LegemiddelMerkevare;
@@ -48,6 +49,7 @@ private:
     [[nodiscard]] FestDbContainer GetFestDb(const std::string &version) const;
 public:
     [[nodiscard]] std::vector<std::string> GetFestVersions() const;
+    [[nodiscard]] std::vector<FestDbQuota> GetDbQuotas() const;
     [[nodiscard]] std::vector<LegemiddelVirkestoff> FindLegemiddelVirkestoff(const std::vector<POppfLegemiddelVirkestoff> &oppfs, const std::string &term) const;
     [[nodiscard]] std::vector<LegemiddelVirkestoff> FindLegemiddelVirkestoff(const std::string &term) const;
     [[nodiscard]] std::vector<LegemiddelMerkevare> FindLegemiddelMerkevare(const std::string &term) const;

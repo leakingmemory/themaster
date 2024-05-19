@@ -34,6 +34,7 @@
 #include "FestVersionsDialog.h"
 #include "PrescriptionDetailsDialog.h"
 #include "RecallPrescriptionDialog.h"
+#include "FestDbQuotasDialog.h"
 
 constexpr int PrescriptionNameColumnWidth = 250;
 constexpr int PrescriptionRemoteColumnWidth = 75;
@@ -52,6 +53,7 @@ TheMasterFrame::TheMasterFrame() : wxFrame(nullptr, wxID_ANY, "The Master"),
     auto *festMenu = new wxMenu();
     festMenu->Append(TheMaster_UpdateFest_Id, "Update FEST");
     festMenu->Append(TheMaster_ShowFestVersions_Id, "FEST versions");
+    festMenu->Append(TheMaster_ShowFestDbQuotas_Id, "FEST DB quotas");
     auto *medicationMenu = new wxMenu();
     medicationMenu->Append(TheMaster_PrescribeMagistral_Id, "Prescribe magistral");
     medicationMenu->Append(TheMaster_PrescribeMedicament_Id, "Prescribe medicament");
@@ -111,6 +113,7 @@ TheMasterFrame::TheMasterFrame() : wxFrame(nullptr, wxID_ANY, "The Master"),
     Bind(wxEVT_MENU, &TheMasterFrame::OnPrescribeMedicament, this, TheMaster_PrescribeMedicament_Id);
     Bind(wxEVT_MENU, &TheMasterFrame::OnUpdateFest, this, TheMaster_UpdateFest_Id);
     Bind(wxEVT_MENU, &TheMasterFrame::OnShowFestVersions, this, TheMaster_ShowFestVersions_Id);
+    Bind(wxEVT_MENU, &TheMasterFrame::OnShowFestDbQuotas, this, TheMaster_ShowFestDbQuotas_Id);
 
     Bind(wxEVT_MENU, &TheMasterFrame::OnPrescriptionDetails, this, TheMaster_PrescriptionDetails_Id);
     Bind(wxEVT_MENU, &TheMasterFrame::OnPrescriptionRecall, this, TheMaster_PrescriptionRecall_Id);
@@ -1262,6 +1265,11 @@ void TheMasterFrame::OnUpdateFest(wxCommandEvent &e) {
 void TheMasterFrame::OnShowFestVersions(wxCommandEvent &e) {
     FestVersionsDialog festVersionsDialog{this};
     festVersionsDialog.ShowModal();
+}
+
+void TheMasterFrame::OnShowFestDbQuotas(wxCommandEvent &e) {
+    FestDbQuotasDialog dialog{this};
+    dialog.ShowModal();
 }
 
 void TheMasterFrame::OnPrescriptionContextMenu(wxContextMenuEvent &e) {
