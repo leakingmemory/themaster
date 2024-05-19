@@ -334,8 +334,12 @@ void FestExploreOppfRefusjonItem::Show(wxPanel &panel, wxPanel &topRight) {
 }
 
 void FestExploreOppfRefusjonItem::Hide(wxPanel &panel, wxPanel &topRight) {
-    panel.SetSizerAndFit(nullptr);
-    topRight.SetSizerAndFit(nullptr);
+    panel.GetSizer()->Clear();
+    panel.SetSizer(nullptr);
+    panel.DestroyChildren();
+    topRight.GetSizer()->Clear();
+    topRight.SetSizer(nullptr);
+    topRight.DestroyChildren();
 }
 
 void FestExploreOppfRefusjonItem::ClearRefusjonskode() {
@@ -379,7 +383,9 @@ void FestExploreDetailListItem::Show(wxPanel &panel, wxPanel &topRight) {
 }
 
 void FestExploreDetailListItem::Hide(wxPanel &panel, wxPanel &topRight) {
-    panel.SetSizerAndFit(nullptr);
+    panel.GetSizer()->Clear();
+    panel.SetSizer(nullptr);
+    panel.DestroyChildren();
 }
 
 class FestExploreOppfItem : public FestExploreDetailListItem, protected Oppf {
@@ -1103,6 +1109,8 @@ public:
 };
 
 class FestExploreOppfKodeverkItem : public FestExploreOppfItem, protected OppfKodeverk {
+private:
+    wxListView *kodeverkList;
 public:
     FestExploreOppfKodeverkItem(const OppfKodeverk &oppf) : FestExploreOppfItem(oppf), OppfKodeverk(oppf) {}
     std::string GetName() const override;
@@ -1135,7 +1143,7 @@ std::vector<std::tuple<std::string, std::string>> FestExploreOppfKodeverkItem::G
 void FestExploreOppfKodeverkItem::Show(wxPanel &panel, wxPanel &topRight) {
     FestExploreOppfItem::Show(panel, topRight);
     auto *sizer = new wxBoxSizer(wxHORIZONTAL);
-    auto *kodeverkList = new wxListView(&topRight);
+    kodeverkList = new wxListView(&topRight);
     kodeverkList->AppendColumn(wxT("Kode"));
     kodeverkList->AppendColumn(wxT("Id"));
     kodeverkList->AppendColumn(wxT("Term"));
@@ -1158,7 +1166,9 @@ void FestExploreOppfKodeverkItem::Show(wxPanel &panel, wxPanel &topRight) {
 }
 
 void FestExploreOppfKodeverkItem::Hide(wxPanel &panel, wxPanel &topRight) {
+    topRight.GetSizer()->Clear();
     topRight.SetSizer(nullptr);
+    topRight.DestroyChildren();
     FestExploreOppfItem::Hide(panel, topRight);
 }
 
