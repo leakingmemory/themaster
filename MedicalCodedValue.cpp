@@ -704,10 +704,10 @@ constexpr VolvenRecallCode::VolvenRecallCode() {
     Add("5", "Administrativ sletting");
 }
 
-constexpr VolvenMedicamentForm GetVolvenMedicamentFormV() {
+static VolvenMedicamentForm GetVolvenMedicamentFormV() {
     return {};
 }
-constexpr VolvenRecallCode GetVolvenRecallCodeV() {
+static VolvenRecallCode GetVolvenRecallCodeV() {
     return {};
 }
 
