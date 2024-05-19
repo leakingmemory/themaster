@@ -10,6 +10,7 @@
 #include <medfest/Struct/Decoded/OppfLegemiddelpakning.h>
 #include <medfest/Struct/Decoded/OppfLegemiddeldose.h>
 #include <medfest/Struct/Decoded/OppfRefusjon.h>
+#include <medfest/Struct/Decoded/OppfKodeverk.h>
 #include <medfest/Struct/Packed/PPakningsinfo.h>
 #include "DataDirectory.h"
 #include <filesystem>
@@ -420,6 +421,43 @@ std::vector<OppfLegemiddeldose> FestDb::GetOppfLegemiddeldose(const std::string 
     return oppfs;
 }
 
+std::vector<OppfKodeverk> FestDb::GetOppfKodeverk(const std::string &festVersion) const {
+    std::vector<OppfKodeverk> oppfs{};
+    {
+        FestDbContainer festDbContainer = GetFestDb(festVersion);
+        if (!festDbContainer.festVectors) {
+            return {};
+        }
+        auto oppfKodeverks = festDbContainer.festVectors->GetKodeverk(*festDeserializer);
+        for (const auto &poppf : oppfKodeverks) {
+            oppfs.emplace_back(festDeserializer->Unpack(poppf));
+        }
+    }
+    return oppfs;
+}
+
+std::vector<Element> FestDb::GetKodeverkElements(const std::string &kodeverkId, const std::string &festVersion) const {
+    std::vector<Element> oppfs{};
+    {
+        FestDbContainer festDbContainer = GetFestDb(festVersion);
+        if (!festDbContainer.festVectors) {
+            return {};
+        }
+        auto oppfKodeverks = festDbContainer.festVectors->GetKodeverk(*festDeserializer);
+        for (const auto &poppf : oppfKodeverks) {
+            auto oppf = festDeserializer->Unpack(static_cast<const PInfo &>(poppf));
+            if (oppf.GetId() == kodeverkId) {
+                auto elements = festDeserializer->GetElementList(poppf);
+                for (const auto &element : elements) {
+                    oppfs.emplace_back(festDeserializer->Unpack(element));
+                }
+                break;
+            }
+        }
+    }
+    return oppfs;
+}
+
 FestDiff<OppfRefusjon> FestDb::GetOppfRefusjonDiff(const std::function<void (int addsAndRemovesDone, int addsAndRemovesMax, int modificationsDone, int modificationsMax)> &progress, const std::string &firstVersion, const std::string &secondVersion) const {
     FestDiff<OppfRefusjon> oppfs{};
     {
@@ -757,6 +795,168 @@ FestDiff<OppfLegemiddeldose> FestDb::GetOppfLegemiddeldoseDiff(const std::functi
             if (removedIterator->GetLegemiddeldose().GetId() == addedIterator->GetLegemiddeldose().GetId()) {
                 found = true;
                 FestModified<OppfLegemiddeldose> modified{
+                        .previous = *removedIterator,
+                        .latest = *addedIterator
+                };
+                removedIterator = oppfs.removed.erase(removedIterator);
+                addedIterator = oppfs.added.erase(addedIterator);
+                oppfs.modified.emplace_back(std::move(modified));
+                break;
+            }
+            ++addedIterator;
+        }
+        if (!found) {
+            ++removedIterator;
+        }
+        ++counter;
+        progress(1, 1, counter, max);
+    }
+    return oppfs;
+}
+
+FestDiff<OppfKodeverk> FestDb::GetOppfKodeverkDiff(const std::function<void (int addsAndRemovesDone, int addsAndRemovesMax, int modificationsDone, int modificationsMax)> &progress, const std::string &firstVersion, const std::string &secondVersion) const {
+    FestDiff<OppfKodeverk> oppfs{};
+    {
+        FestDbContainer firstDbContainer = GetFestDb(firstVersion);
+        FestDbContainer secondDbContainer = GetFestDb(secondVersion);
+        if (!firstDbContainer.festVectors || !secondDbContainer.festVectors) {
+            return {};
+        }
+        auto first = firstDbContainer.festVectors->GetKodeverk(*festDeserializer);
+        auto second = secondDbContainer.festVectors->GetKodeverk(*festDeserializer);
+        int max = first.size() + second.size();
+        int counter = 0;
+        progress(counter, max, 0, 1);
+        for (const auto &poppf : first) {
+            bool found{false};
+            for (const auto &po : second) {
+                if (poppf == po) {
+                    found = true;
+                    break;
+                }
+            }
+            if (!found) {
+                oppfs.removed.emplace_back(festDeserializer->Unpack(poppf));
+            }
+            counter++;
+            progress(counter, max, 0, 1);
+        }
+        for (const auto &poppf : second) {
+            bool found{false};
+            for (const auto &po : first) {
+                if (poppf == po) {
+                    found = true;
+                    break;
+                }
+            }
+            if (!found) {
+                oppfs.added.emplace_back(festDeserializer->Unpack(poppf));
+            }
+            counter++;
+            progress(counter, max, 0, 1);
+        }
+    }
+    int max = oppfs.removed.size();
+    int counter = 0;
+    auto removedIterator = oppfs.removed.begin();
+    while (removedIterator != oppfs.removed.end()) {
+        auto addedIterator = oppfs.added.begin();
+        bool found{false};
+        while (addedIterator != oppfs.added.end()) {
+            if (removedIterator->GetInfo().GetId() == addedIterator->GetInfo().GetId()) {
+                found = true;
+                FestModified<OppfKodeverk> modified{
+                        .previous = *removedIterator,
+                        .latest = *addedIterator
+                };
+                removedIterator = oppfs.removed.erase(removedIterator);
+                addedIterator = oppfs.added.erase(addedIterator);
+                oppfs.modified.emplace_back(std::move(modified));
+                break;
+            }
+            ++addedIterator;
+        }
+        if (!found) {
+            ++removedIterator;
+        }
+        ++counter;
+        progress(1, 1, counter, max);
+    }
+    return oppfs;
+}
+
+FestDiff<Element>
+FestDb::GetKodeverkElementsDiff(const std::function<void(int, int, int, int)> &progress, const std::string &kodeverkId,
+                                const std::string &firstVersion, const std::string &secondVersion) const {
+    FestDiff<Element> oppfs{};
+    {
+        FestDbContainer firstDbContainer = GetFestDb(firstVersion);
+        FestDbContainer secondDbContainer = GetFestDb(secondVersion);
+        if (!firstDbContainer.festVectors || !secondDbContainer.festVectors) {
+            return {};
+        }
+        std::vector<PElement> first{};
+        std::vector<PElement> second{};
+        {
+            auto firstKodeverk = firstDbContainer.festVectors->GetKodeverk(*festDeserializer);
+            auto secondKodeverk = secondDbContainer.festVectors->GetKodeverk(*festDeserializer);
+            for (const auto &poppf : firstKodeverk) {
+                auto oppf = festDeserializer->Unpack(static_cast<const POppf &>(poppf));
+                if (oppf.GetId() == kodeverkId) {
+                    first = festDeserializer->GetElementList(poppf);
+                    break;
+                }
+            }
+            for (const auto &poppf : secondKodeverk) {
+                auto oppf = festDeserializer->Unpack(static_cast<const POppf &>(poppf));
+                if (oppf.GetId() == kodeverkId) {
+                    second = festDeserializer->GetElementList(poppf);
+                    break;
+                }
+            }
+        }
+        int max = first.size() + second.size();
+        int counter = 0;
+        progress(counter, max, 0, 1);
+        for (const auto &poppf : first) {
+            bool found{false};
+            for (const auto &po : second) {
+                if (poppf == po) {
+                    found = true;
+                    break;
+                }
+            }
+            if (!found) {
+                oppfs.removed.emplace_back(festDeserializer->Unpack(poppf));
+            }
+            counter++;
+            progress(counter, max, 0, 1);
+        }
+        for (const auto &poppf : second) {
+            bool found{false};
+            for (const auto &po : first) {
+                if (poppf == po) {
+                    found = true;
+                    break;
+                }
+            }
+            if (!found) {
+                oppfs.added.emplace_back(festDeserializer->Unpack(poppf));
+            }
+            counter++;
+            progress(counter, max, 0, 1);
+        }
+    }
+    int max = oppfs.removed.size();
+    int counter = 0;
+    auto removedIterator = oppfs.removed.begin();
+    while (removedIterator != oppfs.removed.end()) {
+        auto addedIterator = oppfs.added.begin();
+        bool found{false};
+        while (addedIterator != oppfs.added.end()) {
+            if (removedIterator->GetKode() == addedIterator->GetKode()) {
+                found = true;
+                FestModified<Element> modified{
                         .previous = *removedIterator,
                         .latest = *addedIterator
                 };

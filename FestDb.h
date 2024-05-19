@@ -26,6 +26,8 @@ class OppfLegemiddelMerkevare;
 class OppfLegemiddelVirkestoff;
 class OppfLegemiddelpakning;
 class OppfLegemiddeldose;
+class OppfKodeverk;
+class Element;
 
 template <class T> struct FestModified {
     T previous{};
@@ -71,11 +73,15 @@ public:
     [[nodiscard]] std::vector<OppfLegemiddelVirkestoff> GetOppfLegemiddelVirkestoff(const std::string &festVersion) const;
     [[nodiscard]] std::vector<OppfLegemiddelpakning> GetOppfLegemiddelpakning(const std::string &festVersion) const;
     [[nodiscard]] std::vector<OppfLegemiddeldose> GetOppfLegemiddeldose(const std::string &festVersion) const;
+    [[nodiscard]] std::vector<OppfKodeverk> GetOppfKodeverk(const std::string &festVersion) const;
+    [[nodiscard]] std::vector<Element> GetKodeverkElements(const std::string &kodeverkId, const std::string &festVersion) const;
     [[nodiscard]] FestDiff<OppfRefusjon> GetOppfRefusjonDiff(const std::function<void (int addsAndRemovesDone, int addsAndRemovesMax, int modificationsDone, int modificationsMax)> &progress, const std::string &firstVersion, const std::string &secondVersion) const;
     [[nodiscard]] FestDiff<OppfLegemiddelMerkevare> GetOppfLegemiddelMerkevareDiff(const std::function<void (int addsAndRemovesDone, int addsAndRemovesMax, int modificationsDone, int modificationsMax)> &progress, const std::string &firstVersion, const std::string &secondVersion) const;
     [[nodiscard]] FestDiff<OppfLegemiddelVirkestoff> GetOppfLegemiddelVirkestoffDiff(const std::function<void (int addsAndRemovesDone, int addsAndRemovesMax, int modificationsDone, int modificationsMax)> &progress, const std::string &firstVersion, const std::string &secondVersion) const;
     [[nodiscard]] FestDiff<OppfLegemiddelpakning> GetOppfLegemiddelpakningDiff(const std::function<void (int addsAndRemovesDone, int addsAndRemovesMax, int modificationsDone, int modificationsMax)> &progress, const std::string &firstVersion, const std::string &secondVersion) const;
     [[nodiscard]] FestDiff<OppfLegemiddeldose> GetOppfLegemiddeldoseDiff(const std::function<void (int addsAndRemovesDone, int addsAndRemovesMax, int modificationsDone, int modificationsMax)> &progress, const std::string &firstVersion, const std::string &secondVersion) const;
+    [[nodiscard]] FestDiff<OppfKodeverk> GetOppfKodeverkDiff(const std::function<void (int addsAndRemovesDone, int addsAndRemovesMax, int modificationsDone, int modificationsMax)> &progress, const std::string &firstVersion, const std::string &secondVersion) const;
+    [[nodiscard]] FestDiff<Element> GetKodeverkElementsDiff(const std::function<void (int addsAndRemovesDone, int addsAndRemovesMax, int modificationsDone, int modificationsMax)> &progress, const std::string &kodeverkId, const std::string &firstVersion, const std::string &secondVersion) const;
 };
 
 

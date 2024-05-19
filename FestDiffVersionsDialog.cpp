@@ -9,6 +9,7 @@
 #include <medfest/Struct/Decoded/OppfLegemiddelVirkestoff.h>
 #include <medfest/Struct/Decoded/OppfLegemiddelpakning.h>
 #include <medfest/Struct/Decoded/OppfLegemiddeldose.h>
+#include <medfest/Struct/Decoded/OppfKodeverk.h>
 #include <sstream>
 #include "FestExploreVersionDialog.h"
 
@@ -20,7 +21,9 @@ FestDiffVersionsDialog::FestDiffVersionsDialog(wxWindow *parent, const std::stri
     legemiddelMerkevare(std::make_shared<FestDiff<OppfLegemiddelMerkevare>>()),
     legemiddelVirkestoff(std::make_shared<FestDiff<OppfLegemiddelVirkestoff>>()),
     legemiddelpakning(std::make_shared<FestDiff<OppfLegemiddelpakning>>()),
-    legemiddeldose(std::make_shared<FestDiff<OppfLegemiddeldose>>())
+    legemiddeldose(std::make_shared<FestDiff<OppfLegemiddeldose>>()),
+    kodeverk(std::make_shared<FestDiff<OppfKodeverk>>()),
+    atc(std::make_shared<FestDiff<Element>>())
 {
     auto *sizer = new wxBoxSizer(wxVERTICAL);
     {
@@ -51,7 +54,7 @@ FestDiffVersionsDialog::FestDiffVersionsDialog(wxWindow *parent, const std::stri
 void FestDiffVersionsDialog::RunDiff(const std::function<void (int toplevelDone,int toplevelMax, int addsAndRemovesDone, int addsAndRemovesMax, int modificationsDone, int modificationsMax)> &progressFuncRef, const std::shared_ptr<FestDb> &db) {
     std::function<void (int toplevelDone,int toplevelMax, int addsAndRemovesDone, int addsAndRemovesMax, int modificationsDone, int modificationsMax)> progress{progressFuncRef};
     int toplevelDone{0};
-    int toplevelMax{5};
+    int toplevelMax{7};
     progress(0, toplevelMax, 0, 1, 0, 1);
     std::function<void (int addsAndRemovesDone, int addsAndRemovesMax, int modificationsDone, int modificationsMax)> subProgress =
             [progress, &toplevelDone, toplevelMax] (int addsAndRemovesDone, int addsAndRemovesMax, int modificationsDone, int modificationsMax) {
@@ -72,6 +75,12 @@ void FestDiffVersionsDialog::RunDiff(const std::function<void (int toplevelDone,
     *legemiddeldose = db->GetOppfLegemiddeldoseDiff(subProgress, fromVersion, toVersion);
     ++toplevelDone;
     progress(toplevelDone, toplevelMax, 0, 1, 0, 1);
+    *kodeverk = db->GetOppfKodeverkDiff(subProgress, fromVersion, toVersion);
+    ++toplevelDone;
+    progress(toplevelDone, toplevelMax, 0, 1, 0, 1);
+    *atc = db->GetKodeverkElementsDiff(subProgress, "2.16.578.1.12.4.1.1.7180", fromVersion, toVersion);
+    ++toplevelDone;
+    progress(toplevelDone, toplevelMax, 0, 1, 0, 1);
 }
 
 void FestDiffVersionsDialog::OnRemoved(wxCommandEvent &) {
@@ -82,6 +91,8 @@ void FestDiffVersionsDialog::OnRemoved(wxCommandEvent &) {
         std::make_shared<std::vector<OppfLegemiddelVirkestoff>>(legemiddelVirkestoff->removed),
         std::make_shared<std::vector<OppfLegemiddelpakning>>(legemiddelpakning->removed),
         std::make_shared<std::vector<OppfLegemiddeldose>>(legemiddeldose->removed),
+        std::make_shared<std::vector<OppfKodeverk>>(kodeverk->removed),
+        std::make_shared<std::vector<Element>>(atc->removed),
         fromVersion
     };
     dialog.ShowModal();
@@ -111,6 +122,8 @@ void FestDiffVersionsDialog::OnModifiedPrevious(wxCommandEvent &e) {
             std::make_shared<std::vector<OppfLegemiddelVirkestoff>>(PreviousItems<OppfLegemiddelVirkestoff>(legemiddelVirkestoff->modified)),
             std::make_shared<std::vector<OppfLegemiddelpakning>>(PreviousItems<OppfLegemiddelpakning>(legemiddelpakning->modified)),
             std::make_shared<std::vector<OppfLegemiddeldose>>(PreviousItems<OppfLegemiddeldose>(legemiddeldose->modified)),
+            std::make_shared<std::vector<OppfKodeverk>>(PreviousItems<OppfKodeverk>(kodeverk->modified)),
+            std::make_shared<std::vector<Element>>(PreviousItems<Element>(atc->modified)),
             fromVersion
     };
     dialog.ShowModal();
@@ -124,6 +137,8 @@ void FestDiffVersionsDialog::OnModifiedNew(wxCommandEvent &e) {
             std::make_shared<std::vector<OppfLegemiddelVirkestoff>>(NewItems<OppfLegemiddelVirkestoff>(legemiddelVirkestoff->modified)),
             std::make_shared<std::vector<OppfLegemiddelpakning>>(NewItems<OppfLegemiddelpakning>(legemiddelpakning->modified)),
             std::make_shared<std::vector<OppfLegemiddeldose>>(NewItems<OppfLegemiddeldose>(legemiddeldose->modified)),
+            std::make_shared<std::vector<OppfKodeverk>>(NewItems<OppfKodeverk>(kodeverk->modified)),
+            std::make_shared<std::vector<Element>>(NewItems<Element>(atc->modified)),
             fromVersion
     };
     dialog.ShowModal();
@@ -137,6 +152,8 @@ void FestDiffVersionsDialog::OnAdded(wxCommandEvent &e) {
             std::make_shared<std::vector<OppfLegemiddelVirkestoff>>(legemiddelVirkestoff->added),
             std::make_shared<std::vector<OppfLegemiddelpakning>>(legemiddelpakning->added),
             std::make_shared<std::vector<OppfLegemiddeldose>>(legemiddeldose->added),
+            std::make_shared<std::vector<OppfKodeverk>>(kodeverk->added),
+            std::make_shared<std::vector<Element>>(atc->added),
             fromVersion
     };
     dialog.ShowModal();

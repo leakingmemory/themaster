@@ -10,6 +10,7 @@
 #include <medfest/Struct/Decoded/OppfLegemiddelVirkestoff.h>
 #include <medfest/Struct/Decoded/OppfLegemiddelpakning.h>
 #include <medfest/Struct/Decoded/OppfLegemiddeldose.h>
+#include <medfest/Struct/Decoded/OppfKodeverk.h>
 #include <vector>
 #include <tuple>
 #include <sstream>
@@ -41,6 +42,8 @@ constexpr const char *itemTypes[] = {
         "Legemiddelpakning",
         "Legemiddeldose",
         "Refusjon",
+        "Kodeverk",
+        "ATC",
         nullptr
 };
 constexpr int numberOfItemTypes = LengthOfNullptrTerminated<int,const char>(&(*itemTypes));
@@ -52,9 +55,9 @@ FestExploreVersionDialog::FestExploreVersionDialog(wxWindow *parent, const std::
     Init();
 }
 
-FestExploreVersionDialog::FestExploreVersionDialog(wxWindow *parent, const std::shared_ptr<std::vector<OppfRefusjon>> &refusjon, const std::shared_ptr<std::vector<OppfLegemiddelMerkevare>> &legemiddelMerkevare, const std::shared_ptr<std::vector<OppfLegemiddelVirkestoff>> &legemiddelVirkestoff, const std::shared_ptr<std::vector<OppfLegemiddelpakning>> &legemiddelpakning, const std::shared_ptr<std::vector<OppfLegemiddeldose>> &legemiddeldose, const std::string &version) :
+FestExploreVersionDialog::FestExploreVersionDialog(wxWindow *parent, const std::shared_ptr<std::vector<OppfRefusjon>> &refusjon, const std::shared_ptr<std::vector<OppfLegemiddelMerkevare>> &legemiddelMerkevare, const std::shared_ptr<std::vector<OppfLegemiddelVirkestoff>> &legemiddelVirkestoff, const std::shared_ptr<std::vector<OppfLegemiddelpakning>> &legemiddelpakning, const std::shared_ptr<std::vector<OppfLegemiddeldose>> &legemiddeldose, const std::shared_ptr<std::vector<OppfKodeverk>> &kodeverk, const std::shared_ptr<std::vector<Element>> &atc, const std::string &version) :
     wxDialog(parent, wxID_ANY, wxString::FromUTF8(version)),
-    db(), refusjon(refusjon), legemiddelMerkevare(legemiddelMerkevare), legemiddelVirkestoff(legemiddelVirkestoff), legemiddelpakning(legemiddelpakning), legemiddeldose(legemiddeldose), version(version)
+    db(), refusjon(refusjon), legemiddelMerkevare(legemiddelMerkevare), legemiddelVirkestoff(legemiddelVirkestoff), legemiddelpakning(legemiddelpakning), legemiddeldose(legemiddeldose), kodeverk(kodeverk), atc(atc), version(version)
 {
     Init();
 }
@@ -341,13 +344,73 @@ void FestExploreOppfRefusjonItem::ClearRefusjonskode() {
     refusjonskodeDetails->AppendColumn(wxT("Value"));
 }
 
-class FestExploreLegemiddelCoreItem : public FestExploreItem, protected LegemiddelCore, protected Oppf {
+class FestExploreDetailListItem : public FestExploreItem {
 public:
-    FestExploreLegemiddelCoreItem(const class Oppf &oppf, const LegemiddelCore &legemiddelCore) : LegemiddelCore(legemiddelCore), Oppf(oppf) {}
-    virtual std::vector<std::tuple<std::string,std::string>> GetDetails();
+    virtual std::vector<std::tuple<std::string,std::string>> GetDetails() = 0;
     [[nodiscard]] std::string GetName() const override;
     void Show(wxPanel &panel, wxPanel &topRight) override;
     void Hide(wxPanel &panel, wxPanel &topRight) override;
+};
+
+std::string FestExploreDetailListItem::GetName() const {
+    return "";
+}
+
+void FestExploreDetailListItem::Show(wxPanel &panel, wxPanel &topRight) {
+    auto *sizer = new wxBoxSizer(wxHORIZONTAL);
+    auto *details = new wxListView(&panel, wxID_ANY);
+    details->AppendColumn(wxT("Field"));
+    details->SetColumnWidth(0, 133);
+    details->AppendColumn(wxT("Value"));
+    details->SetColumnWidth(1, 267);
+    int rowNum = 0;
+    {
+        auto detailsVec = GetDetails();
+        for (const auto &detail : detailsVec) {
+            auto field = std::get<0>(detail);
+            auto value = std::get<1>(detail);
+            auto row = rowNum++;
+            details->InsertItem(row, wxString::FromUTF8(field));
+            details->SetItem(row, 1, wxString::FromUTF8(value));
+        }
+    }
+    sizer->Add(details, 3, wxALL | wxEXPAND, 5);
+    panel.SetSizerAndFit(sizer);
+}
+
+void FestExploreDetailListItem::Hide(wxPanel &panel, wxPanel &topRight) {
+    panel.SetSizerAndFit(nullptr);
+}
+
+class FestExploreOppfItem : public FestExploreDetailListItem, protected Oppf {
+public:
+    explicit FestExploreOppfItem(const class Oppf &oppf) : Oppf(oppf) {}
+    virtual std::vector<std::tuple<std::string,std::string>> GetDetails();
+    [[nodiscard]] std::string GetName() const override;
+};
+
+std::vector<std::tuple<std::string, std::string>> FestExploreOppfItem::GetDetails() {
+    auto status = Oppf::GetStatus();
+    auto str{status.GetDistinguishedName()};
+    str.append(" (");
+    str.append(status.GetValue());
+    str.append(")");
+    return {
+            {"Oppføring", Oppf::GetId()},
+            {"Tidspunkt", Oppf::GetTidspunkt()},
+            {"Status", str}
+    };
+}
+
+std::string FestExploreOppfItem::GetName() const {
+    return Oppf::GetId();
+}
+
+class FestExploreLegemiddelCoreItem : public FestExploreOppfItem, protected LegemiddelCore {
+public:
+    FestExploreLegemiddelCoreItem(const class Oppf &oppf, const LegemiddelCore &legemiddelCore) : FestExploreOppfItem(oppf), LegemiddelCore(legemiddelCore) {}
+    virtual std::vector<std::tuple<std::string,std::string>> GetDetails();
+    [[nodiscard]] std::string GetName() const override;
 };
 
 std::vector<std::tuple<std::string, std::string>> FestExploreLegemiddelCoreItem::GetDetails() {
@@ -375,12 +438,18 @@ std::vector<std::tuple<std::string, std::string>> FestExploreLegemiddelCoreItem:
         reseptgruppe.append(reseptgruppeCV.GetDistinguishedName());
         reseptgruppe.append(")");
     }
-    std::vector<std::tuple<std::string, std::string>> details = {
-            {"Navn form styrke", LegemiddelCore::GetNavnFormStyrke()},
-            {"ATC", atc},
-            {"Legemiddelform", form},
-            {"Reseptgruppe", reseptgruppe},
-    };
+    auto details = FestExploreOppfItem::GetDetails();
+    {
+        std::vector<std::tuple<std::string, std::string>> initialDetails = {
+                {"Navn form styrke", LegemiddelCore::GetNavnFormStyrke()},
+                {"ATC",              atc},
+                {"Legemiddelform",   form},
+                {"Reseptgruppe",     reseptgruppe},
+        };
+        for (const auto &tupl : initialDetails) {
+            details.emplace_back(tupl);
+        }
+    }
     {
         auto opioidsoknad = LegemiddelCore::GetOpioidsoknad();
         if (opioidsoknad == MaybeBoolean::MTRUE) {
@@ -432,52 +501,6 @@ std::vector<std::tuple<std::string, std::string>> FestExploreLegemiddelCoreItem:
 
 std::string FestExploreLegemiddelCoreItem::GetName() const {
     return LegemiddelCore::GetNavnFormStyrke();
-}
-
-void FestExploreLegemiddelCoreItem::Show(wxPanel &panel, wxPanel &topRight) {
-    auto *sizer = new wxBoxSizer(wxHORIZONTAL);
-    auto *details = new wxListView(&panel, wxID_ANY);
-    details->AppendColumn(wxT("Field"));
-    details->SetColumnWidth(0, 133);
-    details->AppendColumn(wxT("Value"));
-    details->SetColumnWidth(1, 267);
-    int rowNum = 0;
-    {
-        auto row = rowNum++;
-        details->InsertItem(row, wxT("Oppføring"));
-        details->SetItem(row, 1, wxString::FromUTF8(Oppf::GetId()));
-    }
-    {
-        auto row = rowNum++;
-        details->InsertItem(row, wxT("Tidpunkt"));
-        details->SetItem(row, 1, wxString::FromUTF8(Oppf::GetTidspunkt()));
-    }
-    {
-        auto row = rowNum++;
-        details->InsertItem(row, wxT("Status"));
-        auto status = Oppf::GetStatus();
-        auto str{status.GetDistinguishedName()};
-        str.append(" (");
-        str.append(status.GetValue());
-        str.append(")");
-        details->SetItem(row, 1, wxString::FromUTF8(str));
-    }
-    {
-        auto detailsVec = GetDetails();
-        for (const auto &detail : detailsVec) {
-            auto field = std::get<0>(detail);
-            auto value = std::get<1>(detail);
-            auto row = rowNum++;
-            details->InsertItem(row, wxString::FromUTF8(field));
-            details->SetItem(row, 1, wxString::FromUTF8(value));
-        }
-    }
-    sizer->Add(details, 3, wxALL | wxEXPAND, 5);
-    panel.SetSizerAndFit(sizer);
-}
-
-void FestExploreLegemiddelCoreItem::Hide(wxPanel &panel, wxPanel &topRight) {
-    panel.SetSizerAndFit(nullptr);
 }
 
 class FestExploreLegemiddelItem : public FestExploreLegemiddelCoreItem, protected Legemiddel {
@@ -1079,6 +1102,90 @@ public:
     explicit FestExploreOppfLegemiddeldoseItem(const OppfLegemiddeldose &oppfLegemiddeldose) : FestExploreLegemiddeldoseItem(oppfLegemiddeldose, oppfLegemiddeldose.GetLegemiddeldose()) {}
 };
 
+class FestExploreOppfKodeverkItem : public FestExploreOppfItem, protected OppfKodeverk {
+public:
+    FestExploreOppfKodeverkItem(const OppfKodeverk &oppf) : FestExploreOppfItem(oppf), OppfKodeverk(oppf) {}
+    std::string GetName() const override;
+    std::vector<std::tuple<std::string, std::string>> GetDetails() override;
+    void Show(wxPanel &panel, wxPanel &topRight) override;
+    void Hide(wxPanel &panel, wxPanel &topRight) override;
+};
+
+std::string FestExploreOppfKodeverkItem::GetName() const {
+    return OppfKodeverk::GetInfo().GetKortnavn();
+}
+
+std::vector<std::tuple<std::string, std::string>> FestExploreOppfKodeverkItem::GetDetails() {
+    auto details = FestExploreOppfItem::GetDetails();
+    {
+        auto info = OppfKodeverk::GetInfo();
+        std::vector<std::tuple<std::string,std::string>> initialDetails = {
+                {"Kodeverk ID", info.GetId()},
+                {"Kortnavn", info.GetKortnavn()},
+                {"Betegnelse", info.GetBetegnelse()},
+                {"Ansvarlig utgiver", info.GetAnsvarligUtgiver()}
+        };
+        for (const auto &tupl : initialDetails) {
+            details.emplace_back(tupl);
+        }
+    }
+    return details;
+}
+
+void FestExploreOppfKodeverkItem::Show(wxPanel &panel, wxPanel &topRight) {
+    FestExploreOppfItem::Show(panel, topRight);
+    auto *sizer = new wxBoxSizer(wxHORIZONTAL);
+    auto *kodeverkList = new wxListView(&topRight);
+    kodeverkList->AppendColumn(wxT("Kode"));
+    kodeverkList->AppendColumn(wxT("Id"));
+    kodeverkList->AppendColumn(wxT("Term"));
+    kodeverkList->AppendColumn(wxT("Beskrivelse"));
+    kodeverkList->AppendColumn(wxT("Språk"));
+
+    auto elementer = OppfKodeverk::GetElement();
+    int rowNum = 0;
+    for (const auto &element : elementer) {
+        auto row = rowNum++;
+        kodeverkList->InsertItem(row, wxString::FromUTF8(element.GetKode()));
+        kodeverkList->SetItem(row, 1, wxString::FromUTF8(element.GetId()));
+        auto term = element.GetTerm();
+        kodeverkList->SetItem(row, 2, wxString::FromUTF8(term.GetTerm()));
+        kodeverkList->SetItem(row, 3, wxString::FromUTF8(term.GetBeskrivelseTerm()));
+        kodeverkList->SetItem(row, 4, wxString::FromUTF8(term.GetSprak().GetDistinguishedName()));
+    }
+    sizer->Add(kodeverkList, 1, wxALL | wxEXPAND, 5);
+    topRight.SetSizerAndFit(sizer);
+}
+
+void FestExploreOppfKodeverkItem::Hide(wxPanel &panel, wxPanel &topRight) {
+    topRight.SetSizer(nullptr);
+    FestExploreOppfItem::Hide(panel, topRight);
+}
+
+class FestExploreElementItem : public FestExploreDetailListItem, protected Element {
+public:
+    FestExploreElementItem(const Element &element) : Element(element) {}
+    std::string GetName() const override;
+    std::vector<std::tuple<std::string, std::string>> GetDetails() override;
+};
+
+std::string FestExploreElementItem::GetName() const {
+    return Element::GetKode();
+}
+
+std::vector<std::tuple<std::string, std::string>> FestExploreElementItem::GetDetails() {
+    auto term = Element::GetTerm();
+    auto sprak = term.GetSprak();
+    return {
+            {"Id", Element::GetId()},
+            {"Kode", Element::GetKode()},
+            {"Språkkode", sprak.GetValue()},
+            {"Språk", sprak.GetDistinguishedName()},
+            {"Term", term.GetTerm()},
+            {"Beskrivelse term", term.GetBeskrivelseTerm()}
+    };
+}
+
 void FestExploreOppfRefusjonItem::ShowRefusjonskode(const RefusjonskodeItem &item) {
     auto details = item.GetDetails();
     int rowNum = 0;
@@ -1143,6 +1250,16 @@ void FestExploreVersionDialog::ShowItemsWithFilter(const std::string &itemType) 
         auto oppfLegemiddeldoses = legemiddeldose ? *legemiddeldose : db->GetOppfLegemiddeldose(version);
         for (const auto &oppfLegemiddeldose : oppfLegemiddeldoses) {
             items.emplace_back(std::make_shared<FestExploreOppfLegemiddeldoseItem>(oppfLegemiddeldose));
+        }
+    } else if (itemType == "Kodeverk") {
+        auto oppfKodeverks = kodeverk ? *kodeverk : db->GetOppfKodeverk(version);
+        for (const auto &oppfKodeverk : oppfKodeverks) {
+            items.emplace_back(std::make_shared<FestExploreOppfKodeverkItem>(oppfKodeverk));
+        }
+    } else if (itemType == "ATC") {
+        auto atcs = atc ? *atc : db->GetKodeverkElements("2.16.578.1.12.4.1.1.7180", version);
+        for (const auto &atc : atcs) {
+            items.emplace_back(std::make_shared<FestExploreElementItem>(atc));
         }
     }
     auto selection = itemFilterSelector->GetSelection();

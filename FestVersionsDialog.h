@@ -19,7 +19,7 @@ private:
     std::vector<std::string> versions{};
     wxListView *listView;
 public:
-    FestVersionsDialog(wxWindow *parent);
+    explicit FestVersionsDialog(wxWindow *parent);
     void OnVersionContextMenu(wxContextMenuEvent &);
     void OnVersionExplore(wxCommandEvent &);
 };
