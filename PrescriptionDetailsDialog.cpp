@@ -26,10 +26,12 @@ PrescriptionDetailsDialog::PrescriptionDetailsDialog(wxWindow *parent,
     wxString expirationDate{};
     wxString festUpdate{};
     wxString reit{};
+    wxString ceaseTime{};
     std::string amountUnit{};
     FhirCodeableConcept rfstatus{};
     FhirCodeableConcept itemGroup{};
     FhirCodeableConcept typeOfPrescription{};
+    FhirCodeableConcept ceaseReason{};
     double amount;
     double numberOfPackages{0.000};
     bool guardianTransparencyReservation{false};
@@ -133,6 +135,26 @@ PrescriptionDetailsDialog::PrescriptionDetailsDialog(wxWindow *parent,
                 }
             } else if (url == "http://ehelse.no/fhir/StructureDefinition/sfm-regInfo") {
                 regInfos.emplace_back(extension);
+            } else if (url == "http://ehelse.no/fhir/StructureDefinition/sfm-discontinuation") {
+                auto extensions = extension->GetExtensions();
+                for (const auto &extension : extensions) {
+                    auto url = extension->GetUrl();
+                    auto valueExtension = std::dynamic_pointer_cast<FhirValueExtension>(extension);
+                    if (valueExtension) {
+                        auto value = valueExtension->GetValue();
+                        auto dateTimeValue = std::dynamic_pointer_cast<FhirDateTimeValue>(value);
+                        auto codeableConceptValue = !dateTimeValue ? std::dynamic_pointer_cast<FhirCodeableConceptValue>(value) : std::shared_ptr<FhirCodeableConceptValue>();
+                        if (dateTimeValue) {
+                            if (url == "timedate") {
+                                ceaseTime = wxString::FromUTF8(dateTimeValue->GetDateTime());
+                            }
+                        } else if (codeableConceptValue) {
+                            if (url == "reason") {
+                                ceaseReason = *codeableConceptValue;
+                            }
+                        }
+                    }
+                }
             }
         }
     }
@@ -165,6 +187,34 @@ PrescriptionDetailsDialog::PrescriptionDetailsDialog(wxWindow *parent,
         auto row = rowNum++;
         listView->InsertItem(row, wxT("RFStatus:"));
         listView->SetItem(row, 1, status);
+    }
+    if (ceaseReason.IsSet()) {
+        FhirCoding coding{};
+        {
+            auto codings = ceaseReason.GetCoding();
+            if (!codings.empty()) {
+                coding = codings[0];
+            }
+        }
+        auto ceaseCode = coding.GetCode();
+        auto ceaseDisplay = coding.GetDisplay();
+        if (!ceaseCode.empty() || !ceaseDisplay.empty()) {
+            std::string info{ceaseCode};
+            if (!ceaseDisplay.empty()) {
+                if (!info.empty()) {
+                    info.append(" ");
+                }
+                info.append(ceaseDisplay);
+            }
+            auto row = rowNum++;
+            listView->InsertItem(row, wxT("Cessation reason: "));
+            listView->SetItem(row, 1, wxString::FromUTF8(info));
+        }
+        if (!ceaseTime.empty()) {
+            auto row = rowNum++;
+            listView->InsertItem(row, wxT("Cessation reason: "));
+            listView->SetItem(row, 1, ceaseTime);
+        }
     }
     {
         auto dosages = statement->GetDosage();

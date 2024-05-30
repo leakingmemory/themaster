@@ -20,7 +20,8 @@ enum {
     TheMaster_ShowFestDbQuotas_Id = 12,
     TheMaster_PrescriptionDetails_Id = 13,
     TheMaster_PrescriptionRecall_Id = 14,
-    TheMaster_VersionDialog_Explore = 15
+    TheMaster_PrescriptionCease_Id = 15,
+    TheMaster_VersionDialog_Explore = 16
 };
 
 #endif //DRWHATSNOT_THEMASTERIDS_H

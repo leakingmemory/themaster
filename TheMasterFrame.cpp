@@ -35,6 +35,8 @@
 #include "PrescriptionDetailsDialog.h"
 #include "RecallPrescriptionDialog.h"
 #include "FestDbQuotasDialog.h"
+#include "CeasePrescriptionDialog.h"
+#include "DateTime.h"
 
 constexpr int PrescriptionNameColumnWidth = 250;
 constexpr int PrescriptionRemoteColumnWidth = 75;
@@ -117,6 +119,7 @@ TheMasterFrame::TheMasterFrame() : wxFrame(nullptr, wxID_ANY, "The Master"),
 
     Bind(wxEVT_MENU, &TheMasterFrame::OnPrescriptionDetails, this, TheMaster_PrescriptionDetails_Id);
     Bind(wxEVT_MENU, &TheMasterFrame::OnPrescriptionRecall, this, TheMaster_PrescriptionRecall_Id);
+    Bind(wxEVT_MENU, &TheMasterFrame::OnPrescriptionCease, this, TheMaster_PrescriptionCease_Id);
 }
 
 void TheMasterFrame::UpdateHeader() {
@@ -1285,6 +1288,7 @@ void TheMasterFrame::OnPrescriptionContextMenu(wxContextMenuEvent &e) {
     wxMenu menu(wxString::FromUTF8(display));
     menu.Append(TheMaster_PrescriptionDetails_Id, wxT("Details"));
     menu.Append(TheMaster_PrescriptionRecall_Id, wxT("Recall"));
+    menu.Append(TheMaster_PrescriptionCease_Id, wxT("Cease"));
     PopupMenu(&menu);
 }
 
@@ -1347,6 +1351,80 @@ void TheMasterFrame::OnPrescriptionRecall(wxCommandEvent &e) {
         recallInfoExt->AddExtension(std::make_shared<FhirValueExtension>("recallcode", recallCode));
         recallInfoExt->AddExtension(std::make_shared<FhirValueExtension>("notsent", std::make_shared<FhirBooleanValue>(true)));
         reseptAmendment->AddExtension(recallInfoExt);
+    }
+    UpdateMedications();
+}
+
+void TheMasterFrame::OnPrescriptionCease(wxCommandEvent &e) {
+    if (prescriptions->GetSelectedItemCount() != 1) {
+        return;
+    }
+    auto selected = prescriptions->GetFirstSelected();
+    if (selected < 0 || selected >= displayedMedicationStatements.size()) {
+        return;
+    }
+    auto medicationStatement = displayedMedicationStatements[selected];
+    std::shared_ptr<FhirExtension> reseptAmendment{};
+    {
+        auto extensions = medicationStatement->GetExtensions();
+        for (const auto extension : extensions) {
+            auto url = extension->GetUrl();
+            if (url == "http://ehelse.no/fhir/StructureDefinition/sfm-reseptamendment") {
+                reseptAmendment = extension;
+            }
+        }
+    }
+    if (!reseptAmendment) {
+        wxMessageBox(wxT("The prescription is not valid"), wxT("Can not recall prescription"), wxICON_ERROR);
+        return;
+    }
+    {
+        auto extensions = reseptAmendment->GetExtensions();
+        for (const auto &extension : extensions) {
+            auto url = extension->GetUrl();
+            if (url == "recallinfo") {
+                wxMessageBox(wxT("The prescription is already recalled"), wxT("Can not recall prescription"), wxICON_ERROR);
+                return;
+            }
+        }
+    }
+    CeasePrescriptionDialog dialog{this, medicationStatement};
+    {
+        auto res = dialog.ShowModal();
+        if (res != wxID_OK) {
+            return;
+        }
+    }
+    {
+        auto recallCode = std::make_shared<FhirCodeableConceptValue>(FhirCodeableConcept("urn:oid:2.16.578.1.12.4.1.1.7500", "2", "Seponering"));
+        auto recallInfoExt = std::make_shared<FhirExtension>("recallinfo");
+        recallInfoExt->AddExtension(std::make_shared<FhirValueExtension>("recallcode", recallCode));
+        recallInfoExt->AddExtension(std::make_shared<FhirValueExtension>("notsent", std::make_shared<FhirBooleanValue>(true)));
+        reseptAmendment->AddExtension(recallInfoExt);
+    }
+    {
+        auto discontinuation = std::make_shared<FhirExtension>("http://ehelse.no/fhir/StructureDefinition/sfm-discontinuation");
+        {
+            {
+                auto dt = DateTimeOffset::Now();
+                auto timedate = std::make_shared<FhirValueExtension>("timedate", std::make_shared<FhirDateTimeValue>(dt.to_iso8601()));
+                discontinuation->AddExtension(timedate);
+            }
+            {
+                std::vector<FhirCoding> codings{};
+                {
+                    auto reason = dialog.GetReason();
+                    std::string system{reason.GetSystem()};
+                    std::string code{reason.GetCode()};
+                    std::string display{reason.GetDisplay()};
+                    codings.emplace_back(std::move(system), std::move(code), std::move(display));
+                }
+                std::string text{dialog.GetReasonText()};
+                FhirCodeableConcept codeable{std::move(codings), std::move(text)};
+                discontinuation->AddExtension(std::make_shared<FhirValueExtension>("reason", std::make_shared<FhirCodeableConceptValue>(codeable)));
+            }
+        }
+        medicationStatement->AddExtension(discontinuation);
     }
     UpdateMedications();
 }

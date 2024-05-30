@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.27)
-project(drwhatsnot)
+project(themaster)
 
 set(CMAKE_CXX_STANDARD 23)
 
@@ -28,7 +28,8 @@ add_executable(themaster TheMasterApp.cpp TheMasterApp.h TheMasterFrame.cpp TheM
     WxDebouncer.cpp WxDebouncer.h SfmMedicamentMapper.cpp SfmMedicamentMapper.h
     FestVersionsDialog.cpp FestVersionsDialog.h PrescriptionDetailsDialog.cpp PrescriptionDetailsDialog.h
     RecallPrescriptionDialog.cpp RecallPrescriptionDialog.h FestExploreVersionDialog.cpp FestExploreVersionDialog.h
-    FestDiffVersionsDialog.cpp FestDiffVersionsDialog.h FestDbQuotasDialog.cpp FestDbQuotasDialog.h)
+    FestDiffVersionsDialog.cpp FestDiffVersionsDialog.h FestDbQuotasDialog.cpp FestDbQuotasDialog.h
+    CeasePrescriptionDialog.cpp CeasePrescriptionDialog.h DateTime.cpp DateTime.h)
 target_link_libraries(themaster PRIVATE -lsfmbasisapi -ljjwtid -lmedfest)
 target_link_libraries(themaster PRIVATE cpprestsdk::cpprest -lcrypto)
 target_link_libraries(themaster PRIVATE ${wxWidgets_LIBRARIES})

@@ -71,6 +71,7 @@ public:
     void OnPrescriptionContextMenu(wxContextMenuEvent &e);
     void OnPrescriptionDetails(wxCommandEvent &e);
     void OnPrescriptionRecall(wxCommandEvent &e);
+    void OnPrescriptionCease(wxCommandEvent &e);
 };
 
 

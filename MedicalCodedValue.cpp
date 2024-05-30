@@ -43,6 +43,7 @@ public:
 
 constexpr const char medicamentForm[] = "urn:oid:2.16.578.1.12.4.1.1.7448";
 constexpr const char recallCode[] = "urn:oid:2.16.578.1.12.4.1.1.7500";
+constexpr const char cessationCode[] = "urn:oid:2.16.578.1.12.4.1.1.7494";
 
 class VolvenMedicamentForm : public MedicalCodingSystem<medicamentForm> {
 public:
@@ -52,6 +53,11 @@ public:
 class VolvenRecallCode : public MedicalCodingSystem<recallCode> {
 public:
     constexpr VolvenRecallCode();
+};
+
+class VolvenCessationCode : public MedicalCodingSystem<cessationCode> {
+public:
+    constexpr VolvenCessationCode();
 };
 
 constexpr VolvenMedicamentForm::VolvenMedicamentForm() {
@@ -704,10 +710,24 @@ constexpr VolvenRecallCode::VolvenRecallCode() {
     Add("5", "Administrativ sletting");
 }
 
+constexpr VolvenCessationCode::VolvenCessationCode() {
+    Add("A", "Avsluttet behandling");
+    Add("D", "Dobbeltoppføring");
+    Add("I", "Interaksjon med annet legemiddel");
+    Add("L", "Legemiddelreaksjon");
+    Add("M", "Manglende effekt");
+    Add("P", "Pasienten har ikke brukt legemiddelet");
+    Add("S", "Pasienten har selv sluttet med legemiddelet");
+    Add("X", "Annen årsak");
+}
+
 static VolvenMedicamentForm GetVolvenMedicamentFormV() {
     return {};
 }
 static VolvenRecallCode GetVolvenRecallCodeV() {
+    return {};
+}
+static VolvenCessationCode GetVolvenCessationCodeV() {
     return {};
 }
 
@@ -717,4 +737,8 @@ std::vector<MedicalCodedValue> MedicalCodedValue::GetVolvenMedicamentForm() {
 
 std::vector<MedicalCodedValue> MedicalCodedValue::GetVolvenRecallCode() {
     return GetVolvenRecallCodeV().values;
+}
+
+std::vector<MedicalCodedValue> MedicalCodedValue::GetVolvenCessationCode() {
+    return GetVolvenCessationCodeV().values;
 }

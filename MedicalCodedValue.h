@@ -26,6 +26,7 @@ public:
     [[nodiscard]] FhirCodeableConcept ToCodeableConcept() const;
     static std::vector<MedicalCodedValue> GetVolvenMedicamentForm();
     static std::vector<MedicalCodedValue> GetVolvenRecallCode();
+    static std::vector<MedicalCodedValue> GetVolvenCessationCode();
 };
 
 #endif //DRWHATSNOT_MEDICALCODEDVALUE_H
