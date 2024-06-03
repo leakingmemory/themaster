@@ -48,6 +48,9 @@ void FestDbUi::UpdateFromFile(DownloadFestDialog &dialog, const std::string &fil
     if (std::filesystem::exists(dbfile)) {
         FestDeserializer festDeserializer{dbfile};
         festDeserializer.Preload(festSerializer);
+        if (std::filesystem::exists(dbBackupFile)) {
+            std::filesystem::remove(dbBackupFile);
+        }
         std::filesystem::copy(dbfile, dbBackupFile);
     }
     festSerializer.Serialize(*fest);
