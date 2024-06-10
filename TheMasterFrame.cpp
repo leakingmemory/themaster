@@ -19,6 +19,7 @@
 #include <sfmbasisapi/fhir/bundle.h>
 #include <sfmbasisapi/fhir/value.h>
 #include <sfmbasisapi/fhir/medstatement.h>
+#include <sfmbasisapi/fhir/fhirbasic.h>
 #include <jjwtid/Jwt.h>
 #include <jjwtid/OidcTokenRequest.h>
 #include <cpprest/http_client.h>
@@ -66,6 +67,8 @@ TheMasterFrame::TheMasterFrame() : wxFrame(nullptr, wxID_ANY, "The Master"),
     serverMenu->Append(TheMaster_Connect_Id, "Connect");
     serverMenu->Append(TheMaster_GetMedication_Id, "Get medication");
     serverMenu->Append(TheMaster_SendMedication_Id, "Send medication");
+    serverMenu->Append(TheMaster_SendPll_Id, "Send PLL");
+    serverMenu->Append(TheMaster_SaveLastRequest_Id, "Save last request");
     serverMenu->Append(TheMaster_SaveLast_Id, "Save last response");
     serverMenu->Append(TheMaster_SaveBundle_Id, "Save bundle");
     auto *menuBar = new wxMenuBar();
@@ -109,6 +112,8 @@ TheMasterFrame::TheMasterFrame() : wxFrame(nullptr, wxID_ANY, "The Master"),
     Bind(wxEVT_MENU, &TheMasterFrame::OnCreatePatient, this, TheMaster_CreatePatient_Id);
     Bind(wxEVT_MENU, &TheMasterFrame::OnGetMedication, this, TheMaster_GetMedication_Id);
     Bind(wxEVT_MENU, &TheMasterFrame::OnSendMedication, this, TheMaster_SendMedication_Id);
+    Bind(wxEVT_MENU, &TheMasterFrame::OnSendPll, this, TheMaster_SendPll_Id);
+    Bind(wxEVT_MENU, &TheMasterFrame::OnSaveLastRequest, this, TheMaster_SaveLastRequest_Id);
     Bind(wxEVT_MENU, &TheMasterFrame::OnSaveLast, this, TheMaster_SaveLast_Id);
     Bind(wxEVT_MENU, &TheMasterFrame::OnSaveBundle, this, TheMaster_SaveBundle_Id);
     Bind(wxEVT_MENU, &TheMasterFrame::OnPrescribeMagistral, this, TheMaster_PrescribeMagistral_Id);
@@ -379,7 +384,8 @@ void TheMasterFrame::OnGetMedication(wxCommandEvent &e) {
 
     pplx::task<web::http::http_response> responseTask;
     auto accessTokenTask = GetAccessToken();
-    responseTask = accessTokenTask.then([apiUrl, patient] (const std::string &accessToken) {
+    std::shared_ptr<std::string> rawRequest = std::make_shared<std::string>();
+    responseTask = accessTokenTask.then([apiUrl, patient, rawRequest] (const std::string &accessToken) {
         web::http::http_request request{web::http::methods::POST};
         if (!accessToken.empty()) {
             std::cout << "Access token: " << accessToken << "\n";
@@ -398,6 +404,7 @@ void TheMasterFrame::OnGetMedication(wxCommandEvent &e) {
             {
                 auto jsonString = requestBody.serialize();
                 request.set_body(jsonString, "application/fhir+json; charset=utf-8");
+                *rawRequest = jsonString;
             }
         }
         web::http::client::http_client client{apiUrl};
@@ -498,6 +505,7 @@ void TheMasterFrame::OnGetMedication(wxCommandEvent &e) {
     {
         std::lock_guard lock{*getMedResponseMtx};
         getMedResp = std::move(*getMedResponse);
+        lastRequest = *rawRequest;
         lastResponse = *rawResponse;
     }
     if (getMedResp) {
@@ -622,7 +630,7 @@ std::map<std::string,std::shared_ptr<FhirExtension>> TheMasterFrame::GetRecallIn
     return map;
 }
 
-void TheMasterFrame::OnSendMedication(wxCommandEvent &e) {
+void TheMasterFrame::SendMedication(const std::function<void (const std::shared_ptr<FhirBundle> &)> &preprocessing) {
     if (!patientInformation) {
         wxMessageBox("Error: No patient information provided", "Error", wxICON_ERROR);
         return;
@@ -660,7 +668,8 @@ void TheMasterFrame::OnSendMedication(wxCommandEvent &e) {
 
     pplx::task<web::http::http_response> responseTask{};
     auto accessTokenTask = GetAccessToken();
-    responseTask = accessTokenTask.then([apiUrl, bundle, recallInfos] (const std::string &accessToken) {
+    std::shared_ptr<std::string> rawRequest = std::make_shared<std::string>();
+    responseTask = accessTokenTask.then([apiUrl, bundle, recallInfos, preprocessing, rawRequest] (const std::string &accessToken) {
         web::http::http_request request{web::http::methods::POST};
         if (!accessToken.empty()) {
             std::cout << "Access token: " << accessToken << "\n";
@@ -703,12 +712,15 @@ void TheMasterFrame::OnSendMedication(wxCommandEvent &e) {
                     }
                 }
 
+                preprocessing(medBundle);
+
                 sendMedicationParameters.AddParameter("medication", medBundle);
             }
             {
                 auto json = sendMedicationParameters.ToJson();
                 auto jsonString = json.serialize();
                 request.set_body(jsonString, "application/fhir+json; charset=utf-8");
+                *rawRequest = jsonString;
             }
         }
         web::http::client::http_client client{apiUrl};
@@ -804,6 +816,7 @@ void TheMasterFrame::OnSendMedication(wxCommandEvent &e) {
     {
         std::lock_guard lock{*sendMedResponseMtx};
         sendMedResp = std::move(*sendMedResponse);
+        lastRequest = std::move(*rawRequest);
         lastResponse = std::move(*rawResponse);
     }
     if (!sendMedResp) {
@@ -907,6 +920,192 @@ void TheMasterFrame::OnSendMedication(wxCommandEvent &e) {
     str << "Recalled " << recallCount << (recallCount == 1 ? " prescription and prescribed " : " prescriptions and prescribed ")
         << prescriptionCount << (prescriptionCount == 1 ? " prescription." : " prescriptions.");
     wxMessageBox(str.str(), wxT("Successful sending"), wxICON_INFORMATION);
+}
+
+void TheMasterFrame::OnSendMedication(wxCommandEvent &e) {
+    SendMedication([] (const std::shared_ptr<FhirBundle> &) {});
+}
+
+void TheMasterFrame::OnSendPll(wxCommandEvent &e) {
+    {
+        auto bundle = medicationBundle->medBundle;
+        if (!bundle) {
+            return;
+        }
+        std::map<std::string,std::shared_ptr<FhirMedicationStatement>> medicationStatements{};
+        {
+            auto bundleEntries = bundle->GetEntries();
+            for (const auto &bundleEntry : bundleEntries) {
+                auto url = bundleEntry.GetFullUrl();
+                auto resource = bundleEntry.GetResource();
+                std::shared_ptr<FhirMedicationStatement> medStatement = std::dynamic_pointer_cast<FhirMedicationStatement>(resource);
+                if (medStatement) {
+                    medicationStatements.insert_or_assign(url, medStatement);
+                }
+            }
+        }
+        auto lastChanged = DateTimeOffset::Now().to_iso8601();
+        for (const auto &pair : medicationStatements) {
+            auto &medicationStatement = *(pair.second);
+            auto extensions = medicationStatement.GetExtensions();
+            for (auto &extension : extensions) {
+                auto url = extension->GetUrl();
+                if (url == "http://ehelse.no/fhir/StructureDefinition/sfm-reseptamendment") {
+                    auto extensions = extension->GetExtensions();
+                    auto extensionIterator = extensions.begin();
+                    auto replaceIterator = extensions.end();
+                    bool found{false};
+                    while (extensionIterator != extensions.end()) {
+                        auto &extension = *extensionIterator;
+                        auto url = extension->GetUrl();
+                        if (url == "lastchanged") {
+                            replaceIterator = extensionIterator;
+                            auto valueExtension = std::dynamic_pointer_cast<FhirValueExtension>(extension);
+                            if (valueExtension) {
+                                auto value = std::dynamic_pointer_cast<FhirDateTimeValue>(valueExtension->GetValue());
+                                if (value) {
+                                    value->SetDateTime(lastChanged);
+                                    found = true;
+                                }
+                            }
+                        }
+                        ++extensionIterator;
+                    }
+                    if (!found) {
+                        if (replaceIterator != extensions.end()) {
+                            extensions.erase(replaceIterator);
+                        }
+                        extensions.emplace_back(std::make_shared<FhirValueExtension>("lastchanged", std::make_shared<FhirDateTimeValue>(lastChanged)));
+                        extension->SetExtensions(extensions);
+                    }
+                }
+            }
+        }
+    }
+    auto subjectRef = GetSubjectRef();
+    SendMedication([subjectRef] (const std::shared_ptr<FhirBundle> &bundle) {
+        auto entries = bundle->GetEntries();
+        std::vector<FhirBundleEntry> appendEntries{};
+        for (const auto &entry : entries) {
+            auto composition = std::dynamic_pointer_cast<FhirComposition>(entry.GetResource());
+            if (composition) {
+                auto sections = composition->GetSections();
+                for (auto &section : sections) {
+                    auto codings = section.GetCode().GetCoding();
+                    if (codings.empty()) {
+                        continue;
+                    }
+                    if (codings[0].GetCode() == "sectionPLLinfo") {
+                        auto sectionEntries = section.GetEntries();
+                        std::shared_ptr<FhirBasic> m251Message{};
+                        {
+                            std::vector<std::shared_ptr<FhirBasic>> m25Messages{};
+                            for (const auto &entry: sectionEntries) {
+                                auto ref = entry.GetReference();
+                                for (const auto &bundleEntry: entries) {
+                                    if (bundleEntry.GetFullUrl() == ref) {
+                                        auto fhirBasic = std::dynamic_pointer_cast<FhirBasic>(
+                                                bundleEntry.GetResource());
+                                        if (fhirBasic) {
+                                            m25Messages.emplace_back(fhirBasic);
+                                        }
+                                    }
+                                }
+                            }
+                            for (const auto &m25Message : m25Messages) {
+                                std::string code{};
+                                {
+                                    auto codings = m25Message->GetCode().GetCoding();
+                                    if (!codings.empty()) {
+                                        code = codings[0].GetCode();
+                                    }
+                                }
+                                if (code == "M25.1") {
+                                    m251Message = m25Message;
+                                }
+                            }
+                        }
+                        if (!m251Message) {
+                            std::string url{"urn:uuid:"};
+                            m251Message = std::make_shared<FhirBasic>();
+                            {
+                                boost::uuids::random_generator generator;
+                                boost::uuids::uuid randomUUID = generator();
+                                std::string uuidStr = boost::uuids::to_string(randomUUID);
+                                m251Message->SetId(uuidStr);
+                                url.append(uuidStr);
+                            }
+                            m251Message->SetProfile("http://ehelse.no/fhir/StructureDefinition/sfm-PLL-info");
+                            m251Message->SetCode(FhirCodeableConcept("http://ehelse.no/fhir/CodeSystem/sfm-message-type", "M25.1", "PLL"));
+                            if (subjectRef.IsSet()) {
+                                m251Message->SetSubject(subjectRef);
+                            }
+                            appendEntries.emplace_back(url, m251Message);
+                            sectionEntries.emplace_back(url, "http://ehelse.no/fhir/StructureDefinition/sfm-PLL-info", "sfm-PLL-info");
+                            section.SetEntries(sectionEntries);
+                            section.SetEmptyReason({});
+                        }
+                        std::shared_ptr<FhirExtension> metadataPll{};
+                        {
+                            auto extensions = m251Message->GetExtensions();
+                            for (const auto &extension: extensions) {
+                                auto urlLower = extension->GetUrl();
+                                std::transform(urlLower.begin(), urlLower.end(), urlLower.begin(), [] (auto ch) -> char {return std::tolower(ch);});
+                                if (urlLower == "http://ehelse.no/fhir/StructureDefinition/sfm-pllInformation") {
+                                    metadataPll = extension;
+                                }
+                            }
+                        }
+                        if (!metadataPll) {
+                            metadataPll = std::make_shared<FhirExtension>("http://ehelse.no/fhir/StructureDefinition/sfm-pllInformation");
+                            m251Message->AddExtension(metadataPll);
+                        }
+                        std::shared_ptr<FhirBooleanValue> createPll{};
+                        {
+                            auto extensions = metadataPll->GetExtensions();
+                            for (const auto &extension: extensions) {
+                                auto urlLower = extension->GetUrl();
+                                std::transform(urlLower.begin(), urlLower.end(), urlLower.begin(), [] (auto ch) -> char {return std::tolower(ch);});
+                                if (urlLower == "createpll") {
+                                    auto valueExtension = std::dynamic_pointer_cast<FhirValueExtension>(extension);
+                                    if (valueExtension) {
+                                        auto value = std::dynamic_pointer_cast<FhirBooleanValue>(valueExtension->GetValue());
+                                        if (value) {
+                                            createPll = value;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        if (createPll) {
+                            createPll->SetValue(true);
+                        } else {
+                            createPll = std::make_shared<FhirBooleanValue>(true);
+                            metadataPll->AddExtension(std::make_shared<FhirValueExtension>("createPLL", createPll));
+                        }
+                    }
+                }
+                composition->SetSections(sections);
+            }
+        }
+        if (!appendEntries.empty()) {
+            auto iterator = appendEntries.begin();
+            while (iterator != appendEntries.end()) {
+                entries.emplace_back(std::move(*iterator));
+                iterator = appendEntries.erase(iterator);
+            }
+            bundle->SetEntries(entries);
+        }
+    });
+}
+
+void TheMasterFrame::OnSaveLastRequest(wxCommandEvent &e) {
+    wxFileDialog saveFileDialog(this, _("Save last request"), "", "", "Json files (*.json)|*.json", wxFD_SAVE|wxFD_OVERWRITE_PROMPT);
+    if (saveFileDialog.ShowModal() == wxID_CANCEL)
+        return; // the user changed their mind
+    std::ofstream ofs{saveFileDialog.GetPath().ToStdString()};
+    ofs << lastRequest;
+    ofs.close();
 }
 
 void TheMasterFrame::OnSaveLast(wxCommandEvent &e) {
@@ -1086,7 +1285,7 @@ void TheMasterFrame::SetPrescriber(PrescriptionData &prescriptionData) const {
     prescriptionData.prescribedByDisplay = practitioner->GetDisplay();
 }
 
-void TheMasterFrame::SetPatient(PrescriptionData &prescriptionData) const {
+FhirReference TheMasterFrame::GetSubjectRef() const {
     std::string pid{};
     auto patientInformation = this->patientInformation;
     if (patientInformation && patientInformation->GetPatientIdType() == PatientIdType::FODSELSNUMMER) {
@@ -1094,7 +1293,7 @@ void TheMasterFrame::SetPatient(PrescriptionData &prescriptionData) const {
     }
     auto bundle = medicationBundle->medBundle;
     if (!bundle) {
-        return;
+        return {};
     }
     if (!pid.empty()) {
         for (const auto &entry: bundle->GetEntries()) {
@@ -1110,9 +1309,7 @@ void TheMasterFrame::SetPatient(PrescriptionData &prescriptionData) const {
                     }
                 }
                 if (ppid == pid) {
-                    prescriptionData.subjectReference = entry.GetFullUrl();
-                    prescriptionData.subjectDisplay = patient->GetDisplay();
-                    return;
+                    return FhirReference(entry.GetFullUrl(), "http://ehelse.no/fhir/StructureDefinition/sfm-Patient", patient->GetDisplay());
                 }
             }
         }
@@ -1145,8 +1342,16 @@ void TheMasterFrame::SetPatient(PrescriptionData &prescriptionData) const {
     fullUrl.append(patient->GetId());
     FhirBundleEntry bundleEntry{fullUrl, patient};
     bundle->AddEntry(bundleEntry);
-    prescriptionData.subjectReference = fullUrl;
-    prescriptionData.subjectDisplay = patient->GetDisplay();
+    return FhirReference(fullUrl, "http://ehelse.no/fhir/StructureDefinition/sfm-Patient", patient->GetDisplay());
+}
+
+void TheMasterFrame::SetPatient(PrescriptionData &prescriptionData) const {
+    auto ref = GetSubjectRef();
+    if (!ref.IsSet()) {
+        return;
+    }
+    prescriptionData.subjectReference = ref.GetReference();
+    prescriptionData.subjectDisplay = ref.GetDisplay();
 }
 
 void TheMasterFrame::PrescribeMedicament(const PrescriptionDialog &prescriptionDialog) {

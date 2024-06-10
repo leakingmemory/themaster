@@ -18,6 +18,7 @@ class PatientInformation;
 class MedBundleData;
 class FhirBundle;
 class FhirExtension;
+class FhirReference;
 class wxListView;
 namespace pplx {
     template<class ReturnType> class task;
@@ -31,6 +32,7 @@ private:
     std::shared_ptr<PatientInformation> patientInformation;
     std::unique_ptr<MedBundleData> medicationBundle{};
     std::vector<std::shared_ptr<FhirMedicationStatement>> displayedMedicationStatements{};
+    std::string lastRequest{};
     std::string lastResponse{};
     std::string url{};
     std::string helseidUrl{};
@@ -53,10 +55,14 @@ public:
     pplx::task<std::string> GetAccessToken();
     void OnGetMedication(wxCommandEvent &e);
     static std::map<std::string,std::shared_ptr<FhirExtension>> GetRecallInfos(FhirBundle &bundle);
+    void SendMedication(const std::function<void (const std::shared_ptr<FhirBundle> &)> &preprocessing);
     void OnSendMedication(wxCommandEvent &e);
+    void OnSendPll(wxCommandEvent &e);
+    void OnSaveLastRequest(wxCommandEvent &e);
     void OnSaveLast(wxCommandEvent &e);
     void OnSaveBundle(wxCommandEvent &e);
     void SetPrescriber(PrescriptionData &prescriptionData) const ;
+    [[nodiscard]] FhirReference GetSubjectRef() const ;
     void SetPatient(PrescriptionData &prescriptionData) const ;
     //pplx::task<PrescriptionData> SetPrescriber(const PrescriptionData &prescriptionData);
     void PrescribeMedicament(const PrescriptionDialog &prescriptionDialog);
