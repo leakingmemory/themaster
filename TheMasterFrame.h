@@ -19,6 +19,7 @@ class MedBundleData;
 class FhirBundle;
 class FhirExtension;
 class FhirReference;
+class FhirCoding;
 class wxListView;
 namespace pplx {
     template<class ReturnType> class task;
@@ -55,7 +56,7 @@ public:
     pplx::task<std::string> GetAccessToken();
     void OnGetMedication(wxCommandEvent &e);
     static std::map<std::string,std::shared_ptr<FhirExtension>> GetRecallInfos(FhirBundle &bundle);
-    void SendMedication(const std::function<void (const std::shared_ptr<FhirBundle> &)> &preprocessing);
+    void SendMedication(const std::function<void (const std::shared_ptr<FhirBundle> &)> &preprocessing, const std::function<void (const std::map<std::string,FhirCoding> &)> &pllResultsFunc);
     void OnSendMedication(wxCommandEvent &e);
     void OnSendPll(wxCommandEvent &e);
     void OnSaveLastRequest(wxCommandEvent &e);

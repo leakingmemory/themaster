@@ -21,6 +21,7 @@ PrescriptionDetailsDialog::PrescriptionDetailsDialog(wxWindow *parent,
         listView->SetItem(row, 1, display);
     }
     wxString ePrescriptionId{};
+    wxString pllId{};
     wxString dssn{};
     wxString prescriptionDate{};
     wxString expirationDate{};
@@ -165,6 +166,8 @@ PrescriptionDetailsDialog::PrescriptionDetailsDialog(wxWindow *parent,
             std::transform(typeText.begin(), typeText.end(), typeText.begin(), [] (char ch) { return std::tolower(ch); });
             if (typeText == "reseptid") {
                 ePrescriptionId = wxString::FromUTF8(identifier.GetValue());
+            } else if (typeText == "pll") {
+                pllId = wxString::FromUTF8(identifier.GetValue());
             }
         }
     }
@@ -172,6 +175,11 @@ PrescriptionDetailsDialog::PrescriptionDetailsDialog(wxWindow *parent,
         auto row = rowNum++;
         listView->InsertItem(row, wxT("EPrescriptionId:"));
         listView->SetItem(row, 1, ePrescriptionId);
+    }
+    if (!pllId.empty()) {
+        auto row = rowNum++;
+        listView->InsertItem(row, wxT("PLL:"));
+        listView->SetItem(row, 1, pllId);
     }
     {
         auto row = rowNum++;

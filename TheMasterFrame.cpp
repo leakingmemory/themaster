@@ -38,6 +38,7 @@
 #include "FestDbQuotasDialog.h"
 #include "CeasePrescriptionDialog.h"
 #include "DateTime.h"
+#include "SignPllDialog.h"
 
 constexpr int PrescriptionNameColumnWidth = 250;
 constexpr int PrescriptionRemoteColumnWidth = 75;
@@ -630,7 +631,7 @@ std::map<std::string,std::shared_ptr<FhirExtension>> TheMasterFrame::GetRecallIn
     return map;
 }
 
-void TheMasterFrame::SendMedication(const std::function<void (const std::shared_ptr<FhirBundle> &)> &preprocessing) {
+void TheMasterFrame::SendMedication(const std::function<void (const std::shared_ptr<FhirBundle> &)> &preprocessing, const std::function<void (const std::map<std::string,FhirCoding> &)> &pllResultsFunc) {
     if (!patientInformation) {
         wxMessageBox("Error: No patient information provided", "Error", wxICON_ERROR);
         return;
@@ -825,6 +826,7 @@ void TheMasterFrame::SendMedication(const std::function<void (const std::shared_
     }
     int recallCount{0};
     int prescriptionCount{0};
+    std::map<std::string,FhirCoding> pllResults{};
     for (const auto &param : sendMedResp->GetParameters()) {
         auto name = param.GetName();
         if (name == "recallCount") {
@@ -833,6 +835,29 @@ void TheMasterFrame::SendMedication(const std::function<void (const std::shared_
         } else if (name == "prescriptionCount") {
             auto value = std::dynamic_pointer_cast<FhirIntegerValue>(param.GetFhirValue());
             prescriptionCount = (int) value->GetValue();
+        } else if (name == "PllResult") {
+            std::string pllId{};
+            FhirCoding resultCode{};
+            {
+                auto subparams = param.GetPart();
+                for (const auto &subparam : subparams) {
+                    auto name = subparam->GetName();
+                    if (name == "PllmessageID") {
+                        auto value = std::dynamic_pointer_cast<FhirString>(subparam->GetFhirValue());
+                        if (value) {
+                            pllId = value->GetValue();
+                        }
+                    } else if (name == "resultCode") {
+                        auto value = std::dynamic_pointer_cast<FhirCodingValue>(subparam->GetFhirValue());
+                        if (value) {
+                            resultCode = *value;
+                        }
+                    }
+                }
+            }
+            if (!pllId.empty()) {
+                pllResults.insert_or_assign(pllId, resultCode);
+            }
         } else if (name == "prescriptionOperationResult") {
             std::string reseptId{};
             FhirCoding resultCode{};
@@ -915,6 +940,7 @@ void TheMasterFrame::SendMedication(const std::function<void (const std::shared_
             }
         }
     }
+    pllResultsFunc(pllResults);
     UpdateMedications();
     std::stringstream str{};
     str << "Recalled " << recallCount << (recallCount == 1 ? " prescription and prescribed " : " prescriptions and prescribed ")
@@ -923,16 +949,22 @@ void TheMasterFrame::SendMedication(const std::function<void (const std::shared_
 }
 
 void TheMasterFrame::OnSendMedication(wxCommandEvent &e) {
-    SendMedication([] (const std::shared_ptr<FhirBundle> &) {});
+    SendMedication(
+            [] (const std::shared_ptr<FhirBundle> &) {},
+            [] (const std::map<std::string,FhirCoding> &) {}
+    );
 }
 
 void TheMasterFrame::OnSendPll(wxCommandEvent &e) {
+    std::vector<std::string> selected{};
+    std::map<std::string,std::shared_ptr<FhirMedicationStatement>> medicationStatements{};
+    std::map<std::string,std::shared_ptr<FhirMedicationStatement>> pllMedicationStatements{};
+    std::vector<std::string> newPllIds{};
     {
         auto bundle = medicationBundle->medBundle;
         if (!bundle) {
             return;
         }
-        std::map<std::string,std::shared_ptr<FhirMedicationStatement>> medicationStatements{};
         {
             auto bundleEntries = bundle->GetEntries();
             for (const auto &bundleEntry : bundleEntries) {
@@ -944,10 +976,82 @@ void TheMasterFrame::OnSendPll(wxCommandEvent &e) {
                 }
             }
         }
+        {
+            std::map<std::string, std::string> idToDisplay{};
+            for (const auto &statement : medicationStatements) {
+                idToDisplay.insert_or_assign(statement.first, statement.second->GetDisplay());
+            }
+            SignPllDialog signPllDialog{this, idToDisplay};
+            if (signPllDialog.ShowModal() != wxID_OK) {
+                return;
+            }
+            selected = signPllDialog.GetSelected();
+            for (const auto &id : selected) {
+                auto iterator = medicationStatements.find(id);
+                if (iterator != medicationStatements.end()) {
+                    auto medicationStatement = iterator->second;
+                    std::string pllId{};
+                    {
+                        auto identifiers = medicationStatement->GetIdentifiers();
+                        for (const auto &identifier: identifiers) {
+                            auto key = identifier.GetType().GetText();
+                            std::transform(key.begin(), key.end(), key.begin(),
+                                           [](auto ch) -> char { return std::tolower(ch); });
+                            if (key == "pll") {
+                                pllId = identifier.GetValue();
+                            }
+                        }
+                        if (pllId.empty()) {
+                            boost::uuids::uuid uuid = boost::uuids::random_generator()();
+                            pllId = to_string(uuid);
+                            std::vector<FhirIdentifier> newIdentifiers{};
+                            {
+                                FhirIdentifier pllIdentifier{FhirCodeableConcept("PLL"), "usual", pllId};
+                                newIdentifiers.emplace_back(std::move(pllIdentifier));
+                            }
+                            for (auto &identifier : identifiers) {
+                                newIdentifiers.emplace_back(std::move(identifier));
+                            }
+                            identifiers = std::move(newIdentifiers);
+                            newPllIds.emplace_back(pllId);
+                        }
+                        medicationStatement->SetIdentifiers(identifiers);
+                        pllMedicationStatements.insert_or_assign(pllId, medicationStatement);
+                    }
+                }
+            }
+        }
         auto lastChanged = DateTimeOffset::Now().to_iso8601();
         for (const auto &pair : medicationStatements) {
             auto &medicationStatement = *(pair.second);
             auto extensions = medicationStatement.GetExtensions();
+            {
+                std::string pllId{};
+                {
+                    auto identifiers = medicationStatement.GetIdentifiers();
+                    for (const auto &identifier : identifiers) {
+                        std::string key = identifier.GetType().GetText();
+                        std::transform(key.cbegin(), key.cend(), key.begin(), [] (char ch) { return std::tolower(ch); });
+                        if (key == "pll") {
+                            pllId = identifier.GetValue();
+                            break;
+                        }
+                    }
+                }
+                bool found{false};
+                if (!pllId.empty()) {
+                    for (const auto &newId : newPllIds) {
+                        if (pllId == newId) {
+                            found = true;
+                            break;
+                        }
+                    }
+                }
+                if (!found) {
+                    // We should not set lastchanged for an unchanged medication statement with pll id
+                    continue;
+                }
+            }
             for (auto &extension : extensions) {
                 auto url = extension->GetUrl();
                 if (url == "http://ehelse.no/fhir/StructureDefinition/sfm-reseptamendment") {
@@ -983,7 +1087,7 @@ void TheMasterFrame::OnSendPll(wxCommandEvent &e) {
         }
     }
     auto subjectRef = GetSubjectRef();
-    SendMedication([subjectRef] (const std::shared_ptr<FhirBundle> &bundle) {
+    SendMedication([subjectRef, selected, pllMedicationStatements] (const std::shared_ptr<FhirBundle> &bundle) {
         auto entries = bundle->GetEntries();
         std::vector<FhirBundleEntry> appendEntries{};
         for (const auto &entry : entries) {
@@ -1083,18 +1187,126 @@ void TheMasterFrame::OnSendPll(wxCommandEvent &e) {
                             createPll = std::make_shared<FhirBooleanValue>(true);
                             metadataPll->AddExtension(std::make_shared<FhirValueExtension>("createPLL", createPll));
                         }
+                    } else if (codings[0].GetCode() == "sectionMedication") {
+                        auto entries = section.GetEntries();
+                        auto iterator = entries.begin();
+                        while (iterator != entries.end()) {
+                            auto reference = iterator->GetReference();
+                            bool found{false};
+                            for (const auto &id : selected) {
+                                if (reference == id) {
+                                    found = true;
+                                    break;
+                                }
+                            }
+                            if (found) {
+                                ++iterator;
+                            } else {
+                                iterator = entries.erase(iterator);
+                            }
+                        }
+                        section.SetEntries(entries);
                     }
                 }
                 composition->SetSections(sections);
+                continue;
             }
         }
-        if (!appendEntries.empty()) {
-            auto iterator = appendEntries.begin();
-            while (iterator != appendEntries.end()) {
-                entries.emplace_back(std::move(*iterator));
-                iterator = appendEntries.erase(iterator);
+        {
+            auto iterator = entries.begin();
+            while (iterator != entries.end()) {
+                auto medicationStatement = std::dynamic_pointer_cast<FhirMedicationStatement>(iterator->GetResource());
+                if (medicationStatement) {
+                    std::string pllId{};
+                    {
+                        auto identifiers = medicationStatement->GetIdentifiers();
+                        for (const auto &identifier : identifiers) {
+                            auto key = identifier.GetType().GetText();
+                            std::transform(key.cbegin(), key.cend(), key.begin(), [] (char ch) {return std::tolower(ch);});
+                            if (key == "pll") {
+                                pllId = identifier.GetValue();
+                            }
+                        }
+                    }
+                    bool found{false};
+                    if (!pllId.empty()) {
+                        found = pllMedicationStatements.find(pllId) != pllMedicationStatements.end();
+                    }
+                    if (found) {
+                        ++iterator;
+                    } else {
+                        iterator = entries.erase(iterator);
+                    }
+                } else {
+                    ++iterator;
+                }
             }
-            bundle->SetEntries(entries);
+        }
+        auto iterator = appendEntries.begin();
+        while (iterator != appendEntries.end()) {
+            entries.emplace_back(std::move(*iterator));
+            iterator = appendEntries.erase(iterator);
+        }
+        bundle->SetEntries(entries);
+    }, [medicationStatements, newPllIds, pllMedicationStatements] (const std::map<std::string,FhirCoding> &pllResults) {
+        std::vector<std::string> removePllIds = newPllIds;
+        int pllsSent{0};
+        for (const auto &resultPair : pllResults) {
+            const auto &pllId = resultPair.first;
+            const auto &resultCode = resultPair.second;
+            if (resultCode.GetCode() == "0") {
+                ++pllsSent;
+                auto iterator = removePllIds.begin();
+                while (iterator != removePllIds.end()) {
+                    if (*iterator == pllId) {
+                        iterator = removePllIds.erase(iterator);
+                    } else {
+                        ++iterator;
+                    }
+                }
+            } else {
+                std::stringstream sstr{};
+                sstr << "Failed to send PLL with id " << pllId << " with code " << resultCode.GetCode()
+                << " " << resultCode.GetDisplay();
+                wxMessageBox(wxString::FromUTF8(sstr.str()), wxT("PLL result error code"), wxICON_ERROR);
+            }
+        }
+        if (pllsSent > 0) {
+            {
+                std::stringstream sstr{};
+                sstr << "Successfully sent PLL with " << pllsSent << " messages.";
+                wxMessageBox(wxString::FromUTF8(sstr.str()), wxT("PLL updated"), wxICON_INFORMATION);
+            }
+#if (false)
+            for (const auto &medStatementPair : medicationStatements) {
+                auto identifiers = medStatementPair.second->GetIdentifiers();
+                auto pllIdIterator = identifiers.begin();
+                std::string pllId{};
+                while (pllIdIterator != identifiers.end()) {
+                    std::string key = pllIdIterator->GetType().GetText();
+                    std::transform(key.cbegin(), key.cend(), key.begin(), [] (char ch) {return std::tolower(ch); });
+                    if (key == "pll") {
+                        pllId = pllIdIterator->GetValue();
+                        break;
+                    }
+                    ++pllIdIterator;
+                }
+                if (pllIdIterator != identifiers.end()) {
+                    if (pllMedicationStatements.find(pllId) == pllMedicationStatements.end()) {
+                        for (const auto &removeId : removePllIds) {
+                            if (pllId == removeId) {
+                                identifiers.erase(pllIdIterator);
+                                medStatementPair.second->SetIdentifiers(identifiers);
+                                break;
+                            }
+                        }
+                    } else {
+                        identifiers.erase(pllIdIterator);
+                        medStatementPair.second->SetIdentifiers(identifiers);
+                    }
+                }
+            }
+#endif
         }
     });
 }
