@@ -20,6 +20,8 @@
 #include <sfmbasisapi/fhir/value.h>
 #include <sfmbasisapi/fhir/medstatement.h>
 #include <sfmbasisapi/fhir/fhirbasic.h>
+#include <sfmbasisapi/fhir/operationoutcome.h>
+#include <sfmbasisapi/fhir/fhir.h>
 #include <jjwtid/Jwt.h>
 #include <jjwtid/OidcTokenRequest.h>
 #include <cpprest/http_client.h>
@@ -221,7 +223,28 @@ void TheMasterFrame::UpdateMedications() {
                     prescriptions->SetItem(row, 1, wxT("Recalled"));
                 }
             } else {
-                prescriptions->SetItem(row, 1, wxT("Published"));
+                bool ep{false}, pll{false};
+                auto identifiers = medicationStatement->GetIdentifiers();
+                for (const auto &identifier : identifiers) {
+                    auto tp = identifier.GetType().GetText();
+                    std::transform(tp.cbegin(), tp.cend(), tp.begin(), [] (char ch) -> char {return std::tolower(ch);});
+                    if (tp == "reseptid") {
+                        ep = true;
+                    } else if (tp == "pll") {
+                        pll = true;
+                    }
+                }
+                if (ep) {
+                    if (pll) {
+                        prescriptions->SetItem(row, 1, wxT("PLL+Prescription"));
+                    } else {
+                        prescriptions->SetItem(row, 1, wxT("Prescription"));
+                    }
+                } else if (pll) {
+                    prescriptions->SetItem(row, 1, wxT("PLL (without prescription)"));
+                } else {
+                    prescriptions->SetItem(row, 1, wxT("Published"));
+                }
             }
         }
     }
@@ -728,7 +751,7 @@ void TheMasterFrame::SendMedication(const std::function<void (const std::shared_
         return client.request(request);
     });
     std::shared_ptr<std::mutex> sendMedResponseMtx = std::make_shared<std::mutex>();
-    std::shared_ptr<std::unique_ptr<FhirParameters>> sendMedResponse = std::make_shared<std::unique_ptr<FhirParameters>>();
+    std::shared_ptr<std::shared_ptr<Fhir>> sendMedResponse = std::make_shared<std::shared_ptr<Fhir>>();
     std::shared_ptr<std::string> rawResponse = std::make_shared<std::string>();
     std::shared_ptr<WaitingForApiDialog> waitingDialog = std::make_shared<WaitingForApiDialog>(this, "Sending medication records", "Sent medication bundle...");
     responseTask.then([waitingDialog, sendMedResponse, rawResponse, sendMedResponseMtx] (const pplx::task<web::http::http_response> &responseTask) {
@@ -759,11 +782,10 @@ void TheMasterFrame::SendMedication(const std::function<void (const std::shared_
                                     std::lock_guard lock{*sendMedResponseMtx};
                                     *rawResponse = responseBody.serialize();
                                 }
-                                FhirParameters responseParameterBundle = FhirParameters::Parse(responseBody);
+                                std::shared_ptr<Fhir> responseParameterBundle = Fhir::Parse(responseBody);
                                 {
                                     std::lock_guard lock{*sendMedResponseMtx};
-                                    *sendMedResponse = std::make_unique<FhirParameters>(
-                                            std::move(responseParameterBundle));
+                                    *sendMedResponse = responseParameterBundle;
                                 }
                                 wxTheApp->GetTopWindow()->GetEventHandler()->CallAfter(
                                         [waitingDialog, sendMedResponse]() {
@@ -813,15 +835,32 @@ void TheMasterFrame::SendMedication(const std::function<void (const std::shared_
         }
     });
     waitingDialog->ShowModal();
-    std::unique_ptr<FhirParameters> sendMedResp{};
+    std::shared_ptr<FhirOperationOutcome> opOutcome{};
+    std::shared_ptr<FhirParameters> sendMedResp{};
     {
         std::lock_guard lock{*sendMedResponseMtx};
-        sendMedResp = std::move(*sendMedResponse);
+        opOutcome = std::dynamic_pointer_cast<FhirOperationOutcome>(*sendMedResponse);
+        sendMedResp = std::dynamic_pointer_cast<FhirParameters>(*sendMedResponse);
         lastRequest = std::move(*rawRequest);
         lastResponse = std::move(*rawResponse);
     }
     if (!sendMedResp) {
-        wxMessageBox("Error: Server did not respond properly to sending medications.", "Error", wxICON_ERROR);
+        if (opOutcome) {
+            std::stringstream str{};
+            auto issues = opOutcome->GetIssue();
+            auto iterator = issues.begin();
+            while (iterator != issues.end()) {
+                const auto &issue = *iterator;
+                str << issue.GetSeverity() << ": " << issue.GetDiagnostics() << " (" << issue.GetCode() << ")";
+                ++iterator;
+                if (iterator != issues.end()) {
+                    str << "\n";
+                }
+            }
+            wxMessageBox(wxString::FromUTF8(str.str()), wxT("Error"), wxICON_ERROR);
+        } else {
+            wxMessageBox(wxT("Error: Server did not respond properly to sending medications."), wxT("Error"), wxICON_ERROR);
+        }
         return;
     }
     int recallCount{0};
@@ -1087,7 +1126,7 @@ void TheMasterFrame::OnSendPll(wxCommandEvent &e) {
         }
     }
     auto subjectRef = GetSubjectRef();
-    SendMedication([subjectRef, selected, pllMedicationStatements] (const std::shared_ptr<FhirBundle> &bundle) {
+    SendMedication([subjectRef, selected, pllMedicationStatements, newPllIds] (const std::shared_ptr<FhirBundle> &bundle) {
         auto entries = bundle->GetEntries();
         std::vector<FhirBundleEntry> appendEntries{};
         for (const auto &entry : entries) {
@@ -1220,13 +1259,30 @@ void TheMasterFrame::OnSendPll(wxCommandEvent &e) {
                     std::string pllId{};
                     {
                         auto identifiers = medicationStatement->GetIdentifiers();
-                        for (const auto &identifier : identifiers) {
+                        auto iterator = identifiers.begin();
+                        while (iterator != identifiers.end()) {
+                            const auto &identifier = *iterator;
                             auto key = identifier.GetType().GetText();
                             std::transform(key.cbegin(), key.cend(), key.begin(), [] (char ch) {return std::tolower(ch);});
                             if (key == "pll") {
                                 pllId = identifier.GetValue();
+                                bool found{false};
+                                for (const auto &newId : newPllIds) {
+                                    if (newId == pllId) {
+                                        found = true;
+                                        break;
+                                    }
+                                }
+                                if (found) {
+                                    iterator = identifiers.erase(iterator);
+                                } else {
+                                    ++iterator;
+                                }
+                            } else {
+                                ++iterator;
                             }
                         }
+                        medicationStatement->SetIdentifiers(identifiers);
                     }
                     bool found{false};
                     if (!pllId.empty()) {
