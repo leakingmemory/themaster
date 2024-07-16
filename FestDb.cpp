@@ -53,7 +53,8 @@ std::map<std::string, std::unique_ptr<FestVectors>> FestDb::GetFestVersionMap() 
     std::map<std::string, std::unique_ptr<FestVectors>> festVersions{};
     festDeserializer->ForEachFests([this, &festVersions](const PFest &pfest) {
         auto fest = std::make_unique<FestVectors>(std::move(festDeserializer->Unpack(pfest)));
-        festVersions.insert_or_assign(fest->GetDato(), std::move(fest));
+        std::string dato = fest->GetDato();
+        festVersions.insert_or_assign(dato, std::move(fest));
     });
     return festVersions;
 }
@@ -196,7 +197,7 @@ LegemiddelVirkestoff FestDb::GetLegemiddelVirkestoffForMerkevare(FestUuid uuid) 
     }
     auto oppfs = festDbContainer.festVectors->GetLegemiddelVirkestoff(*festDeserializer);
     for (const auto &poppf : oppfs) {
-        GenericListItems refList = poppf.GetRefLegemiddelMerkevare();
+        auto refList = poppf.GetRefLegemiddelMerkevare();
         auto ids = festDeserializer->GetFestUuids(refList);
         for (auto id : ids) {
             if (uuid == id) {
