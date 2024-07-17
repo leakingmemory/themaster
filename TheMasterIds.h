@@ -23,7 +23,8 @@ enum {
     TheMaster_PrescriptionDetails_Id = 15,
     TheMaster_PrescriptionRecall_Id = 16,
     TheMaster_PrescriptionCease_Id = 17,
-    TheMaster_VersionDialog_Explore = 18
+    TheMaster_VersionDialog_Explore = 18,
+    TheMaster_PrescriptionRenew_Id = 19
 };
 
 #endif //DRWHATSNOT_THEMASTERIDS_H

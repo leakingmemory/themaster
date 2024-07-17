@@ -13,6 +13,8 @@
 #include <boost/uuid/uuid.hpp>
 #include <boost/uuid/uuid_generators.hpp>
 #include <boost/uuid/uuid_io.hpp>
+#include <cstdio>
+#include <ctime>
 #include <sfmbasisapi/fhir/bundleentry.h>
 #include <sfmbasisapi/fhir/person.h>
 #include <sfmbasisapi/fhir/parameters.h>
@@ -128,6 +130,7 @@ TheMasterFrame::TheMasterFrame() : wxFrame(nullptr, wxID_ANY, "The Master"),
     Bind(wxEVT_MENU, &TheMasterFrame::OnPrescriptionDetails, this, TheMaster_PrescriptionDetails_Id);
     Bind(wxEVT_MENU, &TheMasterFrame::OnPrescriptionRecall, this, TheMaster_PrescriptionRecall_Id);
     Bind(wxEVT_MENU, &TheMasterFrame::OnPrescriptionCease, this, TheMaster_PrescriptionCease_Id);
+    Bind(wxEVT_MENU, &TheMasterFrame::OnPrescriptionRenew, this, TheMaster_PrescriptionRenew_Id);
 }
 
 void TheMasterFrame::UpdateHeader() {
@@ -171,6 +174,7 @@ void TheMasterFrame::UpdateMedications() {
             bool createeresept{false};
             bool recalled{false};
             bool recallNotSent{false};
+            std::string recallCode{};
             auto statementExtensions = medicationStatement->GetExtensions();
             for (const auto &statementExtension : statementExtensions) {
                 auto url = statementExtension->GetUrl();
@@ -196,6 +200,10 @@ void TheMasterFrame::UpdateMedications() {
                                     if (valueExtension) {
                                         auto codeableConceptValue = std::dynamic_pointer_cast<FhirCodeableConceptValue>(valueExtension->GetValue());
                                         if (codeableConceptValue && codeableConceptValue->IsSet()) {
+                                            auto coding = codeableConceptValue->GetCoding();
+                                            if (!coding.empty()) {
+                                                recallCode = coding[0].GetCode();
+                                            }
                                             recalled = true;
                                         }
                                     }
@@ -215,7 +223,15 @@ void TheMasterFrame::UpdateMedications() {
                 }
             }
             if (createeresept) {
-                prescriptions->SetItem(row, 1, wxT("Draft"));
+                if (!recalled) {
+                    prescriptions->SetItem(row, 1, wxT("Draft"));
+                } else {
+                    if (recallCode == "1") {
+                        prescriptions->SetItem(row, 1, wxT("To be renewed"));
+                    } else {
+                        prescriptions->SetItem(row, 1, wxT("Ambiguous"));
+                    }
+                }
             } else if (recalled) {
                 if (recallNotSent) {
                     prescriptions->SetItem(row, 1, wxT("To be recalled"));
@@ -616,6 +632,52 @@ void TheMasterFrame::OnGetMedication(wxCommandEvent &e) {
     }
 }
 
+void TheMasterFrame::FilterRecallInfos(FhirBundle &bundle, const std::function<bool(const std::string &,
+                                                                                    const std::shared_ptr<FhirExtension> &)> &predicate) {
+    for (const auto &entry : bundle.GetEntries()) {
+        auto medStatement = std::dynamic_pointer_cast<FhirMedicationStatement>(entry.GetResource());
+        if (medStatement) {
+            std::string reseptId{};
+            {
+                auto identifiers = medStatement->GetIdentifiers();
+                for (const auto &identifier : identifiers) {
+                    if (identifier.GetType().GetText() == "ReseptId") {
+                        reseptId = identifier.GetValue();
+                    }
+                }
+            }
+            std::shared_ptr<FhirExtension> reseptAmendment{};
+            {
+                auto extensions = medStatement->GetExtensions();
+                for (const auto &extension: extensions) {
+                    auto url = extension->GetUrl();
+                    if (url == "http://ehelse.no/fhir/StructureDefinition/sfm-reseptamendment") {
+                        reseptAmendment = extension;
+                    }
+                }
+            }
+            if (reseptAmendment) {
+                auto extensions = reseptAmendment->GetExtensions();
+                auto iterator = extensions.begin();
+                while (iterator != extensions.end()) {
+                    const auto &extension = *iterator;
+                    auto url = extension->GetUrl();
+                    bool keep{true};
+                    if (url == "recallinfo") {
+                        keep = predicate(reseptId, extension);
+                    }
+                    if (keep) {
+                        ++iterator;
+                    } else {
+                        iterator = extensions.erase(iterator);
+                    }
+                }
+                reseptAmendment->SetExtensions(extensions);
+            }
+        }
+    }
+}
+
 std::map<std::string,std::shared_ptr<FhirExtension>> TheMasterFrame::GetRecallInfos(FhirBundle &bundle) {
     std::map<std::string,std::shared_ptr<FhirExtension>> map{};
     for (const auto &entry : bundle.GetEntries()) {
@@ -672,28 +734,11 @@ void TheMasterFrame::SendMedication(const std::function<void (const std::shared_
         wxMessageBox("Error: Get medications first please", "Error", wxICON_ERROR);
         return;
     }
-    std::shared_ptr<std::map<std::string,std::shared_ptr<FhirExtension>>> recallInfos = std::make_shared<std::map<std::string,std::shared_ptr<FhirExtension>>>();
-    for (const auto &riPair : GetRecallInfos(*bundle)) {
-        auto recallInfo = riPair.second;
-        auto extensions = recallInfo->GetExtensions();
-        for (const auto &extension : extensions) {
-            auto url = extension->GetUrl();
-            if (url == "notsent") {
-                auto valueExtension = std::dynamic_pointer_cast<FhirValueExtension>(extension);
-                if (valueExtension) {
-                    auto value = std::dynamic_pointer_cast<FhirBooleanValue>(valueExtension->GetValue());
-                    if (value && value->IsTrue()) {
-                        recallInfos->insert_or_assign(riPair.first, recallInfo);
-                    }
-                }
-            }
-        }
-    }
 
     pplx::task<web::http::http_response> responseTask{};
     auto accessTokenTask = GetAccessToken();
     std::shared_ptr<std::string> rawRequest = std::make_shared<std::string>();
-    responseTask = accessTokenTask.then([apiUrl, bundle, recallInfos, preprocessing, rawRequest] (const std::string &accessToken) {
+    responseTask = accessTokenTask.then([apiUrl, bundle, preprocessing, rawRequest] (const std::string &accessToken) {
         web::http::http_request request{web::http::methods::POST};
         if (!accessToken.empty()) {
             std::cout << "Access token: " << accessToken << "\n";
@@ -706,9 +751,24 @@ void TheMasterFrame::SendMedication(const std::function<void (const std::shared_
             FhirParameters sendMedicationParameters{};
             {
                 std::shared_ptr<FhirBundle> medBundle = std::make_shared<FhirBundle>();
-                {
-                    *medBundle = FhirBundle::Parse(bundle->ToJson());
-                }
+                *medBundle = FhirBundle::Parse(bundle->ToJson());
+                FilterRecallInfos(*medBundle, [] (const auto &prescriptionId, const auto &recallInfo) -> bool {
+                    bool keep{false};
+                    auto extensions = recallInfo->GetExtensions();
+                    for (const auto &extension : extensions) {
+                        auto url = extension->GetUrl();
+                        if (url == "notsent") {
+                            auto valueExtension = std::dynamic_pointer_cast<FhirValueExtension>(extension);
+                            if (valueExtension) {
+                                auto value = std::dynamic_pointer_cast<FhirBooleanValue>(valueExtension->GetValue());
+                                if (value && value->IsTrue()) {
+                                    keep = true;
+                                }
+                            }
+                        }
+                    }
+                    return keep;
+                });
 
                 for (const auto &riPair : GetRecallInfos(*medBundle)) {
                     auto extensions = riPair.second->GetExtensions();
@@ -960,21 +1020,50 @@ void TheMasterFrame::SendMedication(const std::function<void (const std::shared_
                     }
                     bundle->SetEntries(bundleEntries);
                 } else if (resultCode.GetCode() == "1") {
-                    auto iterator = recallInfos->find(reseptId);
-                    if (iterator != recallInfos->end()) {
-                        auto recallInfo = iterator->second;
-                        auto extensions = recallInfo->GetExtensions();
-                        auto iterator = extensions.begin();
-                        while (iterator != extensions.end()) {
-                            auto url = (*iterator)->GetUrl();
-                            if (url != "notsent") {
-                                ++iterator;
-                            } else {
-                                iterator = extensions.erase(iterator);
-                            };
+                    FilterRecallInfos(*bundle, [&reseptId] (const auto &recallPrescriptionId, const auto &recallInfo) -> bool {
+                        if (reseptId == recallPrescriptionId) {
+                            auto extensions = recallInfo->GetExtensions();
+                            auto iterator = extensions.begin();
+                            while (iterator != extensions.end()) {
+                                auto url = (*iterator)->GetUrl();
+                                if (url != "notsent") {
+                                    ++iterator;
+                                } else {
+                                    iterator = extensions.erase(iterator);
+                                };
+                            }
+                            recallInfo->SetExtensions(extensions);
+                        } else {
+                            auto extensions = recallInfo->GetExtensions();
+                            bool idMatch{false};
+                            bool notSent{false};
+                            for (const auto &extension : extensions) {
+                                auto url = extension->GetUrl();
+                                std::transform(url.cbegin(), url.cend(), url.begin(), [] (char ch) { return std::tolower(ch); });
+                                if (url == "recallid") {
+                                    auto valueExt = std::dynamic_pointer_cast<FhirValueExtension>(extension);
+                                    if (valueExt) {
+                                        auto value = std::dynamic_pointer_cast<FhirString>(valueExt->GetValue());
+                                        if (value) {
+                                            if (value->GetValue() == reseptId) {
+                                                idMatch = true;
+                                            }
+                                        }
+                                    }
+                                }
+                                if (url == "notsent") {
+                                    notSent = true;
+                                }
+                            }
+                            if (idMatch && notSent) {
+                                return false;
+                            }
                         }
-                        recallInfo->SetExtensions(extensions);
-                    }
+                        return true;
+                    });
+                } else {
+                    std::string display = resultCode.GetDisplay();
+                    wxMessageBox(wxString::FromUTF8(display), wxT("Prescription sending error"), wxICON_ERROR);
                 }
             }
         }
@@ -1762,6 +1851,7 @@ void TheMasterFrame::OnPrescriptionContextMenu(wxContextMenuEvent &e) {
     menu.Append(TheMaster_PrescriptionDetails_Id, wxT("Details"));
     menu.Append(TheMaster_PrescriptionRecall_Id, wxT("Recall"));
     menu.Append(TheMaster_PrescriptionCease_Id, wxT("Cease"));
+    menu.Append(TheMaster_PrescriptionRenew_Id, wxT("Renew"));
     PopupMenu(&menu);
 }
 
@@ -1898,6 +1988,195 @@ void TheMasterFrame::OnPrescriptionCease(wxCommandEvent &e) {
             }
         }
         medicationStatement->AddExtension(discontinuation);
+    }
+    UpdateMedications();
+}
+
+void TheMasterFrame::OnPrescriptionRenew(wxCommandEvent &e) {
+    if (prescriptions->GetSelectedItemCount() != 1) {
+        return;
+    }
+    auto selected = prescriptions->GetFirstSelected();
+    if (selected < 0 || selected >= displayedMedicationStatements.size()) {
+        return;
+    }
+    auto medicationStatement = displayedMedicationStatements[selected];
+    std::string reseptId{};
+    auto identifiers = medicationStatement->GetIdentifiers();
+    auto iterator = identifiers.begin();
+    while (iterator != identifiers.end()) {
+        auto identifier = *iterator;
+        auto key = identifier.GetType().GetText();
+        std::transform(key.cbegin(), key.cend(), key.begin(), [] (char ch) -> char { return std::tolower(ch); });
+        if (key == "reseptid") {
+            reseptId = identifier.GetValue();
+            boost::uuids::random_generator generator;
+            boost::uuids::uuid randomUUID = generator();
+            std::string uuidStr = boost::uuids::to_string(randomUUID);
+            FhirIdentifier replacement{identifier.GetType(), identifier.GetUse(), identifier.GetSystem(), uuidStr};
+            *iterator = replacement;
+            ++iterator;
+        } else {
+            ++iterator;
+        }
+    }
+    medicationStatement->SetIdentifiers(identifiers);
+    std::shared_ptr<FhirExtension> reseptAmendment{};
+    {
+        auto extensions = medicationStatement->GetExtensions();
+        for (const auto extension : extensions) {
+            auto url = extension->GetUrl();
+            if (url == "http://ehelse.no/fhir/StructureDefinition/sfm-reseptamendment") {
+                reseptAmendment = extension;
+            }
+        }
+    }
+    if (!reseptAmendment) {
+        wxMessageBox(wxT("The prescription is not valid"), wxT("Can not recall prescription"), wxICON_ERROR);
+        return;
+    }
+    bool addCreate{true};
+    std::string createdDate{};
+    std::shared_ptr<FhirValueExtension> createdDateExt{};
+    std::string expirationDate{};
+    std::shared_ptr<FhirValueExtension> expirationDateExt{};
+
+    {
+        auto extensions = reseptAmendment->GetExtensions();
+        for (const auto &extension : extensions) {
+            auto url = extension->GetUrl();
+            if (url == "recallinfo") {
+                wxMessageBox(wxT("The prescription is already recalled"), wxT("Can not recall prescription"), wxICON_ERROR);
+                return;
+            }
+            if (url == "createeresept") {
+                auto valueExt = std::dynamic_pointer_cast<FhirValueExtension>(extension);
+                if (valueExt) {
+                    auto value = std::dynamic_pointer_cast<FhirBooleanValue>(valueExt->GetValue());
+                    value->SetValue(true);
+                    addCreate = false;
+                } else {
+                    wxMessageBox(wxT("The prescription has an incompatible value for createeresept"), wxT("Can not renew prescription"), wxICON_ERROR);
+                    return;
+                }
+            }
+            if (url == "reseptdate") {
+                auto valueExt = std::dynamic_pointer_cast<FhirValueExtension>(extension);
+                if (valueExt) {
+                    auto value = std::dynamic_pointer_cast<FhirDateValue>(valueExt->GetValue());
+                    if (value) {
+                        createdDateExt = valueExt;
+                        createdDate = value->GetRawValue();
+                    }
+                }
+            }
+            if (url == "expirationdate") {
+                auto valueExt = std::dynamic_pointer_cast<FhirValueExtension>(extension);
+                if (valueExt) {
+                    auto value = std::dynamic_pointer_cast<FhirDateValue>(valueExt->GetValue());
+                    if (value) {
+                        expirationDateExt = valueExt;
+                        expirationDate = value->GetRawValue();
+                    }
+                }
+            }
+        }
+    }
+    std::tm createdDateTm{};
+    std::tm expirationDateTm{};
+    if (createdDateExt) {
+        int y, m, d;
+        auto n = sscanf(createdDate.c_str(), "%d-%d-%d", &y, &m, &d);
+        if (n != 3) {
+            wxMessageBox(wxT("Incorrect prescription date or expiration format"), wxT("Can not renew prescription"), wxICON_ERROR);
+        }
+        createdDateTm.tm_year = y - 1900;
+        createdDateTm.tm_mon = m - 1;
+        createdDateTm.tm_mday = d;
+    }
+    if (expirationDateExt) {
+        int y, m, d;
+        auto n = sscanf(expirationDate.c_str(), "%d-%d-%d", &y, &m, &d);
+        if (n != 3) {
+            wxMessageBox(wxT("Incorrect prescription date or expiration format"), wxT("Can not renew prescription"), wxICON_ERROR);
+            return;
+        }
+        expirationDateTm.tm_year = y - 1900;
+        expirationDateTm.tm_mon = m - 1;
+        expirationDateTm.tm_mday = d;
+    }
+    auto nowT = time(nullptr);
+    if (createdDateExt) {
+        if (expirationDateExt) {
+            std::tm plusoney{createdDateTm};
+            plusoney.tm_year++;
+            auto p1 = mktime(&plusoney);
+            auto expt = mktime(&expirationDateTm);
+            auto diff = p1 - expt;
+            if (diff >= 0 && diff <= (24 * 3600)) {
+                if (localtime_r(&nowT, &createdDateTm) != &createdDateTm) {
+                    wxMessageBox(wxT("Failed to get current date"), wxT("Renew failed"), wxICON_ERROR);
+                    return;
+                }
+                std::tm cplusoney{createdDateTm};
+                cplusoney.tm_year++;
+                auto cp1 = mktime(&cplusoney);
+                cp1 -= 24 * 3600;
+                if (localtime_r(&cp1, &expirationDateTm) != &expirationDateTm) {
+                    wxMessageBox(wxT("Failed to get current date"), wxT("Renew failed"), wxICON_ERROR);
+                    return;
+                }
+            } else {
+                auto p0 = mktime(&createdDateTm);
+                diff = expt - p0;
+                if (localtime_r(&nowT, &createdDateTm) != &createdDateTm) {
+                    wxMessageBox(wxT("Failed to get current date"), wxT("Renew failed"), wxICON_ERROR);
+                    return;
+                }
+                expt = nowT + diff;
+                if (localtime_r(&expt, &expirationDateTm) != &expirationDateTm) {
+                    wxMessageBox(wxT("Failed to get current date"), wxT("Renew failed"), wxICON_ERROR);
+                    return;
+                }
+            }
+        } else {
+            if (localtime_r(&nowT, &createdDateTm) != &createdDateTm) {
+                wxMessageBox(wxT("Failed to get current date"), wxT("Renew failed"), wxICON_ERROR);
+                return;
+            }
+        }
+    } else if (expirationDateExt) {
+        wxMessageBox(wxT("Missing reseptdate"), wxT("Renew failed"), wxICON_ERROR);
+        return;
+    }
+    if (createdDateExt) {
+        std::stringstream sstr{};
+        sstr << (createdDateTm.tm_year + 1900) << "-" << (createdDateTm.tm_mon < 9 ? "0" : "");
+        sstr << (createdDateTm.tm_mon + 1) << "-" << (createdDateTm.tm_mday < 10 ? "0" : "");
+        sstr << createdDateTm.tm_mday;
+        createdDateExt->SetValue(std::make_shared<FhirDateValue>(sstr.str()));
+    }
+    if (expirationDateExt) {
+        std::stringstream sstr{};
+        sstr << (expirationDateTm.tm_year + 1900) << "-" << (expirationDateTm.tm_mon < 9 ? "0" : "");
+        sstr << (expirationDateTm.tm_mon + 1) << "-" << (expirationDateTm.tm_mday < 10 ? "0" : "");
+        sstr << expirationDateTm.tm_mday;
+        expirationDateExt->SetValue(std::make_shared<FhirDateValue>(sstr.str()));
+    }
+    {
+        FhirCodeableConcept recallCode{"urn:oid:2.16.578.1.12.4.1.1.7500", "1", "Fornying"};
+        auto recallInfoExt = std::make_shared<FhirExtension>("recallinfo");
+        if (!reseptId.empty()) {
+            recallInfoExt->AddExtension(
+                    std::make_shared<FhirValueExtension>("recallId", std::make_shared<FhirString>(reseptId)));
+        }
+        recallInfoExt->AddExtension(std::make_shared<FhirValueExtension>("recallcode", std::make_shared<FhirCodeableConceptValue>(recallCode)));
+        recallInfoExt->AddExtension(std::make_shared<FhirValueExtension>("text", std::make_shared<FhirString>("Forny uten endring")));
+        recallInfoExt->AddExtension(std::make_shared<FhirValueExtension>("notsent", std::make_shared<FhirBooleanValue>(true)));
+        reseptAmendment->AddExtension(recallInfoExt);
+    }
+    if (addCreate) {
+        reseptAmendment->AddExtension(std::make_shared<FhirValueExtension>("createeresept", std::make_shared<FhirBooleanValue>(true)));
     }
     UpdateMedications();
 }

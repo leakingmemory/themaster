@@ -55,6 +55,7 @@ public:
     void OnCreatePatient(wxCommandEvent &e);
     pplx::task<std::string> GetAccessToken();
     void OnGetMedication(wxCommandEvent &e);
+    static void FilterRecallInfos(FhirBundle &bundle, const std::function<bool (const std::string &,const std::shared_ptr<FhirExtension> &)> &predicate);
     static std::map<std::string,std::shared_ptr<FhirExtension>> GetRecallInfos(FhirBundle &bundle);
     void SendMedication(const std::function<void (const std::shared_ptr<FhirBundle> &)> &preprocessing, const std::function<void (const std::map<std::string,FhirCoding> &)> &pllResultsFunc);
     void OnSendMedication(wxCommandEvent &e);
@@ -79,6 +80,7 @@ public:
     void OnPrescriptionDetails(wxCommandEvent &e);
     void OnPrescriptionRecall(wxCommandEvent &e);
     void OnPrescriptionCease(wxCommandEvent &e);
+    void OnPrescriptionRenew(wxCommandEvent &e);
 };
 
 
