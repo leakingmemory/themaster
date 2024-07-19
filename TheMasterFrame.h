@@ -26,6 +26,11 @@ namespace pplx {
 }
 class PrescriptionDialog;
 
+struct PrescriberRef {
+    std::string uuid;
+    std::string name;
+};
+
 class TheMasterFrame : public wxFrame {
 private:
     std::shared_ptr<WeakRefUiDispatcher<TheMasterFrame>> weakRefDispatcher;
@@ -63,6 +68,7 @@ public:
     void OnSaveLastRequest(wxCommandEvent &e);
     void OnSaveLast(wxCommandEvent &e);
     void OnSaveBundle(wxCommandEvent &e);
+    [[nodiscard]] PrescriberRef GetPrescriber() const ;
     void SetPrescriber(PrescriptionData &prescriptionData) const ;
     [[nodiscard]] FhirReference GetSubjectRef() const ;
     void SetPatient(PrescriptionData &prescriptionData) const ;

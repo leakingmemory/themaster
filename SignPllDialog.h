@@ -14,7 +14,7 @@ private:
     std::vector<std::string> selected{};
     wxCheckListBox *listbox;
 public:
-    SignPllDialog(wxWindow *parent, const std::map<std::string,std::string> &map);
+    SignPllDialog(wxWindow *parent, const std::map<std::string,std::string> &map, const std::vector<std::string> &preselect);
     void OnCancel(wxCommandEvent &e);
     void OnOk(wxCommandEvent &e);
     [[nodiscard]] std::vector<std::string> GetSelected() const {

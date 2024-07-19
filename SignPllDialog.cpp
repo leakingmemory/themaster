@@ -4,7 +4,7 @@
 
 #include "SignPllDialog.h"
 
-SignPllDialog::SignPllDialog(wxWindow *parent, const std::map<std::string,std::string> &map) : wxDialog(parent, wxID_ANY, wxT("Sign PLL")) {
+SignPllDialog::SignPllDialog(wxWindow *parent, const std::map<std::string,std::string> &map, const std::vector<std::string> &preselect) : wxDialog(parent, wxID_ANY, wxT("Sign PLL")) {
 
 // Create a wxCheckListBox to show the items with checkboxes
     listbox = new wxCheckListBox(this, wxID_ANY, wxDefaultPosition, wxDefaultSize);
@@ -33,9 +33,15 @@ SignPllDialog::SignPllDialog(wxWindow *parent, const std::map<std::string,std::s
 // Call Layout to adjust the dialog's layout
     SetSizerAndFit(sizer);
 
-// Ensure we select the first item by default
-    if (!map.empty()) {
-        listbox->Check(0);
+    int index = 0;
+    for (const auto &element: map) {
+        auto id = element.first;
+        if (std::find(preselect.cbegin(), preselect.cend(), id) != preselect.cend()) {
+            listbox->Check(index, true);
+        } else {
+            listbox->Check(index, false);
+        }
+        ++index;
     }
 
     cancelButton->Bind(wxEVT_BUTTON, &SignPllDialog::OnCancel, this);
