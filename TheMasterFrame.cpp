@@ -178,6 +178,7 @@ void TheMasterFrame::UpdateMedications() {
             bool recalled{false};
             bool recallNotSent{false};
             std::string recallCode{};
+            FhirCoding rfstatus{};
             auto statementExtensions = medicationStatement->GetExtensions();
             for (const auto &statementExtension : statementExtensions) {
                 auto url = statementExtension->GetUrl();
@@ -222,6 +223,24 @@ void TheMasterFrame::UpdateMedications() {
                                 }
                             }
                         }
+                        if (url == "rfstatus") {
+                            auto extensions = reseptAmendmentExtension->GetExtensions();
+                            for (const auto &extension : extensions) {
+                                auto url = extension->GetUrl();
+                                if (url == "status") {
+                                    auto valueExt = std::dynamic_pointer_cast<FhirValueExtension>(extension);
+                                    if (valueExt) {
+                                        auto value = std::dynamic_pointer_cast<FhirCodeableConceptValue>(valueExt->GetValue());
+                                        if (value) {
+                                            auto codings = value->GetCoding();
+                                            if (!codings.empty()) {
+                                                rfstatus = codings[0];
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -258,7 +277,7 @@ void TheMasterFrame::UpdateMedications() {
                     prescriptions->SetItem(row, 2, wxT("Recalled"));
                 }
             } else {
-                if (ep) {
+                if (ep && !rfstatus.GetCode().empty()) {
                     prescriptions->SetItem(row, 2, wxT("Prescription"));
                 } else {
                     prescriptions->SetItem(row, 2, wxT("Without prescription"));
