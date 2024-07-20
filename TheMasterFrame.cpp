@@ -1387,7 +1387,6 @@ void TheMasterFrame::OnSendPll(wxCommandEvent &e) {
                             std::transform(key.cbegin(), key.cend(), key.begin(), [] (char ch) {return std::tolower(ch);});
                             if (key == "pll") {
                                 pllId = identifier.GetValue();
-#if 0
                                 bool found{false};
                                 for (const auto &newId : newPllIds) {
                                     if (newId == pllId) {
@@ -1396,13 +1395,10 @@ void TheMasterFrame::OnSendPll(wxCommandEvent &e) {
                                     }
                                 }
                                 if (found) {
-#endif
                                     iterator = identifiers.erase(iterator);
-#if 0
                                 } else {
                                     ++iterator;
                                 }
-#endif
                             } else {
                                 ++iterator;
                             }
@@ -1412,6 +1408,53 @@ void TheMasterFrame::OnSendPll(wxCommandEvent &e) {
                     bool found{false};
                     if (!pllId.empty()) {
                         found = pllMedicationStatements.find(pllId) != pllMedicationStatements.end();
+                    }
+                    if (found) {
+                        FhirCoding rfstatus{};
+                        std::shared_ptr<FhirCodeableConceptValue> typeresept{};
+                        auto extensions = medicationStatement->GetExtensions();
+                        for (const auto &extension : extensions) {
+                            auto url = extension->GetUrl();
+                            std::transform(url.cbegin(), url.cend(), url.begin(), [] (char ch) { return std::tolower(ch); });
+                            if (url == "http://ehelse.no/fhir/structuredefinition/sfm-reseptamendment") {
+                                auto extensions = extension->GetExtensions();
+                                for (const auto &extension : extensions) {
+                                    auto url = extension->GetUrl();
+                                    if (url == "rfstatus") {
+                                        auto extensions = extension->GetExtensions();
+                                        for (const auto &extension : extensions) {
+                                            auto url = extension->GetUrl();
+                                            if (url == "status") {
+                                                auto valueExt = std::dynamic_pointer_cast<FhirValueExtension>(extension);
+                                                if (valueExt) {
+                                                    auto value = std::dynamic_pointer_cast<FhirCodeableConceptValue>(valueExt->GetValue());
+                                                    if (value) {
+                                                        auto codings = value->GetCoding();
+                                                        if (!codings.empty()) {
+                                                            rfstatus = codings[0];
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    } else if (url == "typeresept") {
+                                        auto valueExt = std::dynamic_pointer_cast<FhirValueExtension>(extension);
+                                        if (valueExt) {
+                                            auto value = std::dynamic_pointer_cast<FhirCodeableConceptValue>(
+                                                    valueExt->GetValue());
+                                            if (value) {
+                                                typeresept = value;
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        if (rfstatus.GetCode().empty() && typeresept) {
+                            FhirCodeableConcept cconcept{"urn:oid:2.16.578.1.12.4.1.1.7491", "U", "Uten resept"};
+                            FhirCodeableConceptValue value{cconcept};
+                            *typeresept = std::move(value);
+                        }
                     }
                     if (found) {
                         ++iterator;
@@ -2109,8 +2152,9 @@ void TheMasterFrame::OnPrescriptionCease(wxCommandEvent &e) {
                     codings.emplace_back(std::move(system), std::move(code), std::move(display));
                 }
                 std::string text{dialog.GetReasonText()};
-                FhirCodeableConcept codeable{std::move(codings), std::move(text)};
+                FhirCodeableConcept codeable{std::move(codings)};
                 discontinuation->AddExtension(std::make_shared<FhirValueExtension>("reason", std::make_shared<FhirCodeableConceptValue>(codeable)));
+                discontinuation->AddExtension(std::make_shared<FhirValueExtension>("note", std::make_shared<FhirString>(text)));
             }
         }
         medicationStatement->AddExtension(discontinuation);
