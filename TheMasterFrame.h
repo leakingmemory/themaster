@@ -16,6 +16,7 @@
 class PatientStore;
 class PatientInformation;
 class MedBundleData;
+class PrescriberRef;
 class FhirBundle;
 class FhirExtension;
 class FhirReference;
@@ -25,11 +26,6 @@ namespace pplx {
     template<class ReturnType> class task;
 }
 class PrescriptionDialog;
-
-struct PrescriberRef {
-    std::string uuid;
-    std::string name;
-};
 
 class TheMasterFrame : public wxFrame {
 private:

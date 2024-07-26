@@ -389,15 +389,16 @@ pplx::task<std::string> TheMasterFrame::GetAccessToken() {
 }
 
 void TheMasterFrame::OnGetMedication(wxCommandEvent &e) {
+    auto patientInformation = this->patientInformation;
     if (!patientInformation) {
         wxMessageBox("Error: No patient information provided", "Error", wxICON_ERROR);
         return;
     }
-    if (url.empty()) {
+    std::string apiUrl = url;
+    if (apiUrl.empty()) {
         wxMessageBox("Error: Not connected", "Error", wxICON_ERROR);
         return;
     }
-    std::string apiUrl = url;
 
     auto patient = std::make_shared<FhirPatient>();
     {
@@ -409,34 +410,34 @@ void TheMasterFrame::OnGetMedication(wxCommandEvent &e) {
         patient->SetProfile("http://ehelse.no/fhir/StructureDefinition/sfm-Patient");
         {
             std::vector <FhirIdentifier> identifiers{};
-            auto patientIdType = this->patientInformation->GetPatientIdType();
+            auto patientIdType = patientInformation->GetPatientIdType();
             if (patientIdType == PatientIdType::FODSELSNUMMER) {
                 identifiers.emplace_back(
                         FhirCodeableConcept("http://hl7.no/fhir/NamingSystem/FNR", "FNR-nummer", ""),
                         "official", "urn:oid:2.16.578.1.12.4.1.4.1",
-                        this->patientInformation->GetPatientId());
+                        patientInformation->GetPatientId());
                 patient->SetIdentifiers(identifiers);
             } else if (patientIdType == PatientIdType::DNUMMER) {
                 identifiers.emplace_back(
                         FhirCodeableConcept("http://hl7.no/fhir/NamingSystem/DNR", "Dnummer", ""),
                         "official", "urn:oid:2.16.578.1.12.4.1.4.2",
-                        this->patientInformation->GetPatientId());
+                        patientInformation->GetPatientId());
                 patient->SetIdentifiers(identifiers);
             }
         }
         patient->SetActive(true);
-        patient->SetName({{"official", this->patientInformation->GetFamilyName(),
-                           this->patientInformation->GetGivenName()}});
+        patient->SetName({{"official", patientInformation->GetFamilyName(),
+                           patientInformation->GetGivenName()}});
         {
-            auto dob = this->patientInformation->GetDateOfBirth();
+            auto dob = patientInformation->GetDateOfBirth();
             if (!dob.empty()) {
                 patient->SetBirthDate(dob);
             }
         }
         patient->SetGender(
-                this->patientInformation->GetGender() == PersonGender::FEMALE ? "female" : "male");
-        auto postCode = this->patientInformation->GetPostCode();
-        auto city = this->patientInformation->GetCity();
+                patientInformation->GetGender() == PersonGender::FEMALE ? "female" : "male");
+        auto postCode = patientInformation->GetPostCode();
+        auto city = patientInformation->GetCity();
         if (!postCode.empty() && !city.empty()) {
             FhirAddress address{{}, "home", "physical", city, postCode};
             patient->SetAddress({address});
@@ -635,8 +636,13 @@ void TheMasterFrame::OnGetMedication(wxCommandEvent &e) {
             }
         }
         if (medBundle) {
+            std::shared_ptr<FhirBundle> previousBundle{};
+            if (medicationBundle && medicationBundle->patientInformation == *patientInformation) {
+                previousBundle = medicationBundle->medBundle;
+            }
             medicationBundle = std::make_unique<MedBundleData>();
             *medicationBundle = {
+                .patientInformation = *patientInformation,
                 .medBundle = medBundle,
                 .kjHentet = kjHentet,
                 .rfHentet = rfHentet,
@@ -647,6 +653,10 @@ void TheMasterFrame::OnGetMedication(wxCommandEvent &e) {
                 .kjHarLaste = kjHarLaste,
                 .rfHarLaste = rfHarLaste
             };
+            if (previousBundle) {
+                medicationBundle->InsertNonexistingMedicationsFrom(previousBundle);
+                medicationBundle->InsertNonexistingMedicationPrescriptionsFrom(previousBundle, helseidIdToken);
+            }
             UpdateHeader();
             UpdateMedications();
         }
@@ -1568,154 +1578,10 @@ void TheMasterFrame::OnSaveBundle(wxCommandEvent &e) {
 }
 
 PrescriberRef TheMasterFrame::GetPrescriber() const {
-    Jwt jwt{helseidIdToken};
-    JwtPart jwtBody{jwt.GetUnverifiedBody()};
-    std::string pid = jwtBody.GetString("helseid://claims/identity/pid");
-    std::string hpr = jwtBody.GetString("helseid://claims/hpr/hpr_number");
-    std::string name = jwtBody.GetString("name");
-    std::string given_name = jwtBody.GetString("given_name");
-    std::string middle_name = jwtBody.GetString("middle_name");
-    std::string family_name = jwtBody.GetString("family_name");
-    std::string dateOfBirth{};
-    bool female{true};
-    if (pid.size() == 11) {
-        std::string sd = pid.substr(0, 2);
-        std::string sm = pid.substr(2, 2);
-        std::string sy2 = pid.substr(4, 2);
-        std::string sc = pid.substr(6, 1);
-        std::string sg = pid.substr(8, 1);
-        std::size_t ccd;
-        std::size_t ccm;
-        std::size_t ccy;
-        std::size_t ccc;
-        std::size_t ccg;
-        auto d = std::stoi(sd, &ccd);
-        auto m = std::stoi(sm, &ccm);
-        auto y = std::stoi(sy2, &ccy);
-        auto c = std::stoi(sc, &ccc);
-        auto g = std::stoi(sg, &ccg);
-        if (ccd == 2 && ccm == 2 && ccy == 2 && ccc == 1 && ccg == 1 && y >= 0 && m > 0 && d > 0) {
-            if (c <= 4) {
-                if (y < 40) {
-                    y += 2000;
-                } else {
-                    y += 1900;
-                }
-            } else if (c == 8) {
-                y += 2000;
-            } else if (c < 8) {
-                if (y < 55) {
-                    y += 2000;
-                } else {
-                    y += 1800;
-                }
-            } else {
-                if (y < 40) {
-                    y += 1900;
-                } else {
-                    y += 2000;
-                }
-            }
-        }
-        if ((g & 1) == 1) {
-            female = false;
-        }
-        std::stringstream dob{};
-        dob << y << "-";
-        if (m < 10) {
-            dob << "0";
-        }
-        dob << m << "-";
-        if ( d < 10) {
-            dob << "0";
-        }
-        dob << d;
-        dateOfBirth = dob.str();
-    }
     if (!medicationBundle) {
         return {};
     }
-    auto bundle = medicationBundle->medBundle;
-    if (!bundle) {
-        return {};
-    }
-    for (const auto &entry : bundle->GetEntries()) {
-        auto resource = entry.GetResource();
-        auto practitioner = std::dynamic_pointer_cast<FhirPractitioner>(resource);
-
-        if (practitioner &&
-            practitioner->IsActive()) {
-            std::string ppid{};
-            std::string phpr{};
-            for (const auto &identifier : practitioner->GetIdentifiers()) {
-                if (identifier.GetSystem() == "urn:oid:2.16.578.1.12.4.1.4.1") {
-                    ppid = identifier.GetValue();
-                } else if (identifier.GetSystem() == "urn:oid:2.16.578.1.12.4.1.4.4") {
-                    phpr = identifier.GetValue();
-                }
-            }
-            bool matching{false};
-            if (!pid.empty()) {
-                if (!hpr.empty()) {
-                    if (ppid == pid && phpr == hpr) {
-                        matching = true;
-                    }
-                } else {
-                    if (ppid == pid) {
-                        matching = true;
-                    }
-                }
-            } else if (!hpr.empty()) {
-                if (phpr == hpr) {
-                    matching = true;
-                }
-            }
-            if (matching) {
-                return {.uuid = entry.GetFullUrl(), .name = practitioner->GetDisplay()};
-            }
-        }
-    }
-    std::shared_ptr<FhirPractitioner> practitioner = std::make_shared<FhirPractitioner>();
-    practitioner->SetProfile("http://ehelse.no/fhir/StructureDefinition/sfm-Practitioner");
-    {
-        boost::uuids::random_generator generator;
-        boost::uuids::uuid randomUUID = generator();
-        std::string uuidStr = boost::uuids::to_string(randomUUID);
-        practitioner->SetId(uuidStr);
-    }
-    practitioner->SetStatus(FhirStatus::ACTIVE);
-    {
-        std::vector<FhirIdentifier> identifiers{};
-        if (!hpr.empty()) {
-            identifiers.emplace_back(FhirCodeableConcept("http://hl7.no/fhir/NamingSystem/HPR", "HPR-nummer", ""), "official", "urn:oid:2.16.578.1.12.4.1.4.4", hpr);
-        }
-        if (!pid.empty()) {
-            identifiers.emplace_back(FhirCodeableConcept("http://hl7.no/fhir/NamingSystem/FNR", "FNR-nummer", ""), "official", "urn:oid:2.16.578.1.12.4.1.4.1", pid);
-        }
-        practitioner->SetIdentifiers(identifiers);
-    }
-    practitioner->SetActive(true);
-    practitioner->SetBirthDate(dateOfBirth);
-    practitioner->SetGender(female ? "female" : "male");
-    {
-        std::vector<FhirName> setName{};
-        std::string name{given_name};
-        if (!name.empty()) {
-            if (!middle_name.empty()) {
-                name.append(" ");
-                name.append(middle_name);
-            }
-        } else {
-            name = middle_name;
-        }
-        setName.emplace_back("official", family_name, name);
-        practitioner->SetName(setName);
-    }
-    std::string fullUrl{"urn:uuid:"};
-    fullUrl.append(practitioner->GetId());
-    FhirBundleEntry bundleEntry{fullUrl, practitioner};
-    bundle->AddEntry(bundleEntry);
-    return {.uuid = fullUrl, .name = practitioner->GetDisplay()};
+    return medicationBundle->GetPrescriber(helseidIdToken);
 }
 
 void TheMasterFrame::SetPrescriber(PrescriptionData &prescriptionData) const {
@@ -1725,63 +1591,10 @@ void TheMasterFrame::SetPrescriber(PrescriptionData &prescriptionData) const {
 }
 
 FhirReference TheMasterFrame::GetSubjectRef() const {
-    std::string pid{};
-    auto patientInformation = this->patientInformation;
-    if (patientInformation && patientInformation->GetPatientIdType() == PatientIdType::FODSELSNUMMER) {
-        pid = patientInformation->GetPatientId();
-    }
-    auto bundle = medicationBundle->medBundle;
-    if (!bundle) {
+    if (!medicationBundle) {
         return {};
     }
-    if (!pid.empty()) {
-        for (const auto &entry: bundle->GetEntries()) {
-            auto resource = entry.GetResource();
-            auto patient = std::dynamic_pointer_cast<FhirPatient>(resource);
-
-            if (patient &&
-                patient->IsActive()) {
-                std::string ppid{};
-                for (const auto &identifier: patient->GetIdentifiers()) {
-                    if (identifier.GetSystem() == "urn:oid:2.16.578.1.12.4.1.4.1") {
-                        ppid = identifier.GetValue();
-                    }
-                }
-                if (ppid == pid) {
-                    return FhirReference(entry.GetFullUrl(), "http://ehelse.no/fhir/StructureDefinition/sfm-Patient", patient->GetDisplay());
-                }
-            }
-        }
-    }
-    std::shared_ptr<FhirPatient> patient = std::make_shared<FhirPatient>();
-    patient->SetProfile("http://ehelse.no/fhir/StructureDefinition/sfm-Patient");
-    {
-        boost::uuids::random_generator generator;
-        boost::uuids::uuid randomUUID = generator();
-        std::string uuidStr = boost::uuids::to_string(randomUUID);
-        patient->SetId(uuidStr);
-    }
-    patient->SetStatus(FhirStatus::NOT_SET);
-    {
-        std::vector<FhirIdentifier> identifiers{};
-        if (!pid.empty()) {
-            identifiers.emplace_back(FhirCodeableConcept("http://hl7.no/fhir/NamingSystem/FNR", "FNR-nummer", ""), "official", "urn:oid:2.16.578.1.12.4.1.4.1", pid);
-        }
-        patient->SetIdentifiers(identifiers);
-    }
-    patient->SetActive(true);
-    patient->SetBirthDate(patientInformation->GetDateOfBirth());
-    patient->SetGender(patientInformation->GetGender() == PersonGender::FEMALE ? "female" : "male");
-    {
-        std::vector<FhirName> setName{};
-        setName.emplace_back("official", patientInformation->GetFamilyName(), patientInformation->GetGivenName());
-        patient->SetName(setName);
-    }
-    std::string fullUrl{"urn:uuid:"};
-    fullUrl.append(patient->GetId());
-    FhirBundleEntry bundleEntry{fullUrl, patient};
-    bundle->AddEntry(bundleEntry);
-    return FhirReference(fullUrl, "http://ehelse.no/fhir/StructureDefinition/sfm-Patient", patient->GetDisplay());
+    return medicationBundle->GetSubjectRef();
 }
 
 void TheMasterFrame::SetPatient(PrescriptionData &prescriptionData) const {

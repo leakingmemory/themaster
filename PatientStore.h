@@ -49,6 +49,21 @@ public:
     void SetCity(const std::string& _city) { city = _city; }
     void SetPatientIdType(PatientIdType idType) { patientIdType = idType; }
     void SetGender(PersonGender setGender) { gender = setGender; }
+
+    constexpr bool operator == (const PatientInformation &other) const {
+        if (patientId != other.patientId || patientIdType != other.patientIdType) {
+            return false;
+        }
+        if (!patientId.empty()) {
+            return true;
+        }
+        return givenName == other.givenName &&
+            familyName == other.familyName &&
+            dateOfBirth == other.dateOfBirth &&
+            postCode == other.postCode &&
+            city == other.city &&
+            gender == other.gender;
+    }
 };
 
 class PatientStore {
