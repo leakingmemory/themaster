@@ -12,6 +12,7 @@
 #include <jjwtid/Jwt.h>
 #include <jjwtid/JwtPart.h>
 #include "MedBundleData.h"
+#include "PrescriptionChangesService.h"
 
 std::vector<FhirBundleEntry> MedBundleData::GetPractitioners(const std::shared_ptr<FhirBundle> &bundle) {
     std::vector<FhirBundleEntry> practitioners{};
@@ -24,6 +25,22 @@ std::vector<FhirBundleEntry> MedBundleData::GetPractitioners(const std::shared_p
         }
     }
     return practitioners;
+}
+
+std::vector<std::string> MedBundleData::GetRenewals(const std::shared_ptr<FhirBundle> &bundle) {
+    std::vector<std::string> renewals{};
+    for (const auto &entry : bundle->GetEntries()) {
+        auto resource = entry.GetResource();
+        auto medicationStatement = std::dynamic_pointer_cast<FhirMedicationStatement>(resource);
+
+        if (medicationStatement && PrescriptionChangesService::IsRenewedWithoutChangesAssumingIsEprescription(*medicationStatement)) {
+            auto reseptId = PrescriptionChangesService::GetPreviousPrescriptionId(*medicationStatement);
+            if (!reseptId.empty()) {
+                renewals.emplace_back(reseptId);
+            }
+        }
+    }
+    return renewals;
 }
 
 PrescriberRef MedBundleData::GetPrescriber(const std::shared_ptr<FhirBundle> &bundle, const std::string &helseidIdToken) {
@@ -307,13 +324,10 @@ void MedBundleData::InsertNonexistingMedicationPrescriptionsFrom(const std::shar
             if (!resource) {
                 continue;
             }
-            auto identifiers = resource->GetIdentifiers();
-            for (const auto &identifier : identifiers) {
-                auto type = identifier.GetType().GetText();
-                std::transform(type.cbegin(), type.cend(), type.begin(), [] (char ch) { return std::tolower(ch); });
-                if (type == "reseptid") {
-                    prescriptionIds.emplace_back(identifier.GetValue());
-                }
+            std::string prescriptionId{};
+            prescriptionId = PrescriptionChangesService::GetPrescriptionId(*resource);
+            if (!prescriptionId.empty()) {
+                prescriptionIds.emplace_back(prescriptionId);
             }
         }
     }
@@ -352,22 +366,17 @@ void MedBundleData::InsertNonexistingMedicationPrescriptionsFrom(const std::shar
                 }
             }
             {
+                std::string prescriptionId{};
+                if (PrescriptionChangesService::IsRenewedWithoutChanges(*resource)) {
+                    prescriptionId = PrescriptionChangesService::GetPreviousPrescriptionId(*resource);
+                } else {
+                    prescriptionId = PrescriptionChangesService::GetPrescriptionId(*resource);
+                }
                 bool found{false};
-                auto identifiers = resource->GetIdentifiers();
-                for (const auto &identifier: identifiers) {
-                    auto type = identifier.GetType().GetText();
-                    std::transform(type.cbegin(), type.cend(), type.begin(), [](char ch) { return std::tolower(ch); });
-                    if (type == "reseptid") {
-                        auto id = identifier.GetValue();
-                        for (const auto &pid: prescriptionIds) {
-                            if (pid == id) {
-                                found = true;
-                                break;
-                            }
-                        }
-                        if (found) {
-                            break;
-                        }
+                for (const auto &pid: prescriptionIds) {
+                    if (pid == prescriptionId) {
+                        found = true;
+                        break;
                     }
                 }
                 if (found) {
@@ -467,5 +476,29 @@ void MedBundleData::InsertNonexistingMedicationPrescriptionsFrom(const std::shar
             resource->SetSections(sections);
         }
         medBundle->SetEntries(entries);
+    }
+}
+
+void MedBundleData::ReplayRenewals(const std::shared_ptr<FhirBundle> &otherBundle) {
+    auto renewals = GetRenewals(otherBundle);
+    auto entries = medBundle->GetEntries();
+    for (const auto &entry : entries) {
+        auto medicationStatement = std::dynamic_pointer_cast<FhirMedicationStatement>(entry.GetResource());
+        if (medicationStatement) {
+            std::string prescriptionId = PrescriptionChangesService::GetPrescriptionId(*medicationStatement);
+            if (prescriptionId.empty()) {
+                continue;
+            }
+            bool renewed{false};
+            for (const auto &id : renewals) {
+                if (prescriptionId == id) {
+                    renewed = true;
+                    break;
+                }
+            }
+            if (renewed) {
+                PrescriptionChangesService::Renew(*medicationStatement);
+            }
+        }
     }
 }

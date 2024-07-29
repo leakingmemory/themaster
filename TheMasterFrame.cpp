@@ -43,6 +43,7 @@
 #include "CeasePrescriptionDialog.h"
 #include "DateTime.h"
 #include "SignPllDialog.h"
+#include "PrescriptionChangesService.h"
 
 constexpr int PrescriptionNameColumnWidth = 250;
 constexpr int PllColumnWidth = 50;
@@ -656,6 +657,7 @@ void TheMasterFrame::OnGetMedication(wxCommandEvent &e) {
             if (previousBundle) {
                 medicationBundle->InsertNonexistingMedicationsFrom(previousBundle);
                 medicationBundle->InsertNonexistingMedicationPrescriptionsFrom(previousBundle, helseidIdToken);
+                medicationBundle->ReplayRenewals(previousBundle);
             }
             UpdateHeader();
             UpdateMedications();
@@ -2063,203 +2065,6 @@ void TheMasterFrame::OnPrescriptionRenew(wxCommandEvent &e) {
         return;
     }
     auto medicationStatement = displayedMedicationStatements[selected];
-    std::string reseptId{};
-    auto identifiers = medicationStatement->GetIdentifiers();
-    auto iterator = identifiers.begin();
-    while (iterator != identifiers.end()) {
-        auto identifier = *iterator;
-        auto key = identifier.GetType().GetText();
-        std::transform(key.cbegin(), key.cend(), key.begin(), [] (char ch) -> char { return std::tolower(ch); });
-        if (key == "reseptid") {
-            reseptId = identifier.GetValue();
-            boost::uuids::random_generator generator;
-            boost::uuids::uuid randomUUID = generator();
-            std::string uuidStr = boost::uuids::to_string(randomUUID);
-            FhirIdentifier replacement{identifier.GetType(), identifier.GetUse(), identifier.GetSystem(), uuidStr};
-            *iterator = replacement;
-            ++iterator;
-        } else {
-            ++iterator;
-        }
-    }
-    medicationStatement->SetIdentifiers(identifiers);
-    std::shared_ptr<FhirExtension> reseptAmendment{};
-    {
-        auto extensions = medicationStatement->GetExtensions();
-        for (const auto extension : extensions) {
-            auto url = extension->GetUrl();
-            if (url == "http://ehelse.no/fhir/StructureDefinition/sfm-reseptamendment") {
-                reseptAmendment = extension;
-            }
-        }
-    }
-    if (!reseptAmendment) {
-        wxMessageBox(wxT("The prescription is not valid"), wxT("Can not recall prescription"), wxICON_ERROR);
-        return;
-    }
-    bool addCreate{true};
-    bool addFestUpdate{true};
-    std::string createdDate{};
-    std::shared_ptr<FhirValueExtension> createdDateExt{};
-    std::string expirationDate{};
-    std::shared_ptr<FhirValueExtension> expirationDateExt{};
-
-    {
-        auto extensions = reseptAmendment->GetExtensions();
-        for (const auto &extension : extensions) {
-            auto url = extension->GetUrl();
-            if (url == "recallinfo") {
-                wxMessageBox(wxT("The prescription is already recalled"), wxT("Can not recall prescription"), wxICON_ERROR);
-                return;
-            }
-            if (url == "createeresept") {
-                auto valueExt = std::dynamic_pointer_cast<FhirValueExtension>(extension);
-                if (valueExt) {
-                    auto value = std::dynamic_pointer_cast<FhirBooleanValue>(valueExt->GetValue());
-                    value->SetValue(true);
-                    addCreate = false;
-                } else {
-                    wxMessageBox(wxT("The prescription has an incompatible value for createeresept"), wxT("Can not renew prescription"), wxICON_ERROR);
-                    return;
-                }
-            }
-            if (url == "reseptdate") {
-                auto valueExt = std::dynamic_pointer_cast<FhirValueExtension>(extension);
-                if (valueExt) {
-                    auto value = std::dynamic_pointer_cast<FhirDateValue>(valueExt->GetValue());
-                    if (value) {
-                        createdDateExt = valueExt;
-                        createdDate = value->GetRawValue();
-                    }
-                }
-            }
-            if (url == "expirationdate") {
-                auto valueExt = std::dynamic_pointer_cast<FhirValueExtension>(extension);
-                if (valueExt) {
-                    auto value = std::dynamic_pointer_cast<FhirDateValue>(valueExt->GetValue());
-                    if (value) {
-                        expirationDateExt = valueExt;
-                        expirationDate = value->GetRawValue();
-                    }
-                }
-            }
-            if (url == "festUpdate") {
-                addFestUpdate = false;
-            }
-        }
-        if (addFestUpdate) {
-            FestDb festDb{};
-            auto versions = festDb.GetFestVersions();
-            if (!versions.empty()) {
-                auto version = versions[0];
-                version.append("Z");
-                reseptAmendment->AddExtension(std::make_shared<FhirValueExtension>("festUpdate", std::make_shared<FhirDateTimeValue>(version)));
-            }
-        }
-    }
-    std::tm createdDateTm{};
-    std::tm expirationDateTm{};
-    if (createdDateExt) {
-        int y, m, d;
-        auto n = sscanf(createdDate.c_str(), "%d-%d-%d", &y, &m, &d);
-        if (n != 3) {
-            wxMessageBox(wxT("Incorrect prescription date or expiration format"), wxT("Can not renew prescription"), wxICON_ERROR);
-        }
-        createdDateTm.tm_year = y - 1900;
-        createdDateTm.tm_mon = m - 1;
-        createdDateTm.tm_mday = d;
-    }
-    if (expirationDateExt) {
-        int y, m, d;
-        auto n = sscanf(expirationDate.c_str(), "%d-%d-%d", &y, &m, &d);
-        if (n != 3) {
-            wxMessageBox(wxT("Incorrect prescription date or expiration format"), wxT("Can not renew prescription"), wxICON_ERROR);
-            return;
-        }
-        expirationDateTm.tm_year = y - 1900;
-        expirationDateTm.tm_mon = m - 1;
-        expirationDateTm.tm_mday = d;
-    }
-    auto nowT = time(nullptr);
-    if (createdDateExt) {
-        if (expirationDateExt) {
-            std::tm plusoney{createdDateTm};
-            plusoney.tm_year++;
-            auto p1 = mktime(&plusoney);
-            auto expt = mktime(&expirationDateTm);
-            auto diff = p1 - expt;
-            if (diff >= 0 && diff <= (24 * 3600)) {
-                if (localtime_r(&nowT, &createdDateTm) != &createdDateTm) {
-                    wxMessageBox(wxT("Failed to get current date"), wxT("Renew failed"), wxICON_ERROR);
-                    return;
-                }
-                std::tm cplusoney{createdDateTm};
-                cplusoney.tm_year++;
-                auto cp1 = mktime(&cplusoney);
-                cp1 -= 24 * 3600;
-                if (localtime_r(&cp1, &expirationDateTm) != &expirationDateTm) {
-                    wxMessageBox(wxT("Failed to get current date"), wxT("Renew failed"), wxICON_ERROR);
-                    return;
-                }
-            } else {
-                auto p0 = mktime(&createdDateTm);
-                diff = expt - p0;
-                if (localtime_r(&nowT, &createdDateTm) != &createdDateTm) {
-                    wxMessageBox(wxT("Failed to get current date"), wxT("Renew failed"), wxICON_ERROR);
-                    return;
-                }
-                expt = nowT + diff;
-                if (localtime_r(&expt, &expirationDateTm) != &expirationDateTm) {
-                    wxMessageBox(wxT("Failed to get current date"), wxT("Renew failed"), wxICON_ERROR);
-                    return;
-                }
-            }
-        } else {
-            if (localtime_r(&nowT, &createdDateTm) != &createdDateTm) {
-                wxMessageBox(wxT("Failed to get current date"), wxT("Renew failed"), wxICON_ERROR);
-                return;
-            }
-        }
-    } else if (expirationDateExt) {
-        auto expt = mktime(&expirationDateTm);
-        if (expt > nowT) {
-            if (localtime_r(&nowT, &createdDateTm) != &createdDateTm) {
-                wxMessageBox(wxT("Failed to get current date"), wxT("Renew failed"), wxICON_ERROR);
-                return;
-            }
-        } else {
-            wxMessageBox(wxT("Missing reseptdate"), wxT("Renew failed"), wxICON_ERROR);
-            return;
-        }
-    }
-    if (createdDateExt) {
-        std::stringstream sstr{};
-        sstr << (createdDateTm.tm_year + 1900) << "-" << (createdDateTm.tm_mon < 9 ? "0" : "");
-        sstr << (createdDateTm.tm_mon + 1) << "-" << (createdDateTm.tm_mday < 10 ? "0" : "");
-        sstr << createdDateTm.tm_mday;
-        createdDateExt->SetValue(std::make_shared<FhirDateValue>(sstr.str()));
-    }
-    if (expirationDateExt) {
-        std::stringstream sstr{};
-        sstr << (expirationDateTm.tm_year + 1900) << "-" << (expirationDateTm.tm_mon < 9 ? "0" : "");
-        sstr << (expirationDateTm.tm_mon + 1) << "-" << (expirationDateTm.tm_mday < 10 ? "0" : "");
-        sstr << expirationDateTm.tm_mday;
-        expirationDateExt->SetValue(std::make_shared<FhirDateValue>(sstr.str()));
-    }
-    {
-        FhirCodeableConcept recallCode{"urn:oid:2.16.578.1.12.4.1.1.7500", "1", "Fornying"};
-        auto recallInfoExt = std::make_shared<FhirExtension>("recallinfo");
-        if (!reseptId.empty()) {
-            recallInfoExt->AddExtension(
-                    std::make_shared<FhirValueExtension>("recallId", std::make_shared<FhirString>(reseptId)));
-        }
-        recallInfoExt->AddExtension(std::make_shared<FhirValueExtension>("recallcode", std::make_shared<FhirCodeableConceptValue>(recallCode)));
-        recallInfoExt->AddExtension(std::make_shared<FhirValueExtension>("text", std::make_shared<FhirString>("Forny uten endring")));
-        recallInfoExt->AddExtension(std::make_shared<FhirValueExtension>("notsent", std::make_shared<FhirBooleanValue>(true)));
-        reseptAmendment->AddExtension(recallInfoExt);
-    }
-    if (addCreate) {
-        reseptAmendment->AddExtension(std::make_shared<FhirValueExtension>("createeresept", std::make_shared<FhirBooleanValue>(true)));
-    }
+    PrescriptionChangesService::Renew(*medicationStatement);
     UpdateMedications();
 }
