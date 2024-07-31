@@ -67,21 +67,21 @@ PrescriptionDetailsDialog::PrescriptionDetailsDialog(wxWindow *parent,
                         }
                     } else if (url == "reseptdate") {
                         auto valueExtension = std::dynamic_pointer_cast<FhirValueExtension>(extension);
-                        auto value = valueExtension.operator bool() ? std::dynamic_pointer_cast<FhirString>(valueExtension->GetValue()) : std::shared_ptr<FhirString>();
+                        auto value = valueExtension.operator bool() ? std::dynamic_pointer_cast<FhirDateValue>(valueExtension->GetValue()) : std::shared_ptr<FhirDateValue>();
                         if (value) {
-                            prescriptionDate = wxString::FromUTF8(value->GetValue());
+                            prescriptionDate = wxString::FromUTF8(value->GetRawValue());
                         }
                     } else if (url == "expirationdate") {
                         auto valueExtension = std::dynamic_pointer_cast<FhirValueExtension>(extension);
-                        auto value = valueExtension.operator bool() ? std::dynamic_pointer_cast<FhirString>(valueExtension->GetValue()) : std::shared_ptr<FhirString>();
+                        auto value = valueExtension.operator bool() ? std::dynamic_pointer_cast<FhirDateValue>(valueExtension->GetValue()) : std::shared_ptr<FhirDateValue>();
                         if (value) {
-                            expirationDate = wxString::FromUTF8(value->GetValue());
+                            expirationDate = wxString::FromUTF8(value->GetRawValue());
                         }
                     } else if (url == "festUpdate") {
                         auto valueExtension = std::dynamic_pointer_cast<FhirValueExtension>(extension);
-                        auto value = valueExtension.operator bool() ? std::dynamic_pointer_cast<FhirString>(valueExtension->GetValue()) : std::shared_ptr<FhirString>();
+                        auto value = valueExtension.operator bool() ? std::dynamic_pointer_cast<FhirDateTimeValue>(valueExtension->GetValue()) : std::shared_ptr<FhirDateTimeValue>();
                         if (value) {
-                            festUpdate = wxString::FromUTF8(value->GetValue());
+                            festUpdate = wxString::FromUTF8(value->GetDateTime());
                         }
                     } else if (url == "guardiantransparencyreservation") {
                         auto valueExtension = std::dynamic_pointer_cast<FhirValueExtension>(extension);
