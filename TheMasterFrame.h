@@ -26,6 +26,7 @@ namespace pplx {
     template<class ReturnType> class task;
 }
 class PrescriptionDialog;
+class CallContext;
 
 class TheMasterFrame : public wxFrame {
 private:
@@ -55,10 +56,16 @@ public:
     void OnFindPatient(wxCommandEvent &e);
     void OnCreatePatient(wxCommandEvent &e);
     pplx::task<std::string> GetAccessToken();
+private:
+    void GetMedication(CallContext &ctx, const std::function<void (const std::string &err)> &callback);
+public:
     void OnGetMedication(wxCommandEvent &e);
     static void FilterRecallInfos(FhirBundle &bundle, const std::function<bool (const std::string &,const std::shared_ptr<FhirExtension> &)> &predicate);
     static std::map<std::string,std::shared_ptr<FhirExtension>> GetRecallInfos(FhirBundle &bundle);
+private:
+    void SendMedication(CallContext &ctx, const std::function<void (const std::shared_ptr<FhirBundle> &)> &preprocessing, const std::function<void (const std::map<std::string,FhirCoding> &)> &pllResultsFunc, const std::function<void (const std::string &err)> &callback);
     void SendMedication(const std::function<void (const std::shared_ptr<FhirBundle> &)> &preprocessing, const std::function<void (const std::map<std::string,FhirCoding> &)> &pllResultsFunc);
+public:
     void OnSendMedication(wxCommandEvent &e);
     void OnSendPll(wxCommandEvent &e);
     void OnSaveLastRequest(wxCommandEvent &e);

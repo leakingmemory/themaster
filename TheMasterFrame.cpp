@@ -389,18 +389,123 @@ pplx::task<std::string> TheMasterFrame::GetAccessToken() {
     return pplx::task<std::string>([] () {return std::string();});
 }
 
-void TheMasterFrame::OnGetMedication(wxCommandEvent &e) {
+class CallContext {
+private:
+    std::mutex mtx{};
+    std::function<void ()> finish{[] () {}};
+    bool finished{false};
+public:
+    void SetFinish(const std::function<void ()> &);
+    void Finish();
+    ~CallContext();
+};
+
+void CallContext::SetFinish(const std::function<void()> &func) {
+    std::lock_guard lock{mtx};
+    finish = func;
+}
+
+void CallContext::Finish() {
+    std::function<void()> finish{};
+    bool finished;
+    {
+        std::lock_guard lock{mtx};
+        finished = this->finished;
+        finish = this->finish;
+        this->finished = true;
+    }
+    if (!finished) {
+        finish();
+    }
+}
+
+CallContext::~CallContext() {
+    bool finshed;
+    {
+        finished = this->finished;
+        this->finished = true;
+    }
+    if (!finished) {
+        finish();
+    }
+}
+
+class CallGuard {
+private:
+    std::mutex mtx{};
+    std::function<void (const std::string &)> func{};
+    bool called{false};
+public:
+    CallGuard() = delete;
+    explicit CallGuard(const std::function<void (const std::string &)> &func) : func(func) {}
+    CallGuard(const CallGuard &) = delete;
+    CallGuard(CallGuard &&) = delete;
+    CallGuard operator = (const CallGuard &) = delete;
+    CallGuard operator = (CallGuard &&) = delete;
+    ~CallGuard() {
+        if (!called) {
+            auto f = func;
+            wxTheApp->GetTopWindow()->GetEventHandler()->CallAfter([f]() {
+                wxMessageBox(wxT("Completion not called"), wxT("Callback error"), wxICON_ERROR);
+                f("");
+            });
+        }
+    }
+    void Call(const std::string &err) {
+        bool callIt{false};
+        {
+            std::lock_guard lock{mtx};
+            callIt = !called;
+            called = true;
+        }
+        if (callIt) {
+            auto f = func;
+            wxTheApp->GetTopWindow()->GetEventHandler()->CallAfter([f, err]() {
+                f(err);
+            });
+        } else {
+            wxTheApp->GetTopWindow()->GetEventHandler()->CallAfter([]() {
+                wxMessageBox(wxT("Completion called repeatedly"), wxT("Callback error"), wxICON_ERROR);
+            });
+        }
+    }
+};
+
+class SyncGetMedError : public std::exception {
+private:
+    std::string error;
+public:
+    SyncGetMedError(const std::string &error) : error(error) {}
+    const char * what() const noexcept override;
+};
+
+const char *SyncGetMedError::what() const noexcept {
+    return error.c_str();
+}
+
+class SyncSendMedError : public std::exception {
+private:
+    std::string error;
+public:
+    SyncSendMedError(const std::string &error) : error(error) {}
+    const char * what() const noexcept override;
+};
+
+const char *SyncSendMedError::what() const noexcept {
+    return error.c_str();
+}
+
+void TheMasterFrame::GetMedication(CallContext &ctx, const std::function<void(const std::string &)> &callbackF) {
     auto patientInformation = this->patientInformation;
     if (!patientInformation) {
-        wxMessageBox("Error: No patient information provided", "Error", wxICON_ERROR);
-        return;
+        throw SyncGetMedError("Error: No patient information provided");
     }
     std::string apiUrl = url;
     if (apiUrl.empty()) {
-        wxMessageBox("Error: Not connected", "Error", wxICON_ERROR);
-        return;
+        throw SyncGetMedError("Error: Not connected");
     }
 
+    auto callback = std::make_shared<CallGuard>(callbackF);
     auto patient = std::make_shared<FhirPatient>();
     {
         {
@@ -477,38 +582,130 @@ void TheMasterFrame::OnGetMedication(wxCommandEvent &e) {
     std::shared_ptr<std::mutex> getMedResponseMtx = std::make_shared<std::mutex>();
     std::shared_ptr<std::unique_ptr<FhirParameters>> getMedResponse = std::make_shared<std::unique_ptr<FhirParameters>>();
     std::shared_ptr<std::string> rawResponse = std::make_shared<std::string>();
-    std::shared_ptr<WaitingForApiDialog> waitingDialog = std::make_shared<WaitingForApiDialog>(this, "Retrieving medication records", "Requested medication bundle...");
-    responseTask.then([waitingDialog, getMedResponse, getMedResponseMtx, rawResponse] (const pplx::task<web::http::http_response> &responseTask) {
+
+    ctx.SetFinish([this, patientInformation, getMedResponseMtx, getMedResponse, rawRequest, rawResponse] () {
+        std::unique_ptr<FhirParameters> getMedResp{};
+        {
+            std::lock_guard lock{*getMedResponseMtx};
+            getMedResp = std::move(*getMedResponse);
+            lastRequest = *rawRequest;
+            lastResponse = *rawResponse;
+        }
+        if (getMedResp) {
+            std::shared_ptr<FhirBundle> medBundle{};
+            std::string kjHentet{};
+            std::string rfHentet{};
+            FhirCoding kjFeilkode{};
+            FhirCoding rfM96Feilkode{};
+            FhirCoding rfM912Feilkode{};
+            bool kjHarLegemidler{false};
+            bool kjHarLaste{false};
+            bool rfHarLaste{false};
+            for (const auto &param : getMedResp->GetParameters()) {
+                auto name = param.GetName();
+                if (name == "medication") {
+                    medBundle = std::dynamic_pointer_cast<FhirBundle>(param.GetResource());
+                } else if (name == "KJHentetTidspunkt") {
+                    auto datetime = std::dynamic_pointer_cast<FhirDateTimeValue>(param.GetFhirValue());
+                    if (datetime) {
+                        kjHentet = datetime->GetDateTime();
+                    }
+                } else if (name == "RFHentetTidspunkt") {
+                    auto datetime = std::dynamic_pointer_cast<FhirDateTimeValue>(param.GetFhirValue());
+                    if (datetime) {
+                        rfHentet = datetime->GetDateTime();
+                    }
+                } else if (name == "KJFeilkode") {
+                    auto code = std::dynamic_pointer_cast<FhirCodeableConceptValue>(param.GetFhirValue());
+                    if (code) {
+                        auto coding = code->GetCoding();
+                        if (!coding.empty()) {
+                            kjFeilkode = coding.at(0);
+                        }
+                    }
+                } else if (name == "RFM96Feilkode") {
+                    auto code = std::dynamic_pointer_cast<FhirCodeableConceptValue>(param.GetFhirValue());
+                    if (code) {
+                        auto coding = code->GetCoding();
+                        if (!coding.empty()) {
+                            rfM96Feilkode = coding.at(0);
+                        }
+                    }
+                } else if (name == "RFM912Feilkode") {
+                    auto code = std::dynamic_pointer_cast<FhirCodeableConceptValue>(param.GetFhirValue());
+                    if (code) {
+                        auto coding = code->GetCoding();
+                        if (!coding.empty()) {
+                            rfM912Feilkode = coding.at(0);
+                        }
+                    }
+                } else if (name == "KJHarLegemidler") {
+                    auto boolval = std::dynamic_pointer_cast<FhirBooleanValue>(param.GetFhirValue());
+                    if (boolval) {
+                        kjHarLegemidler = boolval->IsTrue();
+                    }
+                } else if (name == "KJHarLaste") {
+                    auto boolval = std::dynamic_pointer_cast<FhirBooleanValue>(param.GetFhirValue());
+                    if (boolval) {
+                        kjHarLaste = boolval->IsTrue();
+                    }
+                } else if (name == "RFHarLaste") {
+                    auto boolval = std::dynamic_pointer_cast<FhirBooleanValue>(param.GetFhirValue());
+                    if (boolval) {
+                        rfHarLaste = boolval->IsTrue();
+                    }
+                }
+            }
+            if (medBundle) {
+                std::shared_ptr<FhirBundle> previousBundle{};
+                if (medicationBundle && medicationBundle->patientInformation == *patientInformation) {
+                    previousBundle = medicationBundle->medBundle;
+                }
+                medicationBundle = std::make_unique<MedBundleData>();
+                *medicationBundle = {
+                        .patientInformation = *patientInformation,
+                        .medBundle = medBundle,
+                        .kjHentet = kjHentet,
+                        .rfHentet = rfHentet,
+                        .kjFeilkode = kjFeilkode,
+                        .rfM96Feilkode = rfM96Feilkode,
+                        .rfM912Feilkode = rfM912Feilkode,
+                        .kjHarLegemidler = kjHarLegemidler,
+                        .kjHarLaste = kjHarLaste,
+                        .rfHarLaste = rfHarLaste
+                };
+                if (previousBundle) {
+                    medicationBundle->InsertNonexistingMedicationsFrom(previousBundle);
+                    medicationBundle->InsertNonexistingMedicationPrescriptionsFrom(previousBundle, helseidIdToken);
+                    medicationBundle->ReplayRenewals(previousBundle);
+                }
+                UpdateHeader();
+                UpdateMedications();
+            }
+        }
+    });
+
+    responseTask.then([callback, getMedResponse, getMedResponseMtx, rawResponse] (const pplx::task<web::http::http_response> &responseTask) {
         try {
             auto response = responseTask.get();
             try {
-                wxTheApp->GetTopWindow()->GetEventHandler()->CallAfter([waitingDialog]() {
-                    waitingDialog->SetMessage("Downloading data...");
-                });
                 auto contentType = response.headers().content_type();
                 if (!contentType.starts_with("application/fhir+json")) {
-                    wxTheApp->GetTopWindow()->GetEventHandler()->CallAfter([waitingDialog, contentType]() {
-                        waitingDialog->Close();
-                        std::string msg{"Wrong content type in response: "};
-                        msg.append(contentType);
-                        wxMessageBox(msg, "Error", wxICON_ERROR);
-                    });
+                    std::string msg{"Wrong content type in response: "};
+                    msg.append(contentType);
+                    callback->Call(msg);
                 } else {
-                    response.extract_json(true).then([waitingDialog, getMedResponse, getMedResponseMtx, rawResponse](
+                    response.extract_json(true).then([callback, getMedResponse, getMedResponseMtx, rawResponse](
                             const pplx::task<web::json::value> &responseBodyTask) {
                         try {
                             auto responseBody = responseBodyTask.get();
                             try {
                                 {
                                     auto responseBodyStr = responseBody.serialize();
-                                    wxTheApp->GetTopWindow()->GetEventHandler()->CallAfter(
-                                            [waitingDialog, rawResponse, responseBodyStr, getMedResponseMtx]() {
-                                                {
-                                                    std::lock_guard lock{*getMedResponseMtx};
-                                                    *rawResponse = responseBodyStr;
-                                                }
-                                                waitingDialog->SetMessage("Decoding data...");
-                                            });
+                                    {
+                                        std::lock_guard lock{*getMedResponseMtx};
+                                        *rawResponse = responseBodyStr;
+                                    }
                                 }
                                 FhirParameters responseParameterBundle = FhirParameters::Parse(responseBody);
                                 {
@@ -516,153 +713,50 @@ void TheMasterFrame::OnGetMedication(wxCommandEvent &e) {
                                     *getMedResponse = std::make_unique<FhirParameters>(
                                             std::move(responseParameterBundle));
                                 }
-                                wxTheApp->GetTopWindow()->GetEventHandler()->CallAfter(
-                                        [waitingDialog, getMedResponse]() {
-                                            waitingDialog->Close();
-                                        });
+                                callback->Call("");
                             } catch (std::exception &e) {
                                 std::string error = e.what();
-                                wxTheApp->GetTopWindow()->GetEventHandler()->CallAfter([waitingDialog, error]() {
-                                    waitingDialog->Close();
-                                    std::string msg{"Error: std::exception: "};
-                                    msg.append(error);
-                                    wxMessageBox(msg, "Error", wxICON_ERROR);
-                                });
+                                std::string msg{"Error: std::exception: "};
+                                msg.append(error);
+                                callback->Call(msg);
                             } catch (...) {
-                                wxTheApp->GetTopWindow()->GetEventHandler()->CallAfter([waitingDialog]() {
-                                    waitingDialog->Close();
-                                    wxMessageBox("Error: Decoding failed", "Error", wxICON_ERROR);
-                                });
+                                callback->Call("Error: Decoding failed");
                             }
                         } catch (std::exception &e) {
                             std::string error = e.what();
-                            wxTheApp->GetTopWindow()->GetEventHandler()->CallAfter([waitingDialog, error]() {
-                                waitingDialog->Close();
-                                std::string msg{"Error: std::exception: "};
-                                msg.append(error);
-                                wxMessageBox(msg, "Error", wxICON_ERROR);
-                            });
+                            std::string msg{"Error: std::exception: "};
+                            msg.append(error);
+                            callback->Call(msg);
                         } catch (...) {
-                            wxTheApp->GetTopWindow()->GetEventHandler()->CallAfter([waitingDialog]() {
-                                waitingDialog->Close();
-                                wxMessageBox("Error: Downloading failed", "Error", wxICON_ERROR);
-                            });
+                            callback->Call("Error: Downloading failed");
                         }
                     });
                 }
             } catch (...) {
-                wxTheApp->GetTopWindow()->GetEventHandler()->CallAfter([waitingDialog]() {
-                    waitingDialog->Close();
-                    wxMessageBox("Error: Downloading failed", "Error", wxICON_ERROR);
-                });
+                callback->Call("Error: Downloading failed");
             }
         } catch (...) {
-            wxTheApp->GetTopWindow()->GetEventHandler()->CallAfter([waitingDialog]() {
-                waitingDialog->Close();
-                wxMessageBox("Error: Get medications request failed", "Error", wxICON_ERROR);
-            });
+            callback->Call("Error: Get medications request failed");
         }
     });
+}
+
+void TheMasterFrame::OnGetMedication(wxCommandEvent &e) {
+    std::shared_ptr<WaitingForApiDialog> waitingDialog = std::make_shared<WaitingForApiDialog>(this, "Retrieving medication records", "Requested medication bundle...");
+    CallContext ctx{};
+    try {
+        GetMedication(ctx, [waitingDialog](const std::string &err) {
+            if (!err.empty()) {
+                wxMessageBox(wxString::FromUTF8(err), wxT("Get medication error"), wxICON_ERROR);
+            }
+            waitingDialog->Close();
+        });
+    } catch (SyncGetMedError &e) {
+        wxMessageBox(wxString::FromUTF8(e.what()), wxT("Get medication error"), wxICON_ERROR);
+        return;
+    }
     waitingDialog->ShowModal();
-    std::unique_ptr<FhirParameters> getMedResp{};
-    {
-        std::lock_guard lock{*getMedResponseMtx};
-        getMedResp = std::move(*getMedResponse);
-        lastRequest = *rawRequest;
-        lastResponse = *rawResponse;
-    }
-    if (getMedResp) {
-        std::shared_ptr<FhirBundle> medBundle{};
-        std::string kjHentet{};
-        std::string rfHentet{};
-        FhirCoding kjFeilkode{};
-        FhirCoding rfM96Feilkode{};
-        FhirCoding rfM912Feilkode{};
-        bool kjHarLegemidler{false};
-        bool kjHarLaste{false};
-        bool rfHarLaste{false};
-        for (const auto &param : getMedResp->GetParameters()) {
-            auto name = param.GetName();
-            if (name == "medication") {
-                medBundle = std::dynamic_pointer_cast<FhirBundle>(param.GetResource());
-            } else if (name == "KJHentetTidspunkt") {
-                auto datetime = std::dynamic_pointer_cast<FhirDateTimeValue>(param.GetFhirValue());
-                if (datetime) {
-                    kjHentet = datetime->GetDateTime();
-                }
-            } else if (name == "RFHentetTidspunkt") {
-                auto datetime = std::dynamic_pointer_cast<FhirDateTimeValue>(param.GetFhirValue());
-                if (datetime) {
-                    rfHentet = datetime->GetDateTime();
-                }
-            } else if (name == "KJFeilkode") {
-                auto code = std::dynamic_pointer_cast<FhirCodeableConceptValue>(param.GetFhirValue());
-                if (code) {
-                    auto coding = code->GetCoding();
-                    if (!coding.empty()) {
-                        kjFeilkode = coding.at(0);
-                    }
-                }
-            } else if (name == "RFM96Feilkode") {
-                auto code = std::dynamic_pointer_cast<FhirCodeableConceptValue>(param.GetFhirValue());
-                if (code) {
-                    auto coding = code->GetCoding();
-                    if (!coding.empty()) {
-                        rfM96Feilkode = coding.at(0);
-                    }
-                }
-            } else if (name == "RFM912Feilkode") {
-                auto code = std::dynamic_pointer_cast<FhirCodeableConceptValue>(param.GetFhirValue());
-                if (code) {
-                    auto coding = code->GetCoding();
-                    if (!coding.empty()) {
-                        rfM912Feilkode = coding.at(0);
-                    }
-                }
-            } else if (name == "KJHarLegemidler") {
-                auto boolval = std::dynamic_pointer_cast<FhirBooleanValue>(param.GetFhirValue());
-                if (boolval) {
-                    kjHarLegemidler = boolval->IsTrue();
-                }
-            } else if (name == "KJHarLaste") {
-                auto boolval = std::dynamic_pointer_cast<FhirBooleanValue>(param.GetFhirValue());
-                if (boolval) {
-                    kjHarLaste = boolval->IsTrue();
-                }
-            } else if (name == "RFHarLaste") {
-                auto boolval = std::dynamic_pointer_cast<FhirBooleanValue>(param.GetFhirValue());
-                if (boolval) {
-                    rfHarLaste = boolval->IsTrue();
-                }
-            }
-        }
-        if (medBundle) {
-            std::shared_ptr<FhirBundle> previousBundle{};
-            if (medicationBundle && medicationBundle->patientInformation == *patientInformation) {
-                previousBundle = medicationBundle->medBundle;
-            }
-            medicationBundle = std::make_unique<MedBundleData>();
-            *medicationBundle = {
-                .patientInformation = *patientInformation,
-                .medBundle = medBundle,
-                .kjHentet = kjHentet,
-                .rfHentet = rfHentet,
-                .kjFeilkode = kjFeilkode,
-                .rfM96Feilkode = rfM96Feilkode,
-                .rfM912Feilkode = rfM912Feilkode,
-                .kjHarLegemidler = kjHarLegemidler,
-                .kjHarLaste = kjHarLaste,
-                .rfHarLaste = rfHarLaste
-            };
-            if (previousBundle) {
-                medicationBundle->InsertNonexistingMedicationsFrom(previousBundle);
-                medicationBundle->InsertNonexistingMedicationPrescriptionsFrom(previousBundle, helseidIdToken);
-                medicationBundle->ReplayRenewals(previousBundle);
-            }
-            UpdateHeader();
-            UpdateMedications();
-        }
-    }
+    ctx.Finish();
 }
 
 void TheMasterFrame::FilterRecallInfos(FhirBundle &bundle, const std::function<bool(const std::string &,
@@ -749,14 +843,15 @@ std::map<std::string,std::shared_ptr<FhirExtension>> TheMasterFrame::GetRecallIn
     return map;
 }
 
-void TheMasterFrame::SendMedication(const std::function<void (const std::shared_ptr<FhirBundle> &)> &preprocessing, const std::function<void (const std::map<std::string,FhirCoding> &)> &pllResultsFunc) {
+void TheMasterFrame::SendMedication(CallContext &ctx,
+                                    const std::function<void(const std::shared_ptr<FhirBundle> &)> &preprocessing,
+                                    const std::function<void(const std::map<std::string, FhirCoding> &)> &pllResultsFunc,
+                                    const std::function<void (const std::string &err)> &callbackF) {
     if (!patientInformation) {
-        wxMessageBox("Error: No patient information provided", "Error", wxICON_ERROR);
-        return;
+        throw SyncSendMedError("Error: No patient information provided");
     }
     if (url.empty()) {
-        wxMessageBox("Error: Not connected", "Error", wxICON_ERROR);
-        return;
+        throw SyncSendMedError("Error: Not connected");
     }
     std::string apiUrl = url;
     std::shared_ptr<FhirBundle> bundle{};
@@ -764,8 +859,7 @@ void TheMasterFrame::SendMedication(const std::function<void (const std::shared_
         bundle = medicationBundle->medBundle;
     }
     if (!bundle) {
-        wxMessageBox("Error: Get medications first please", "Error", wxICON_ERROR);
-        return;
+        throw SyncSendMedError("Error: Get medications first please");
     }
 
     pplx::task<web::http::http_response> responseTask{};
@@ -846,31 +940,203 @@ void TheMasterFrame::SendMedication(const std::function<void (const std::shared_
     std::shared_ptr<std::mutex> sendMedResponseMtx = std::make_shared<std::mutex>();
     std::shared_ptr<std::shared_ptr<Fhir>> sendMedResponse = std::make_shared<std::shared_ptr<Fhir>>();
     std::shared_ptr<std::string> rawResponse = std::make_shared<std::string>();
-    std::shared_ptr<WaitingForApiDialog> waitingDialog = std::make_shared<WaitingForApiDialog>(this, "Sending medication records", "Sent medication bundle...");
-    responseTask.then([waitingDialog, sendMedResponse, rawResponse, sendMedResponseMtx] (const pplx::task<web::http::http_response> &responseTask) {
+    ctx.SetFinish([this, bundle, sendMedResponseMtx, sendMedResponse, rawRequest, rawResponse, pllResultsFunc] () -> void {
+        std::shared_ptr<FhirOperationOutcome> opOutcome{};
+        std::shared_ptr<FhirParameters> sendMedResp{};
+        {
+            std::lock_guard lock{*sendMedResponseMtx};
+            opOutcome = std::dynamic_pointer_cast<FhirOperationOutcome>(*sendMedResponse);
+            sendMedResp = std::dynamic_pointer_cast<FhirParameters>(*sendMedResponse);
+            lastRequest = std::move(*rawRequest);
+            lastResponse = std::move(*rawResponse);
+        }
+        if (!sendMedResp) {
+            if (opOutcome) {
+                std::stringstream str{};
+                auto issues = opOutcome->GetIssue();
+                auto iterator = issues.begin();
+                while (iterator != issues.end()) {
+                    const auto &issue = *iterator;
+                    str << issue.GetSeverity() << ": " << issue.GetDiagnostics() << " (" << issue.GetCode() << ")";
+                    ++iterator;
+                    if (iterator != issues.end()) {
+                        str << "\n";
+                    }
+                }
+                wxMessageBox(wxString::FromUTF8(str.str()), wxT("Error"), wxICON_ERROR);
+            } else {
+                wxMessageBox(wxT("Error: Server did not respond properly to sending medications."), wxT("Error"), wxICON_ERROR);
+            }
+            return;
+        }
+        int recallCount{0};
+        int prescriptionCount{0};
+        std::map<std::string,FhirCoding> pllResults{};
+        for (const auto &param : sendMedResp->GetParameters()) {
+            auto name = param.GetName();
+            if (name == "recallCount") {
+                auto value = std::dynamic_pointer_cast<FhirIntegerValue>(param.GetFhirValue());
+                recallCount = (int) value->GetValue();
+            } else if (name == "prescriptionCount") {
+                auto value = std::dynamic_pointer_cast<FhirIntegerValue>(param.GetFhirValue());
+                prescriptionCount = (int) value->GetValue();
+            } else if (name == "PllResult") {
+                std::string pllId{};
+                FhirCoding resultCode{};
+                {
+                    auto subparams = param.GetPart();
+                    for (const auto &subparam : subparams) {
+                        auto name = subparam->GetName();
+                        if (name == "PllmessageID") {
+                            auto value = std::dynamic_pointer_cast<FhirString>(subparam->GetFhirValue());
+                            if (value) {
+                                pllId = value->GetValue();
+                            }
+                        } else if (name == "resultCode") {
+                            auto value = std::dynamic_pointer_cast<FhirCodingValue>(subparam->GetFhirValue());
+                            if (value) {
+                                resultCode = *value;
+                            }
+                        }
+                    }
+                }
+                if (!pllId.empty()) {
+                    pllResults.insert_or_assign(pllId, resultCode);
+                }
+            } else if (name == "prescriptionOperationResult") {
+                std::string reseptId{};
+                FhirCoding resultCode{};
+                {
+                    auto subparams = param.GetPart();
+                    for (const auto &subparam : subparams) {
+                        auto name = subparam->GetName();
+                        if (name == "reseptID") {
+                            auto value = std::dynamic_pointer_cast<FhirString>(subparam->GetFhirValue());
+                            if (value) {
+                                reseptId = value->GetValue();
+                            }
+                        } else if (name == "resultCode") {
+                            auto value = std::dynamic_pointer_cast<FhirCodingValue>(subparam->GetFhirValue());
+                            if (value) {
+                                resultCode = *value;
+                            }
+                        }
+                    }
+                }
+                if (!reseptId.empty()) {
+                    if (resultCode.GetCode() == "0") {
+                        auto bundleEntries = bundle->GetEntries();
+                        for (auto &bundleEntry: bundleEntries) {
+                            auto medicationStatement = std::dynamic_pointer_cast<FhirMedicationStatement>(
+                                    bundleEntry.GetResource());
+                            if (medicationStatement) {
+                                std::string reseptid{};
+                                {
+                                    auto identifiers = medicationStatement->GetIdentifiers();
+                                    for (const auto &identifier: identifiers) {
+                                        auto type = identifier.GetType().GetText();
+                                        std::transform(type.begin(), type.end(), type.begin(),
+                                                       [](char ch) { return std::tolower(ch); });
+                                        if (type == "reseptid") {
+                                            reseptid = identifier.GetValue();
+                                        }
+                                    }
+                                }
+                                if (reseptid != reseptId) {
+                                    continue;
+                                }
+                                auto extensions = medicationStatement->GetExtensions();
+                                for (const auto &ext: extensions) {
+                                    auto url = ext->GetUrl();
+                                    if (url == "http://ehelse.no/fhir/StructureDefinition/sfm-reseptamendment") {
+                                        auto extensions = ext->GetExtensions();
+                                        auto iterator = extensions.begin();
+                                        while (iterator != extensions.end()) {
+                                            auto ext = *iterator;
+                                            if (ext->GetUrl() == "createeresept") {
+                                                iterator = extensions.erase(iterator);
+                                            } else {
+                                                ++iterator;
+                                            }
+                                        }
+                                        ext->SetExtensions(std::move(extensions));
+                                    }
+                                }
+                            }
+                        }
+                        bundle->SetEntries(bundleEntries);
+                    } else if (resultCode.GetCode() == "1") {
+                        FilterRecallInfos(*bundle, [&reseptId] (const auto &recallPrescriptionId, const auto &recallInfo) -> bool {
+                            if (reseptId == recallPrescriptionId) {
+                                auto extensions = recallInfo->GetExtensions();
+                                auto iterator = extensions.begin();
+                                while (iterator != extensions.end()) {
+                                    auto url = (*iterator)->GetUrl();
+                                    if (url != "notsent") {
+                                        ++iterator;
+                                    } else {
+                                        iterator = extensions.erase(iterator);
+                                    };
+                                }
+                                recallInfo->SetExtensions(extensions);
+                            } else {
+                                auto extensions = recallInfo->GetExtensions();
+                                bool idMatch{false};
+                                bool notSent{false};
+                                for (const auto &extension : extensions) {
+                                    auto url = extension->GetUrl();
+                                    std::transform(url.cbegin(), url.cend(), url.begin(), [] (char ch) { return std::tolower(ch); });
+                                    if (url == "recallid") {
+                                        auto valueExt = std::dynamic_pointer_cast<FhirValueExtension>(extension);
+                                        if (valueExt) {
+                                            auto value = std::dynamic_pointer_cast<FhirString>(valueExt->GetValue());
+                                            if (value) {
+                                                if (value->GetValue() == reseptId) {
+                                                    idMatch = true;
+                                                }
+                                            }
+                                        }
+                                    }
+                                    if (url == "notsent") {
+                                        notSent = true;
+                                    }
+                                }
+                                if (idMatch && notSent) {
+                                    return false;
+                                }
+                            }
+                            return true;
+                        });
+                    } else {
+                        std::string display = resultCode.GetDisplay();
+                        wxMessageBox(wxString::FromUTF8(display), wxT("Prescription sending error"), wxICON_ERROR);
+                    }
+                }
+            }
+        }
+        pllResultsFunc(pllResults);
+        UpdateMedications();
+        std::stringstream str{};
+        str << "Recalled " << recallCount << (recallCount == 1 ? " prescription and prescribed " : " prescriptions and prescribed ")
+            << prescriptionCount << (prescriptionCount == 1 ? " prescription." : " prescriptions.");
+        wxMessageBox(str.str(), wxT("Successful sending"), wxICON_INFORMATION);
+    });
+    auto callback = std::make_shared<CallGuard>(callbackF);
+    responseTask.then([callback, sendMedResponse, rawResponse, sendMedResponseMtx] (const pplx::task<web::http::http_response> &responseTask) {
         try {
             auto response = responseTask.get();
             try {
-                wxTheApp->GetTopWindow()->GetEventHandler()->CallAfter([waitingDialog]() {
-                    waitingDialog->SetMessage("Receiving results...");
-                });
                 auto contentType = response.headers().content_type();
                 if (!contentType.starts_with("application/fhir+json")) {
-                    wxTheApp->GetTopWindow()->GetEventHandler()->CallAfter([waitingDialog, contentType]() {
-                        waitingDialog->Close();
-                        std::string msg{"Wrong content type in response: "};
-                        msg.append(contentType);
-                        wxMessageBox(msg, "Error", wxICON_ERROR);
-                    });
+                    std::string msg{"Wrong content type in response: "};
+                    msg.append(contentType);
+                    callback->Call(msg);
                 } else {
-                    response.extract_json(true).then([waitingDialog, sendMedResponse, rawResponse, sendMedResponseMtx](
+                    response.extract_json(true).then([callback, sendMedResponse, rawResponse, sendMedResponseMtx](
                             const pplx::task<web::json::value> &responseBodyTask) {
                         try {
                             auto responseBody = responseBodyTask.get();
                             try {
-                                wxTheApp->GetTopWindow()->GetEventHandler()->CallAfter([waitingDialog]() {
-                                    waitingDialog->SetMessage("Decoding response...");
-                                });
                                 {
                                     std::lock_guard lock{*sendMedResponseMtx};
                                     *rawResponse = responseBody.serialize();
@@ -880,233 +1146,50 @@ void TheMasterFrame::SendMedication(const std::function<void (const std::shared_
                                     std::lock_guard lock{*sendMedResponseMtx};
                                     *sendMedResponse = responseParameterBundle;
                                 }
-                                wxTheApp->GetTopWindow()->GetEventHandler()->CallAfter(
-                                        [waitingDialog, sendMedResponse]() {
-                                            waitingDialog->Close();
-                                        });
+                                callback->Call("");
                             } catch (std::exception &e) {
                                 std::string error = e.what();
-                                wxTheApp->GetTopWindow()->GetEventHandler()->CallAfter([waitingDialog, error]() {
-                                    waitingDialog->Close();
-                                    std::string msg{"Error: std::exception: "};
-                                    msg.append(error);
-                                    wxMessageBox(msg, "Error", wxICON_ERROR);
-                                });
+                                std::string msg{"Error: std::exception: "};
+                                msg.append(error);
+                                callback->Call(msg);
                             } catch (...) {
-                                wxTheApp->GetTopWindow()->GetEventHandler()->CallAfter([waitingDialog]() {
-                                    waitingDialog->Close();
-                                    wxMessageBox("Error: Decoding failed", "Error", wxICON_ERROR);
-                                });
+                                callback->Call("Error: Decoding failed");
                             }
                         } catch (std::exception &e) {
                             std::string error = e.what();
-                            wxTheApp->GetTopWindow()->GetEventHandler()->CallAfter([waitingDialog, error]() {
-                                waitingDialog->Close();
-                                std::string msg{"Error: std::exception: "};
-                                msg.append(error);
-                                wxMessageBox(msg, "Error", wxICON_ERROR);
-                            });
+                            std::string msg{"Error: std::exception: "};
+                            msg.append(error);
+                            callback->Call(msg);
                         } catch (...) {
-                            wxTheApp->GetTopWindow()->GetEventHandler()->CallAfter([waitingDialog]() {
-                                waitingDialog->Close();
-                                wxMessageBox("Error: Send medication failed", "Error", wxICON_ERROR);
-                            });
+                            callback->Call("Error: Send medication failed");
                         }
                     });
                 }
             } catch (...) {
-                wxTheApp->GetTopWindow()->GetEventHandler()->CallAfter([waitingDialog]() {
-                    waitingDialog->Close();
-                    wxMessageBox("Error: Send medication failed", "Error", wxICON_ERROR);
-                });
+                callback->Call("Error: Send medication failed");
             }
         } catch (...) {
-            wxTheApp->GetTopWindow()->GetEventHandler()->CallAfter([waitingDialog]() {
-                waitingDialog->Close();
-                wxMessageBox("Error: Send medications failed", "Error", wxICON_ERROR);
-            });
+            callback->Call("Error: Send medications failed");
         }
     });
-    waitingDialog->ShowModal();
-    std::shared_ptr<FhirOperationOutcome> opOutcome{};
-    std::shared_ptr<FhirParameters> sendMedResp{};
-    {
-        std::lock_guard lock{*sendMedResponseMtx};
-        opOutcome = std::dynamic_pointer_cast<FhirOperationOutcome>(*sendMedResponse);
-        sendMedResp = std::dynamic_pointer_cast<FhirParameters>(*sendMedResponse);
-        lastRequest = std::move(*rawRequest);
-        lastResponse = std::move(*rawResponse);
-    }
-    if (!sendMedResp) {
-        if (opOutcome) {
-            std::stringstream str{};
-            auto issues = opOutcome->GetIssue();
-            auto iterator = issues.begin();
-            while (iterator != issues.end()) {
-                const auto &issue = *iterator;
-                str << issue.GetSeverity() << ": " << issue.GetDiagnostics() << " (" << issue.GetCode() << ")";
-                ++iterator;
-                if (iterator != issues.end()) {
-                    str << "\n";
-                }
+}
+
+void TheMasterFrame::SendMedication(const std::function<void (const std::shared_ptr<FhirBundle> &)> &preprocessing, const std::function<void (const std::map<std::string,FhirCoding> &)> &pllResultsFunc) {
+    std::shared_ptr<WaitingForApiDialog> waitingDialog = std::make_shared<WaitingForApiDialog>(this, "Sending medication records", "Sending medication bundle...");
+    CallContext ctx{};
+    try {
+        SendMedication(ctx, preprocessing, pllResultsFunc, [waitingDialog] (const std::string &err) {
+            if (!err.empty()) {
+                wxMessageBox(wxString::FromUTF8(err), wxT("Send medication error"), wxICON_ERROR);
             }
-            wxMessageBox(wxString::FromUTF8(str.str()), wxT("Error"), wxICON_ERROR);
-        } else {
-            wxMessageBox(wxT("Error: Server did not respond properly to sending medications."), wxT("Error"), wxICON_ERROR);
-        }
+            waitingDialog->Close();
+        });
+    } catch (SyncSendMedError &e) {
+        wxMessageBox(wxString::FromUTF8(e.what()), wxT("Send medication error"), wxICON_ERROR);
         return;
     }
-    int recallCount{0};
-    int prescriptionCount{0};
-    std::map<std::string,FhirCoding> pllResults{};
-    for (const auto &param : sendMedResp->GetParameters()) {
-        auto name = param.GetName();
-        if (name == "recallCount") {
-            auto value = std::dynamic_pointer_cast<FhirIntegerValue>(param.GetFhirValue());
-            recallCount = (int) value->GetValue();
-        } else if (name == "prescriptionCount") {
-            auto value = std::dynamic_pointer_cast<FhirIntegerValue>(param.GetFhirValue());
-            prescriptionCount = (int) value->GetValue();
-        } else if (name == "PllResult") {
-            std::string pllId{};
-            FhirCoding resultCode{};
-            {
-                auto subparams = param.GetPart();
-                for (const auto &subparam : subparams) {
-                    auto name = subparam->GetName();
-                    if (name == "PllmessageID") {
-                        auto value = std::dynamic_pointer_cast<FhirString>(subparam->GetFhirValue());
-                        if (value) {
-                            pllId = value->GetValue();
-                        }
-                    } else if (name == "resultCode") {
-                        auto value = std::dynamic_pointer_cast<FhirCodingValue>(subparam->GetFhirValue());
-                        if (value) {
-                            resultCode = *value;
-                        }
-                    }
-                }
-            }
-            if (!pllId.empty()) {
-                pllResults.insert_or_assign(pllId, resultCode);
-            }
-        } else if (name == "prescriptionOperationResult") {
-            std::string reseptId{};
-            FhirCoding resultCode{};
-            {
-                auto subparams = param.GetPart();
-                for (const auto &subparam : subparams) {
-                    auto name = subparam->GetName();
-                    if (name == "reseptID") {
-                        auto value = std::dynamic_pointer_cast<FhirString>(subparam->GetFhirValue());
-                        if (value) {
-                            reseptId = value->GetValue();
-                        }
-                    } else if (name == "resultCode") {
-                        auto value = std::dynamic_pointer_cast<FhirCodingValue>(subparam->GetFhirValue());
-                        if (value) {
-                            resultCode = *value;
-                        }
-                    }
-                }
-            }
-            if (!reseptId.empty()) {
-                if (resultCode.GetCode() == "0") {
-                    auto bundleEntries = bundle->GetEntries();
-                    for (auto &bundleEntry: bundleEntries) {
-                        auto medicationStatement = std::dynamic_pointer_cast<FhirMedicationStatement>(
-                                bundleEntry.GetResource());
-                        if (medicationStatement) {
-                            std::string reseptid{};
-                            {
-                                auto identifiers = medicationStatement->GetIdentifiers();
-                                for (const auto &identifier: identifiers) {
-                                    auto type = identifier.GetType().GetText();
-                                    std::transform(type.begin(), type.end(), type.begin(),
-                                                   [](char ch) { return std::tolower(ch); });
-                                    if (type == "reseptid") {
-                                        reseptid = identifier.GetValue();
-                                    }
-                                }
-                            }
-                            if (reseptid != reseptId) {
-                                continue;
-                            }
-                            auto extensions = medicationStatement->GetExtensions();
-                            for (const auto &ext: extensions) {
-                                auto url = ext->GetUrl();
-                                if (url == "http://ehelse.no/fhir/StructureDefinition/sfm-reseptamendment") {
-                                    auto extensions = ext->GetExtensions();
-                                    auto iterator = extensions.begin();
-                                    while (iterator != extensions.end()) {
-                                        auto ext = *iterator;
-                                        if (ext->GetUrl() == "createeresept") {
-                                            iterator = extensions.erase(iterator);
-                                        } else {
-                                            ++iterator;
-                                        }
-                                    }
-                                    ext->SetExtensions(std::move(extensions));
-                                }
-                            }
-                        }
-                    }
-                    bundle->SetEntries(bundleEntries);
-                } else if (resultCode.GetCode() == "1") {
-                    FilterRecallInfos(*bundle, [&reseptId] (const auto &recallPrescriptionId, const auto &recallInfo) -> bool {
-                        if (reseptId == recallPrescriptionId) {
-                            auto extensions = recallInfo->GetExtensions();
-                            auto iterator = extensions.begin();
-                            while (iterator != extensions.end()) {
-                                auto url = (*iterator)->GetUrl();
-                                if (url != "notsent") {
-                                    ++iterator;
-                                } else {
-                                    iterator = extensions.erase(iterator);
-                                };
-                            }
-                            recallInfo->SetExtensions(extensions);
-                        } else {
-                            auto extensions = recallInfo->GetExtensions();
-                            bool idMatch{false};
-                            bool notSent{false};
-                            for (const auto &extension : extensions) {
-                                auto url = extension->GetUrl();
-                                std::transform(url.cbegin(), url.cend(), url.begin(), [] (char ch) { return std::tolower(ch); });
-                                if (url == "recallid") {
-                                    auto valueExt = std::dynamic_pointer_cast<FhirValueExtension>(extension);
-                                    if (valueExt) {
-                                        auto value = std::dynamic_pointer_cast<FhirString>(valueExt->GetValue());
-                                        if (value) {
-                                            if (value->GetValue() == reseptId) {
-                                                idMatch = true;
-                                            }
-                                        }
-                                    }
-                                }
-                                if (url == "notsent") {
-                                    notSent = true;
-                                }
-                            }
-                            if (idMatch && notSent) {
-                                return false;
-                            }
-                        }
-                        return true;
-                    });
-                } else {
-                    std::string display = resultCode.GetDisplay();
-                    wxMessageBox(wxString::FromUTF8(display), wxT("Prescription sending error"), wxICON_ERROR);
-                }
-            }
-        }
-    }
-    pllResultsFunc(pllResults);
-    UpdateMedications();
-    std::stringstream str{};
-    str << "Recalled " << recallCount << (recallCount == 1 ? " prescription and prescribed " : " prescriptions and prescribed ")
-        << prescriptionCount << (prescriptionCount == 1 ? " prescription." : " prescriptions.");
-    wxMessageBox(str.str(), wxT("Successful sending"), wxICON_INFORMATION);
+    waitingDialog->ShowModal();
+    ctx.Finish();
 }
 
 void TheMasterFrame::OnSendMedication(wxCommandEvent &e) {
@@ -1259,292 +1342,310 @@ void TheMasterFrame::OnSendPll(wxCommandEvent &e) {
         }
     }
     auto subjectRef = GetSubjectRef();
-    SendMedication([subjectRef, selected, pllMedicationStatements, newPllIds] (const std::shared_ptr<FhirBundle> &bundle) {
-        auto entries = bundle->GetEntries();
-        std::vector<FhirBundleEntry> appendEntries{};
-        for (const auto &entry : entries) {
-            auto composition = std::dynamic_pointer_cast<FhirComposition>(entry.GetResource());
-            if (composition) {
-                auto sections = composition->GetSections();
-                for (auto &section : sections) {
-                    auto codings = section.GetCode().GetCoding();
-                    if (codings.empty()) {
-                        continue;
-                    }
-                    if (codings[0].GetCode() == "sectionPLLinfo") {
-                        auto sectionEntries = section.GetEntries();
-                        std::shared_ptr<FhirBasic> m251Message{};
-                        {
-                            std::vector<std::shared_ptr<FhirBasic>> m25Messages{};
-                            for (const auto &entry: sectionEntries) {
-                                auto ref = entry.GetReference();
-                                for (const auto &bundleEntry: entries) {
-                                    if (bundleEntry.GetFullUrl() == ref) {
-                                        auto fhirBasic = std::dynamic_pointer_cast<FhirBasic>(
-                                                bundleEntry.GetResource());
-                                        if (fhirBasic) {
-                                            m25Messages.emplace_back(fhirBasic);
-                                        }
-                                    }
-                                }
-                            }
-                            for (const auto &m25Message : m25Messages) {
-                                std::string code{};
-                                {
-                                    auto codings = m25Message->GetCode().GetCoding();
-                                    if (!codings.empty()) {
-                                        code = codings[0].GetCode();
-                                    }
-                                }
-                                if (code == "M25.1") {
-                                    m251Message = m25Message;
-                                }
-                            }
+    std::shared_ptr<WaitingForApiDialog> waitingDialog = std::make_shared<WaitingForApiDialog>(this, "Sending PLL", "Sending medication bundle...");
+    auto ctx = std::make_shared<CallContext>();
+    try {
+        SendMedication(*ctx, [subjectRef, selected, pllMedicationStatements, newPllIds](
+                const std::shared_ptr<FhirBundle> &bundle) {
+            auto entries = bundle->GetEntries();
+            std::vector<FhirBundleEntry> appendEntries{};
+            for (const auto &entry: entries) {
+                auto composition = std::dynamic_pointer_cast<FhirComposition>(entry.GetResource());
+                if (composition) {
+                    auto sections = composition->GetSections();
+                    for (auto &section: sections) {
+                        auto codings = section.GetCode().GetCoding();
+                        if (codings.empty()) {
+                            continue;
                         }
-                        if (!m251Message) {
-                            std::string url{"urn:uuid:"};
-                            m251Message = std::make_shared<FhirBasic>();
+                        if (codings[0].GetCode() == "sectionPLLinfo") {
+                            auto sectionEntries = section.GetEntries();
+                            std::shared_ptr<FhirBasic> m251Message{};
                             {
-                                boost::uuids::random_generator generator;
-                                boost::uuids::uuid randomUUID = generator();
-                                std::string uuidStr = boost::uuids::to_string(randomUUID);
-                                m251Message->SetId(uuidStr);
-                                url.append(uuidStr);
-                            }
-                            m251Message->SetProfile("http://ehelse.no/fhir/StructureDefinition/sfm-PLL-info");
-                            m251Message->SetCode(FhirCodeableConcept("http://ehelse.no/fhir/CodeSystem/sfm-message-type", "M25.1", "PLL"));
-                            if (subjectRef.IsSet()) {
-                                m251Message->SetSubject(subjectRef);
-                            }
-                            appendEntries.emplace_back(url, m251Message);
-                            sectionEntries.emplace_back(url, "http://ehelse.no/fhir/StructureDefinition/sfm-PLL-info", "sfm-PLL-info");
-                            section.SetEntries(sectionEntries);
-                            section.SetEmptyReason({});
-                        }
-                        std::shared_ptr<FhirExtension> metadataPll{};
-                        {
-                            auto extensions = m251Message->GetExtensions();
-                            for (const auto &extension: extensions) {
-                                auto urlLower = extension->GetUrl();
-                                std::transform(urlLower.begin(), urlLower.end(), urlLower.begin(), [] (auto ch) -> char {return std::tolower(ch);});
-                                if (urlLower == "http://ehelse.no/fhir/structuredefinition/sfm-pllinformation") {
-                                    metadataPll = extension;
+                                std::vector<std::shared_ptr<FhirBasic>> m25Messages{};
+                                for (const auto &entry: sectionEntries) {
+                                    auto ref = entry.GetReference();
+                                    for (const auto &bundleEntry: entries) {
+                                        if (bundleEntry.GetFullUrl() == ref) {
+                                            auto fhirBasic = std::dynamic_pointer_cast<FhirBasic>(
+                                                    bundleEntry.GetResource());
+                                            if (fhirBasic) {
+                                                m25Messages.emplace_back(fhirBasic);
+                                            }
+                                        }
+                                    }
+                                }
+                                for (const auto &m25Message: m25Messages) {
+                                    std::string code{};
+                                    {
+                                        auto codings = m25Message->GetCode().GetCoding();
+                                        if (!codings.empty()) {
+                                            code = codings[0].GetCode();
+                                        }
+                                    }
+                                    if (code == "M25.1") {
+                                        m251Message = m25Message;
+                                    }
                                 }
                             }
-                        }
-                        if (!metadataPll) {
-                            metadataPll = std::make_shared<FhirExtension>("http://ehelse.no/fhir/StructureDefinition/sfm-pllInformation");
-                            m251Message->AddExtension(metadataPll);
-                        }
-                        std::shared_ptr<FhirBooleanValue> createPll{};
-                        {
-                            auto extensions = metadataPll->GetExtensions();
-                            for (const auto &extension: extensions) {
-                                auto urlLower = extension->GetUrl();
-                                std::transform(urlLower.begin(), urlLower.end(), urlLower.begin(), [] (auto ch) -> char {return std::tolower(ch);});
-                                if (urlLower == "createpll") {
-                                    auto valueExtension = std::dynamic_pointer_cast<FhirValueExtension>(extension);
-                                    if (valueExtension) {
-                                        auto value = std::dynamic_pointer_cast<FhirBooleanValue>(valueExtension->GetValue());
-                                        if (value) {
-                                            createPll = value;
+                            if (!m251Message) {
+                                std::string url{"urn:uuid:"};
+                                m251Message = std::make_shared<FhirBasic>();
+                                {
+                                    boost::uuids::random_generator generator;
+                                    boost::uuids::uuid randomUUID = generator();
+                                    std::string uuidStr = boost::uuids::to_string(randomUUID);
+                                    m251Message->SetId(uuidStr);
+                                    url.append(uuidStr);
+                                }
+                                m251Message->SetProfile("http://ehelse.no/fhir/StructureDefinition/sfm-PLL-info");
+                                m251Message->SetCode(
+                                        FhirCodeableConcept("http://ehelse.no/fhir/CodeSystem/sfm-message-type",
+                                                            "M25.1", "PLL"));
+                                if (subjectRef.IsSet()) {
+                                    m251Message->SetSubject(subjectRef);
+                                }
+                                appendEntries.emplace_back(url, m251Message);
+                                sectionEntries.emplace_back(url,
+                                                            "http://ehelse.no/fhir/StructureDefinition/sfm-PLL-info",
+                                                            "sfm-PLL-info");
+                                section.SetEntries(sectionEntries);
+                                section.SetEmptyReason({});
+                            }
+                            std::shared_ptr<FhirExtension> metadataPll{};
+                            {
+                                auto extensions = m251Message->GetExtensions();
+                                for (const auto &extension: extensions) {
+                                    auto urlLower = extension->GetUrl();
+                                    std::transform(urlLower.begin(), urlLower.end(), urlLower.begin(),
+                                                   [](auto ch) -> char { return std::tolower(ch); });
+                                    if (urlLower == "http://ehelse.no/fhir/structuredefinition/sfm-pllinformation") {
+                                        metadataPll = extension;
+                                    }
+                                }
+                            }
+                            if (!metadataPll) {
+                                metadataPll = std::make_shared<FhirExtension>(
+                                        "http://ehelse.no/fhir/StructureDefinition/sfm-pllInformation");
+                                m251Message->AddExtension(metadataPll);
+                            }
+                            std::shared_ptr<FhirBooleanValue> createPll{};
+                            {
+                                auto extensions = metadataPll->GetExtensions();
+                                for (const auto &extension: extensions) {
+                                    auto urlLower = extension->GetUrl();
+                                    std::transform(urlLower.begin(), urlLower.end(), urlLower.begin(),
+                                                   [](auto ch) -> char { return std::tolower(ch); });
+                                    if (urlLower == "createpll") {
+                                        auto valueExtension = std::dynamic_pointer_cast<FhirValueExtension>(extension);
+                                        if (valueExtension) {
+                                            auto value = std::dynamic_pointer_cast<FhirBooleanValue>(
+                                                    valueExtension->GetValue());
+                                            if (value) {
+                                                createPll = value;
+                                            }
                                         }
                                     }
                                 }
                             }
-                        }
-                        if (createPll) {
-                            createPll->SetValue(true);
-                        } else {
-                            createPll = std::make_shared<FhirBooleanValue>(true);
-                            metadataPll->AddExtension(std::make_shared<FhirValueExtension>("createPLL", createPll));
-                        }
-                    } else if (codings[0].GetCode() == "sectionMedication") {
-                        auto entries = section.GetEntries();
-                        auto iterator = entries.begin();
-                        while (iterator != entries.end()) {
-                            auto reference = iterator->GetReference();
-                            bool found{false};
-                            for (const auto &id : selected) {
-                                if (reference == id) {
-                                    found = true;
-                                    break;
-                                }
-                            }
-                            if (found) {
-                                ++iterator;
+                            if (createPll) {
+                                createPll->SetValue(true);
                             } else {
-                                iterator = entries.erase(iterator);
+                                createPll = std::make_shared<FhirBooleanValue>(true);
+                                metadataPll->AddExtension(std::make_shared<FhirValueExtension>("createPLL", createPll));
                             }
-                        }
-                        section.SetEntries(entries);
-                    }
-                }
-                composition->SetSections(sections);
-                continue;
-            }
-        }
-        {
-            auto iterator = entries.begin();
-            while (iterator != entries.end()) {
-                auto medicationStatement = std::dynamic_pointer_cast<FhirMedicationStatement>(iterator->GetResource());
-                if (medicationStatement) {
-                    std::string pllId{};
-                    {
-                        auto identifiers = medicationStatement->GetIdentifiers();
-                        auto iterator = identifiers.begin();
-                        while (iterator != identifiers.end()) {
-                            const auto &identifier = *iterator;
-                            auto key = identifier.GetType().GetText();
-                            std::transform(key.cbegin(), key.cend(), key.begin(), [] (char ch) {return std::tolower(ch);});
-                            if (key == "pll") {
-                                pllId = identifier.GetValue();
+                        } else if (codings[0].GetCode() == "sectionMedication") {
+                            auto entries = section.GetEntries();
+                            auto iterator = entries.begin();
+                            while (iterator != entries.end()) {
+                                auto reference = iterator->GetReference();
                                 bool found{false};
-                                for (const auto &newId : newPllIds) {
-                                    if (newId == pllId) {
+                                for (const auto &id: selected) {
+                                    if (reference == id) {
                                         found = true;
                                         break;
                                     }
                                 }
                                 if (found) {
-                                    iterator = identifiers.erase(iterator);
+                                    ++iterator;
+                                } else {
+                                    iterator = entries.erase(iterator);
+                                }
+                            }
+                            section.SetEntries(entries);
+                        }
+                    }
+                    composition->SetSections(sections);
+                    continue;
+                }
+            }
+            {
+                auto iterator = entries.begin();
+                while (iterator != entries.end()) {
+                    auto medicationStatement = std::dynamic_pointer_cast<FhirMedicationStatement>(
+                            iterator->GetResource());
+                    if (medicationStatement) {
+                        std::string pllId{};
+                        {
+                            auto identifiers = medicationStatement->GetIdentifiers();
+                            auto iterator = identifiers.begin();
+                            while (iterator != identifiers.end()) {
+                                const auto &identifier = *iterator;
+                                auto key = identifier.GetType().GetText();
+                                std::transform(key.cbegin(), key.cend(), key.begin(),
+                                               [](char ch) { return std::tolower(ch); });
+                                if (key == "pll") {
+                                    pllId = identifier.GetValue();
+                                    bool found{false};
+                                    for (const auto &newId: newPllIds) {
+                                        if (newId == pllId) {
+                                            found = true;
+                                            break;
+                                        }
+                                    }
+                                    if (found) {
+                                        iterator = identifiers.erase(iterator);
+                                    } else {
+                                        ++iterator;
+                                    }
                                 } else {
                                     ++iterator;
                                 }
-                            } else {
-                                ++iterator;
                             }
+                            medicationStatement->SetIdentifiers(identifiers);
                         }
-                        medicationStatement->SetIdentifiers(identifiers);
-                    }
-                    bool found{false};
-                    if (!pllId.empty()) {
-                        found = pllMedicationStatements.find(pllId) != pllMedicationStatements.end();
-                    }
-                    if (found) {
-                        FhirCoding rfstatus{};
-                        std::shared_ptr<FhirCodeableConceptValue> typeresept{};
-                        auto extensions = medicationStatement->GetExtensions();
-                        for (const auto &extension : extensions) {
-                            auto url = extension->GetUrl();
-                            std::transform(url.cbegin(), url.cend(), url.begin(), [] (char ch) { return std::tolower(ch); });
-                            if (url == "http://ehelse.no/fhir/structuredefinition/sfm-reseptamendment") {
-                                auto extensions = extension->GetExtensions();
-                                for (const auto &extension : extensions) {
-                                    auto url = extension->GetUrl();
-                                    if (url == "rfstatus") {
-                                        auto extensions = extension->GetExtensions();
-                                        for (const auto &extension : extensions) {
-                                            auto url = extension->GetUrl();
-                                            if (url == "status") {
-                                                auto valueExt = std::dynamic_pointer_cast<FhirValueExtension>(extension);
-                                                if (valueExt) {
-                                                    auto value = std::dynamic_pointer_cast<FhirCodeableConceptValue>(valueExt->GetValue());
-                                                    if (value) {
-                                                        auto codings = value->GetCoding();
-                                                        if (!codings.empty()) {
-                                                            rfstatus = codings[0];
+                        bool found{false};
+                        if (!pllId.empty()) {
+                            found = pllMedicationStatements.find(pllId) != pllMedicationStatements.end();
+                        }
+                        if (found) {
+                            FhirCoding rfstatus{};
+                            std::shared_ptr<FhirCodeableConceptValue> typeresept{};
+                            auto extensions = medicationStatement->GetExtensions();
+                            for (const auto &extension: extensions) {
+                                auto url = extension->GetUrl();
+                                std::transform(url.cbegin(), url.cend(), url.begin(),
+                                               [](char ch) { return std::tolower(ch); });
+                                if (url == "http://ehelse.no/fhir/structuredefinition/sfm-reseptamendment") {
+                                    auto extensions = extension->GetExtensions();
+                                    for (const auto &extension: extensions) {
+                                        auto url = extension->GetUrl();
+                                        if (url == "rfstatus") {
+                                            auto extensions = extension->GetExtensions();
+                                            for (const auto &extension: extensions) {
+                                                auto url = extension->GetUrl();
+                                                if (url == "status") {
+                                                    auto valueExt = std::dynamic_pointer_cast<FhirValueExtension>(
+                                                            extension);
+                                                    if (valueExt) {
+                                                        auto value = std::dynamic_pointer_cast<FhirCodeableConceptValue>(
+                                                                valueExt->GetValue());
+                                                        if (value) {
+                                                            auto codings = value->GetCoding();
+                                                            if (!codings.empty()) {
+                                                                rfstatus = codings[0];
+                                                            }
                                                         }
                                                     }
                                                 }
                                             }
-                                        }
-                                    } else if (url == "typeresept") {
-                                        auto valueExt = std::dynamic_pointer_cast<FhirValueExtension>(extension);
-                                        if (valueExt) {
-                                            auto value = std::dynamic_pointer_cast<FhirCodeableConceptValue>(
-                                                    valueExt->GetValue());
-                                            if (value) {
-                                                typeresept = value;
+                                        } else if (url == "typeresept") {
+                                            auto valueExt = std::dynamic_pointer_cast<FhirValueExtension>(extension);
+                                            if (valueExt) {
+                                                auto value = std::dynamic_pointer_cast<FhirCodeableConceptValue>(
+                                                        valueExt->GetValue());
+                                                if (value) {
+                                                    typeresept = value;
+                                                }
                                             }
                                         }
                                     }
                                 }
                             }
-                        }
-                        if (rfstatus.GetCode().empty() && typeresept) {
-                            FhirCodeableConcept cconcept{"urn:oid:2.16.578.1.12.4.1.1.7491", "U", "Uten resept"};
-                            FhirCodeableConceptValue value{cconcept};
-                            *typeresept = std::move(value);
-                        }
-                    }
-                    if (found) {
-                        ++iterator;
-                    } else {
-                        iterator = entries.erase(iterator);
-                    }
-                } else {
-                    ++iterator;
-                }
-            }
-        }
-        auto iterator = appendEntries.begin();
-        while (iterator != appendEntries.end()) {
-            entries.emplace_back(std::move(*iterator));
-            iterator = appendEntries.erase(iterator);
-        }
-        bundle->SetEntries(entries);
-    }, [medicationStatements, newPllIds, pllMedicationStatements] (const std::map<std::string,FhirCoding> &pllResults) {
-        std::vector<std::string> removePllIds = newPllIds;
-        int pllsSent{0};
-        for (const auto &resultPair : pllResults) {
-            const auto &pllId = resultPair.first;
-            const auto &resultCode = resultPair.second;
-            if (resultCode.GetCode() == "0") {
-                ++pllsSent;
-                auto iterator = removePllIds.begin();
-                while (iterator != removePllIds.end()) {
-                    if (*iterator == pllId) {
-                        iterator = removePllIds.erase(iterator);
-                    } else {
-                        ++iterator;
-                    }
-                }
-            } else {
-                std::stringstream sstr{};
-                sstr << "Failed to send PLL with id " << pllId << " with code " << resultCode.GetCode()
-                << " " << resultCode.GetDisplay();
-                wxMessageBox(wxString::FromUTF8(sstr.str()), wxT("PLL result error code"), wxICON_ERROR);
-            }
-        }
-        if (pllsSent > 0) {
-            {
-                std::stringstream sstr{};
-                sstr << "Successfully sent PLL with " << pllsSent << " messages.";
-                wxMessageBox(wxString::FromUTF8(sstr.str()), wxT("PLL updated"), wxICON_INFORMATION);
-            }
-#if (false)
-            for (const auto &medStatementPair : medicationStatements) {
-                auto identifiers = medStatementPair.second->GetIdentifiers();
-                auto pllIdIterator = identifiers.begin();
-                std::string pllId{};
-                while (pllIdIterator != identifiers.end()) {
-                    std::string key = pllIdIterator->GetType().GetText();
-                    std::transform(key.cbegin(), key.cend(), key.begin(), [] (char ch) {return std::tolower(ch); });
-                    if (key == "pll") {
-                        pllId = pllIdIterator->GetValue();
-                        break;
-                    }
-                    ++pllIdIterator;
-                }
-                if (pllIdIterator != identifiers.end()) {
-                    if (pllMedicationStatements.find(pllId) == pllMedicationStatements.end()) {
-                        for (const auto &removeId : removePllIds) {
-                            if (pllId == removeId) {
-                                identifiers.erase(pllIdIterator);
-                                medStatementPair.second->SetIdentifiers(identifiers);
-                                break;
+                            if (rfstatus.GetCode().empty() && typeresept) {
+                                FhirCodeableConcept cconcept{"urn:oid:2.16.578.1.12.4.1.1.7491", "U", "Uten resept"};
+                                FhirCodeableConceptValue value{cconcept};
+                                *typeresept = std::move(value);
                             }
                         }
+                        if (found) {
+                            ++iterator;
+                        } else {
+                            iterator = entries.erase(iterator);
+                        }
                     } else {
-                        identifiers.erase(pllIdIterator);
-                        medStatementPair.second->SetIdentifiers(identifiers);
+                        ++iterator;
                     }
                 }
             }
-#endif
-        }
-    });
+            auto iterator = appendEntries.begin();
+            while (iterator != appendEntries.end()) {
+                entries.emplace_back(std::move(*iterator));
+                iterator = appendEntries.erase(iterator);
+            }
+            bundle->SetEntries(entries);
+        }, [medicationStatements, newPllIds, pllMedicationStatements](
+                const std::map<std::string, FhirCoding> &pllResults) {
+            std::vector<std::string> removePllIds = newPllIds;
+            int pllsSent{0};
+            for (const auto &resultPair: pllResults) {
+                const auto &pllId = resultPair.first;
+                const auto &resultCode = resultPair.second;
+                if (resultCode.GetCode() == "0") {
+                    ++pllsSent;
+                    auto iterator = removePllIds.begin();
+                    while (iterator != removePllIds.end()) {
+                        if (*iterator == pllId) {
+                            iterator = removePllIds.erase(iterator);
+                        } else {
+                            ++iterator;
+                        }
+                    }
+                } else {
+                    std::stringstream sstr{};
+                    sstr << "Failed to send PLL with id " << pllId << " with code " << resultCode.GetCode()
+                         << " " << resultCode.GetDisplay();
+                    wxMessageBox(wxString::FromUTF8(sstr.str()), wxT("PLL result error code"), wxICON_ERROR);
+                }
+            }
+            if (pllsSent > 0) {
+                {
+                    std::stringstream sstr{};
+                    sstr << "Successfully sent PLL with " << pllsSent << " messages.";
+                    wxMessageBox(wxString::FromUTF8(sstr.str()), wxT("PLL updated"), wxICON_INFORMATION);
+                }
+
+            }
+        }, [this, waitingDialog, &ctx](const std::string &err) {
+            if (err.empty()) {
+                ctx->Finish();
+                waitingDialog->SetMessage("Requesting new medication bundle...");
+                ctx = std::make_shared<CallContext>();
+                try {
+                    GetMedication(*ctx, [waitingDialog](const std::string &err) {
+                        if (!err.empty()) {
+                            wxMessageBox(wxString::FromUTF8(err), wxT("Get medication error"), wxICON_ERROR);
+                        }
+                        waitingDialog->Close();
+                    });
+                } catch (SyncGetMedError &e) {
+                    wxMessageBox(wxString::FromUTF8(e.what()), wxT("Get medication error"), wxICON_ERROR);
+                    waitingDialog->Close();
+                } catch (...) {
+                    wxMessageBox(wxT("Unknown error"), wxT("Get medication error"), wxICON_ERROR);
+                    waitingDialog->Close();
+                }
+            } else {
+                wxMessageBox(wxString::FromUTF8(err), wxT("Send medication error"), wxICON_ERROR);
+                waitingDialog->Close();
+            }
+        });
+    } catch (SyncSendMedError &e) {
+        wxMessageBox(wxString::FromUTF8(e.what()), wxT("Send medication error"), wxICON_ERROR);
+        return;
+    }
+    waitingDialog->ShowModal();
+    ctx->Finish();
 }
 
 void TheMasterFrame::OnSaveLastRequest(wxCommandEvent &e) {
