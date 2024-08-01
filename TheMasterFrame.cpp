@@ -1125,17 +1125,22 @@ void TheMasterFrame::OnSendPll(wxCommandEvent &e) {
             for (const auto &statement : medicationStatements) {
                 auto id = statement.first;
                 auto medstat = statement.second;
-                idToDisplay.insert_or_assign(id, medstat->GetDisplay());
-                std::string pllId{};
-                auto identifiers = medstat->GetIdentifiers();
-                for (const auto &identifier : identifiers) {
-                    auto key = identifier.GetType().GetText();
-                    std::transform(key.cbegin(), key.cend(), key.begin(), [] (char ch) { return std::tolower(ch); });
-                    if (key == "pll") {
-                        pllId = identifier.GetValue();
+                auto statusInfo = PrescriptionChangesService::GetPrescriptionStatusInfo(*medstat);
+                std::string display{medstat->GetDisplay()};
+                if (statusInfo.IsPll) {
+                    display.append(" (PLL");
+                    if (!statusInfo.IsValidPrescription || statusInfo.IsRenewedWithoutChanges) {
+                        display.append(",");
+                        display.append(PrescriptionChangesService::GetPrescriptionStatusString(statusInfo));
                     }
+                    display.append(")");
+                } else if (!statusInfo.IsValidPrescription || statusInfo.IsRenewedWithoutChanges) {
+                    display.append(" (");
+                    display.append(PrescriptionChangesService::GetPrescriptionStatusString(statusInfo));
+                    display.append(")");
                 }
-                if (!pllId.empty()) {
+                idToDisplay.insert_or_assign(id, display);
+                if (statusInfo.IsPll) {
                     idsToPreselect.emplace_back(id);
                 }
             }

@@ -406,6 +406,7 @@ PrescriptionStatusInfo PrescriptionChangesService::GetPrescriptionStatusInfo(con
         prescriptionStatusInfo.IsRecalled = true;
         prescriptionStatusInfo.IsRecallNotSent = recallNotSent;
         if (recallCode == "1") {
+            prescriptionStatusInfo.IsValidPrescription = true;
             prescriptionStatusInfo.IsRenewedWithoutChanges = true;
         }
     }
