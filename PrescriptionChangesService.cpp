@@ -313,3 +313,132 @@ bool PrescriptionChangesService::IsRenewedWithoutChanges(const FhirMedicationSta
     auto prescriptionId = GetPrescriptionId(medicationStatement);
     return !prescriptionId.empty() && IsRenewedWithoutChangesAssumingIsEprescription(medicationStatement);
 }
+
+PrescriptionStatusInfo PrescriptionChangesService::GetPrescriptionStatusInfo(const FhirMedicationStatement &medicationStatement) {
+    PrescriptionStatusInfo prescriptionStatusInfo{};
+    auto identifiers = medicationStatement.GetIdentifiers();
+    for (const auto &identifier : identifiers) {
+        auto tp = identifier.GetType().GetText();
+        std::transform(tp.cbegin(), tp.cend(), tp.begin(), [] (char ch) -> char {return std::tolower(ch);});
+        if (tp == "reseptid") {
+            prescriptionStatusInfo.IsValidPrescription = true;
+            prescriptionStatusInfo.HasBeenValidPrescription = true;
+        } else if (tp == "pll") {
+            prescriptionStatusInfo.IsPll = true;
+            prescriptionStatusInfo.HasBeenPll = true;
+        }
+    }
+    bool createeresept{false};
+    bool recalled{false};
+    bool recallNotSent{false};
+    std::string recallCode{};
+    FhirCoding rfstatus{};
+    auto statementExtensions = medicationStatement.GetExtensions();
+    for (const auto &statementExtension : statementExtensions) {
+        auto url = statementExtension->GetUrl();
+        if (url == "http://ehelse.no/fhir/StructureDefinition/sfm-reseptamendment") {
+            auto reseptAmendmentExtensions = statementExtension->GetExtensions();
+            for (const auto &reseptAmendmentExtension : reseptAmendmentExtensions) {
+                auto url = reseptAmendmentExtension->GetUrl();
+                if (url == "createeresept") {
+                    auto valueExt = std::dynamic_pointer_cast<FhirValueExtension>(reseptAmendmentExtension);
+                    if (valueExt) {
+                        auto value = std::dynamic_pointer_cast<FhirBooleanValue>(valueExt->GetValue());
+                        if (value && value->IsTrue()) {
+                            createeresept = true;
+                        }
+                    }
+                }
+                if (url == "recallinfo") {
+                    auto extensions = reseptAmendmentExtension->GetExtensions();
+                    for (const auto &extension : extensions) {
+                        auto url = extension->GetUrl();
+                        if (url == "recallcode") {
+                            auto valueExtension = std::dynamic_pointer_cast<FhirValueExtension>(extension);
+                            if (valueExtension) {
+                                auto codeableConceptValue = std::dynamic_pointer_cast<FhirCodeableConceptValue>(valueExtension->GetValue());
+                                if (codeableConceptValue && codeableConceptValue->IsSet()) {
+                                    auto coding = codeableConceptValue->GetCoding();
+                                    if (!coding.empty()) {
+                                        recallCode = coding[0].GetCode();
+                                    }
+                                    recalled = true;
+                                }
+                            }
+                        }
+                        if (url == "notsent") {
+                            auto valueExtension = std::dynamic_pointer_cast<FhirValueExtension>(extension);
+                            if (valueExtension) {
+                                auto booleanExtension = std::dynamic_pointer_cast<FhirBooleanValue>(valueExtension->GetValue());
+                                if (booleanExtension) {
+                                    recallNotSent = booleanExtension->IsTrue();
+                                }
+                            }
+                        }
+                    }
+                }
+                if (url == "rfstatus") {
+                    auto extensions = reseptAmendmentExtension->GetExtensions();
+                    for (const auto &extension : extensions) {
+                        auto url = extension->GetUrl();
+                        if (url == "status") {
+                            auto valueExt = std::dynamic_pointer_cast<FhirValueExtension>(extension);
+                            if (valueExt) {
+                                auto value = std::dynamic_pointer_cast<FhirCodeableConceptValue>(valueExt->GetValue());
+                                if (value) {
+                                    auto codings = value->GetCoding();
+                                    if (!codings.empty()) {
+                                        rfstatus = codings[0];
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    if (createeresept) {
+        prescriptionStatusInfo.IsCreate = true;
+    }
+    if (recalled) {
+        prescriptionStatusInfo.IsValidPrescription = false;
+        prescriptionStatusInfo.IsRecalled = true;
+        prescriptionStatusInfo.IsRecallNotSent = recallNotSent;
+        if (recallCode == "1") {
+            prescriptionStatusInfo.IsRenewedWithoutChanges = true;
+        }
+    }
+    if (prescriptionStatusInfo.IsValidPrescription && rfstatus.GetCode().empty()) {
+        prescriptionStatusInfo.IsValidPrescription = false;
+    }
+    return prescriptionStatusInfo;
+}
+
+std::string PrescriptionChangesService::GetPrescriptionStatusString(const PrescriptionStatusInfo &info) {
+    if (info.IsCreate) {
+        if (!info.IsRecalled) {
+            return "Draft";
+        } else {
+            if (info.IsRenewedWithoutChanges) {
+                return "To be renewed";
+            } else {
+                return "Ambiguous";
+            }
+        }
+    } else if (info.IsRecalled) {
+        if (info.IsRecallNotSent) {
+            return "To be recalled";
+        } else {
+            return "Recalled";
+        }
+    } else {
+        if (info.IsValidPrescription) {
+            return "Prescription";
+        } else if (info.HasBeenValidPrescription) {
+            return "Expired prescription";
+        } else {
+            return "Without prescription";
+        }
+    }
+}

@@ -175,115 +175,14 @@ void TheMasterFrame::UpdateMedications() {
             auto row = pos++;
             displayedMedicationStatements.emplace_back(medicationStatement);
             prescriptions->InsertItem(row, medicationStatement->GetMedicationReference().GetDisplay());
-            bool createeresept{false};
-            bool recalled{false};
-            bool recallNotSent{false};
-            std::string recallCode{};
-            FhirCoding rfstatus{};
-            auto statementExtensions = medicationStatement->GetExtensions();
-            for (const auto &statementExtension : statementExtensions) {
-                auto url = statementExtension->GetUrl();
-                if (url == "http://ehelse.no/fhir/StructureDefinition/sfm-reseptamendment") {
-                    auto reseptAmendmentExtensions = statementExtension->GetExtensions();
-                    for (const auto &reseptAmendmentExtension : reseptAmendmentExtensions) {
-                        auto url = reseptAmendmentExtension->GetUrl();
-                        if (url == "createeresept") {
-                            auto valueExt = std::dynamic_pointer_cast<FhirValueExtension>(reseptAmendmentExtension);
-                            if (valueExt) {
-                                auto value = std::dynamic_pointer_cast<FhirBooleanValue>(valueExt->GetValue());
-                                if (value && value->IsTrue()) {
-                                    createeresept = true;
-                                }
-                            }
-                        }
-                        if (url == "recallinfo") {
-                            auto extensions = reseptAmendmentExtension->GetExtensions();
-                            for (const auto &extension : extensions) {
-                                auto url = extension->GetUrl();
-                                if (url == "recallcode") {
-                                    auto valueExtension = std::dynamic_pointer_cast<FhirValueExtension>(extension);
-                                    if (valueExtension) {
-                                        auto codeableConceptValue = std::dynamic_pointer_cast<FhirCodeableConceptValue>(valueExtension->GetValue());
-                                        if (codeableConceptValue && codeableConceptValue->IsSet()) {
-                                            auto coding = codeableConceptValue->GetCoding();
-                                            if (!coding.empty()) {
-                                                recallCode = coding[0].GetCode();
-                                            }
-                                            recalled = true;
-                                        }
-                                    }
-                                }
-                                if (url == "notsent") {
-                                    auto valueExtension = std::dynamic_pointer_cast<FhirValueExtension>(extension);
-                                    if (valueExtension) {
-                                        auto booleanExtension = std::dynamic_pointer_cast<FhirBooleanValue>(valueExtension->GetValue());
-                                        if (booleanExtension) {
-                                            recallNotSent = booleanExtension->IsTrue();
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                        if (url == "rfstatus") {
-                            auto extensions = reseptAmendmentExtension->GetExtensions();
-                            for (const auto &extension : extensions) {
-                                auto url = extension->GetUrl();
-                                if (url == "status") {
-                                    auto valueExt = std::dynamic_pointer_cast<FhirValueExtension>(extension);
-                                    if (valueExt) {
-                                        auto value = std::dynamic_pointer_cast<FhirCodeableConceptValue>(valueExt->GetValue());
-                                        if (value) {
-                                            auto codings = value->GetCoding();
-                                            if (!codings.empty()) {
-                                                rfstatus = codings[0];
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-            bool ep{false}, pll{false};
-            auto identifiers = medicationStatement->GetIdentifiers();
-            for (const auto &identifier : identifiers) {
-                auto tp = identifier.GetType().GetText();
-                std::transform(tp.cbegin(), tp.cend(), tp.begin(), [] (char ch) -> char {return std::tolower(ch);});
-                if (tp == "reseptid") {
-                    ep = true;
-                } else if (tp == "pll") {
-                    pll = true;
-                }
-            }
-            if (pll) {
+            auto statusInfo = PrescriptionChangesService::GetPrescriptionStatusInfo(*medicationStatement);
+            if (statusInfo.IsPll) {
                 prescriptions->SetItem(row, 1, wxT("PLL"));
             } else {
                 prescriptions->SetItem(row, 1, wxT(""));
             }
-            if (createeresept) {
-                if (!recalled) {
-                    prescriptions->SetItem(row, 2, wxT("Draft"));
-                } else {
-                    if (recallCode == "1") {
-                        prescriptions->SetItem(row, 2, wxT("To be renewed"));
-                    } else {
-                        prescriptions->SetItem(row, 2, wxT("Ambiguous"));
-                    }
-                }
-            } else if (recalled) {
-                if (recallNotSent) {
-                    prescriptions->SetItem(row, 2, wxT("To be recalled"));
-                } else {
-                    prescriptions->SetItem(row, 2, wxT("Recalled"));
-                }
-            } else {
-                if (ep && !rfstatus.GetCode().empty()) {
-                    prescriptions->SetItem(row, 2, wxT("Prescription"));
-                } else {
-                    prescriptions->SetItem(row, 2, wxT("Without prescription"));
-                }
-            }
+            auto statusStr = PrescriptionChangesService::GetPrescriptionStatusString(statusInfo);
+            prescriptions->SetItem(row, 2, wxString::FromUTF8(statusStr));
         }
     }
     this->displayedMedicationStatements = displayedMedicationStatements;
