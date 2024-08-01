@@ -331,12 +331,14 @@ PrescriptionStatusInfo PrescriptionChangesService::GetPrescriptionStatusInfo(con
     bool createeresept{false};
     bool recalled{false};
     bool recallNotSent{false};
+    bool ceased{false};
     std::string recallCode{};
     FhirCoding rfstatus{};
     auto statementExtensions = medicationStatement.GetExtensions();
     for (const auto &statementExtension : statementExtensions) {
         auto url = statementExtension->GetUrl();
-        if (url == "http://ehelse.no/fhir/StructureDefinition/sfm-reseptamendment") {
+        std::transform(url.cbegin(), url.cend(), url.begin(), [] (char ch) { return std::tolower(ch); });
+        if (url == "http://ehelse.no/fhir/structuredefinition/sfm-reseptamendment") {
             auto reseptAmendmentExtensions = statementExtension->GetExtensions();
             for (const auto &reseptAmendmentExtension : reseptAmendmentExtensions) {
                 auto url = reseptAmendmentExtension->GetUrl();
@@ -396,6 +398,21 @@ PrescriptionStatusInfo PrescriptionChangesService::GetPrescriptionStatusInfo(con
                     }
                 }
             }
+        } else if (url == "http://ehelse.no/fhir/structuredefinition/sfm-discontinuation") {
+            auto discontinuationExtensions = statementExtension->GetExtensions();
+            for (const auto &discontinuationExtension : discontinuationExtensions) {
+                auto url = discontinuationExtension->GetUrl();
+                std::transform(url.cbegin(), url.cend(), url.begin(), [] (char ch) {return std::tolower(ch);});
+                if (url == "reason") {
+                    auto reasonExt = std::dynamic_pointer_cast<FhirValueExtension>(discontinuationExtension);
+                    if (reasonExt) {
+                        auto reason = std::dynamic_pointer_cast<FhirCodeableConceptValue>(reasonExt->GetValue());
+                        if (reason && reason->IsSet()) {
+                            ceased = true;
+                        }
+                    }
+                }
+            }
         }
     }
     if (createeresept) {
@@ -410,6 +427,10 @@ PrescriptionStatusInfo PrescriptionChangesService::GetPrescriptionStatusInfo(con
             prescriptionStatusInfo.IsRenewedWithoutChanges = true;
         }
     }
+    if (ceased) {
+        prescriptionStatusInfo.IsValidPrescription = false;
+        prescriptionStatusInfo.IsCeased = true;
+    }
     if (prescriptionStatusInfo.IsValidPrescription && rfstatus.GetCode().empty()) {
         prescriptionStatusInfo.IsValidPrescription = false;
     }
@@ -420,6 +441,8 @@ std::string PrescriptionChangesService::GetPrescriptionStatusString(const Prescr
     if (info.IsCreate) {
         if (!info.IsRecalled) {
             return "Draft";
+        } else if (info.IsCeased) {
+            return "Ceased";
         } else {
             if (info.IsRenewedWithoutChanges) {
                 return "To be renewed";
@@ -427,6 +450,8 @@ std::string PrescriptionChangesService::GetPrescriptionStatusString(const Prescr
                 return "Ambiguous";
             }
         }
+    } else if (info.IsCeased) {
+        return "Ceased";
     } else if (info.IsRecalled) {
         if (info.IsRecallNotSent) {
             return "To be recalled";
