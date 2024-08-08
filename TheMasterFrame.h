@@ -35,8 +35,10 @@ private:
     std::shared_ptr<PatientInformation> patientInformation;
     std::unique_ptr<MedBundleData> medicationBundle{};
     std::vector<std::shared_ptr<FhirMedicationStatement>> displayedMedicationStatements{};
-    std::string lastRequest{};
-    std::string lastResponse{};
+    std::string lastGetmedRequest{};
+    std::string lastGetmedResponse{};
+    std::string lastSendmedRequest{};
+    std::string lastSendmedResponse{};
     std::string url{};
     std::string helseidUrl{};
     std::string helseidClientId{};
@@ -68,8 +70,10 @@ private:
 public:
     void OnSendMedication(wxCommandEvent &e);
     void OnSendPll(wxCommandEvent &e);
-    void OnSaveLastRequest(wxCommandEvent &e);
-    void OnSaveLast(wxCommandEvent &e);
+    void OnSaveLastGetmedRequest(wxCommandEvent &e);
+    void OnSaveLastSendmedRequest(wxCommandEvent &e);
+    void OnSaveLastGetmed(wxCommandEvent &e);
+    void OnSaveLastSendmed(wxCommandEvent &e);
     void OnSaveBundle(wxCommandEvent &e);
     [[nodiscard]] PrescriberRef GetPrescriber() const ;
     void SetPrescriber(PrescriptionData &prescriptionData) const ;

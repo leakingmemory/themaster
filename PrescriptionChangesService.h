@@ -33,6 +33,7 @@ struct PrescriptionStatusInfo {
 class PrescriptionChangesService {
 public:
     static void Renew(FhirMedicationStatement &);
+    static void RenewRevokedOrExpiredPll(FhirMedicationStatement &);
     static std::string GetPreviousPrescriptionId(const FhirMedicationStatement &);
     static std::string GetPrescriptionId(const FhirMedicationStatement &);
     static bool IsRenewedWithoutChangesAssumingIsEprescription(const FhirMedicationStatement &);

@@ -12,8 +12,8 @@ enum {
     TheMaster_GetMedication_Id = 4,
     TheMaster_SendMedication_Id = 5,
     TheMaster_SendPll_Id = 6,
-    TheMaster_SaveLastRequest_Id = 7,
-    TheMaster_SaveLast_Id = 8,
+    TheMaster_SaveLastGetmedRequest_Id = 7,
+    TheMaster_SaveLastGetmed_Id = 8,
     TheMaster_SaveBundle_Id = 9,
     TheMaster_PrescribeMagistral_Id = 10,
     TheMaster_PrescribeMedicament_Id = 11,
@@ -24,7 +24,9 @@ enum {
     TheMaster_PrescriptionRecall_Id = 16,
     TheMaster_PrescriptionCease_Id = 17,
     TheMaster_VersionDialog_Explore = 18,
-    TheMaster_PrescriptionRenew_Id = 19
+    TheMaster_PrescriptionRenew_Id = 19,
+    TheMaster_SaveLastSendmedRequest_Id = 20,
+    TheMaster_SaveLastSendmed_Id = 21
 };
 
 #endif //DRWHATSNOT_THEMASTERIDS_H

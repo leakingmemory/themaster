@@ -204,6 +204,120 @@ void PrescriptionChangesService::Renew(FhirMedicationStatement &medicationStatem
     }
 }
 
+void PrescriptionChangesService::RenewRevokedOrExpiredPll(FhirMedicationStatement &medicationStatement) {
+    auto medicationStatementExtensions = medicationStatement.GetExtensions();
+    std::shared_ptr<FhirExtension> reseptAmendment{};
+    std::shared_ptr<FhirExtension> recallInfo{};
+    std::shared_ptr<FhirExtension> rfstatus{};
+    std::shared_ptr<FhirExtension> createereseptExt{};
+    for (const auto &medicationStatementExtension : medicationStatementExtensions) {
+        auto url = medicationStatementExtension->GetUrl();
+        std::transform(url.cbegin(), url.cend(), url.begin(), [] (char ch) { return std::tolower(ch); });
+        if (url == "http://ehelse.no/fhir/structuredefinition/sfm-reseptamendment") {
+            reseptAmendment = medicationStatementExtension;
+            auto reseptAmendmentExtensions = reseptAmendment->GetExtensions();
+            auto reseptAmendmentExtensionsIterator = reseptAmendmentExtensions.begin();
+            while (reseptAmendmentExtensionsIterator != reseptAmendmentExtensions.end()) {
+                auto &reseptAmendmentExtension = *reseptAmendmentExtensionsIterator;
+                auto url = reseptAmendmentExtension->GetUrl();
+                std::transform(url.cbegin(), url.cend(), url.begin(), [] (char ch) { return std::tolower(ch); });
+                if (url == "recallinfo") {
+                    recallInfo = reseptAmendmentExtension;
+                    ++reseptAmendmentExtensionsIterator;
+                } else if (url == "rfstatus") {
+                    rfstatus = reseptAmendmentExtension;
+                    ++reseptAmendmentExtensionsIterator;
+                } else if (url == "createeresept") {
+                    createereseptExt = reseptAmendmentExtension;
+                    ++reseptAmendmentExtensionsIterator;
+                } else {
+                    ++reseptAmendmentExtensionsIterator;
+                }
+            }
+            reseptAmendment->SetExtensions(reseptAmendmentExtensions);
+        }
+    }
+    if (!reseptAmendment) {
+        throw RenewalFailureException("Renew without amendment");
+    }
+    if (!rfstatus) {
+        rfstatus = std::make_shared<FhirExtension>("rfstatus");
+        reseptAmendment->AddExtension(rfstatus);
+    }
+    {
+        std::vector<std::shared_ptr<FhirExtension>> exts{};
+        {
+            std::shared_ptr<FhirExtension> status = std::make_shared<FhirValueExtension>("status",
+                                                                                         std::make_shared<FhirCodeableConceptValue>(
+                                                                                                 FhirCodeableConcept(
+                                                                                                         "urn:oid:2.16.578.1.12.4.1.1.7408",
+                                                                                                         "E",
+                                                                                                         "Ekspederbar")));
+            exts.emplace_back(status);
+        }
+        rfstatus->SetExtensions(exts);
+    }
+    std::shared_ptr<FhirValueExtension> createeresept{};
+    if (createereseptExt) {
+        createeresept = std::dynamic_pointer_cast<FhirValueExtension>(createereseptExt);
+        if (!createeresept) {
+            throw RenewalFailureException("Ext createeresept is not a value extension");
+        }
+    }
+    if (createeresept) {
+        createeresept->SetValue(std::make_shared<FhirBooleanValue>(true));
+    } else {
+        createereseptExt = std::make_shared<FhirValueExtension>("createeresept", std::make_shared<FhirBooleanValue>(true));
+        reseptAmendment->AddExtension(createereseptExt);
+    }
+    boost::uuids::random_generator generator;
+    boost::uuids::uuid randomUUID = generator();
+    std::string originalReseptId{};
+    std::string reseptId = boost::uuids::to_string(randomUUID);
+    std::vector<FhirIdentifier> identifiers{};
+    {
+        bool hasReseptId{false};
+        auto originalIdentifiers = medicationStatement.GetIdentifiers();
+        for (const auto &identifier: originalIdentifiers) {
+            auto typeObj = identifier.GetType();
+            auto type = typeObj.GetText();
+            std::transform(type.cbegin(), type.cend(), type.begin(), [] (char ch) { return std::tolower(ch); });
+            if (type == "reseptid") {
+                hasReseptId = true;
+                originalReseptId = identifier.GetValue();
+                identifiers.emplace_back(typeObj, identifier.GetUse(), identifier.GetSystem(), reseptId);
+            } else {
+                identifiers.emplace_back(typeObj, identifier.GetUse(), identifier.GetSystem(), identifier.GetValue());
+            }
+        }
+        if (hasReseptId) {
+            if (recallInfo) {
+                bool hasRecallId{false};
+                auto recallExtensions = recallInfo->GetExtensions();
+                for (const auto &recallExtension : recallExtensions) {
+                    auto url = recallExtension->GetUrl();
+                    std::transform(url.cbegin(), url.cend(), url.begin(), [] (char ch) { return std::tolower(ch); });
+                    if (url == "recallId") {
+                        auto valueExt = std::dynamic_pointer_cast<FhirValueExtension>(recallExtension);
+                        if (!valueExt) {
+                            throw RenewalFailureException("RecallInfos recallId is not a value extension");
+                        }
+                        valueExt->SetValue(std::make_shared<FhirString>(originalReseptId));
+                        hasRecallId = true;
+                    }
+                }
+                if (!hasRecallId) {
+                    recallExtensions.emplace_back(std::make_shared<FhirValueExtension>("recallId", std::make_shared<FhirString>(originalReseptId)));
+                    recallInfo->SetExtensions(recallExtensions);
+                }
+            }
+        } else {
+            identifiers.emplace_back(FhirCodeableConcept({}, "ReseptId"), "usual", reseptId);
+        }
+    }
+    medicationStatement.SetIdentifiers(identifiers);
+}
+
 std::string PrescriptionChangesService::GetPreviousPrescriptionId(const FhirMedicationStatement &medicationStatement) {
     std::string previousPrescriptionId{};
     auto extensions = medicationStatement.GetExtensions();
@@ -414,6 +528,9 @@ PrescriptionStatusInfo PrescriptionChangesService::GetPrescriptionStatusInfo(con
                 }
             }
         }
+    }
+    if (rfstatus.GetCode() == "T") {
+        recalled = true;
     }
     if (createeresept) {
         prescriptionStatusInfo.IsCreate = true;

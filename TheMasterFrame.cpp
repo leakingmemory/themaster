@@ -75,8 +75,10 @@ TheMasterFrame::TheMasterFrame() : wxFrame(nullptr, wxID_ANY, "The Master"),
     serverMenu->Append(TheMaster_GetMedication_Id, "Get medication");
     serverMenu->Append(TheMaster_SendMedication_Id, "Send medication");
     serverMenu->Append(TheMaster_SendPll_Id, "Send PLL");
-    serverMenu->Append(TheMaster_SaveLastRequest_Id, "Save last request");
-    serverMenu->Append(TheMaster_SaveLast_Id, "Save last response");
+    serverMenu->Append(TheMaster_SaveLastGetmedRequest_Id, "Save last \"getmed\" request");
+    serverMenu->Append(TheMaster_SaveLastSendmedRequest_Id, "Save last \"sendmed\" request");
+    serverMenu->Append(TheMaster_SaveLastGetmed_Id, "Save last \"getmed\" response");
+    serverMenu->Append(TheMaster_SaveLastSendmed_Id, "Save last \"sendmed\" response");
     serverMenu->Append(TheMaster_SaveBundle_Id, "Save bundle");
     auto *menuBar = new wxMenuBar();
     menuBar->Append(serverMenu, "Server");
@@ -120,8 +122,10 @@ TheMasterFrame::TheMasterFrame() : wxFrame(nullptr, wxID_ANY, "The Master"),
     Bind(wxEVT_MENU, &TheMasterFrame::OnGetMedication, this, TheMaster_GetMedication_Id);
     Bind(wxEVT_MENU, &TheMasterFrame::OnSendMedication, this, TheMaster_SendMedication_Id);
     Bind(wxEVT_MENU, &TheMasterFrame::OnSendPll, this, TheMaster_SendPll_Id);
-    Bind(wxEVT_MENU, &TheMasterFrame::OnSaveLastRequest, this, TheMaster_SaveLastRequest_Id);
-    Bind(wxEVT_MENU, &TheMasterFrame::OnSaveLast, this, TheMaster_SaveLast_Id);
+    Bind(wxEVT_MENU, &TheMasterFrame::OnSaveLastGetmedRequest, this, TheMaster_SaveLastGetmedRequest_Id);
+    Bind(wxEVT_MENU, &TheMasterFrame::OnSaveLastSendmedRequest, this, TheMaster_SaveLastSendmedRequest_Id);
+    Bind(wxEVT_MENU, &TheMasterFrame::OnSaveLastGetmed, this, TheMaster_SaveLastGetmed_Id);
+    Bind(wxEVT_MENU, &TheMasterFrame::OnSaveLastSendmed, this, TheMaster_SaveLastSendmed_Id);
     Bind(wxEVT_MENU, &TheMasterFrame::OnSaveBundle, this, TheMaster_SaveBundle_Id);
     Bind(wxEVT_MENU, &TheMasterFrame::OnPrescribeMagistral, this, TheMaster_PrescribeMagistral_Id);
     Bind(wxEVT_MENU, &TheMasterFrame::OnPrescribeMedicament, this, TheMaster_PrescribeMedicament_Id);
@@ -487,8 +491,8 @@ void TheMasterFrame::GetMedication(CallContext &ctx, const std::function<void(co
         {
             std::lock_guard lock{*getMedResponseMtx};
             getMedResp = std::move(*getMedResponse);
-            lastRequest = *rawRequest;
-            lastResponse = *rawResponse;
+            lastGetmedRequest = *rawRequest;
+            lastGetmedResponse = *rawResponse;
         }
         if (getMedResp) {
             std::shared_ptr<FhirBundle> medBundle{};
@@ -846,8 +850,8 @@ void TheMasterFrame::SendMedication(CallContext &ctx,
             std::lock_guard lock{*sendMedResponseMtx};
             opOutcome = std::dynamic_pointer_cast<FhirOperationOutcome>(*sendMedResponse);
             sendMedResp = std::dynamic_pointer_cast<FhirParameters>(*sendMedResponse);
-            lastRequest = std::move(*rawRequest);
-            lastResponse = std::move(*rawResponse);
+            lastSendmedRequest = std::move(*rawRequest);
+            lastSendmedResponse = std::move(*rawResponse);
         }
         if (!sendMedResp) {
             if (opOutcome) {
@@ -1423,53 +1427,9 @@ void TheMasterFrame::OnSendPll(wxCommandEvent &e) {
                             found = pllMedicationStatements.find(pllId) != pllMedicationStatements.end();
                         }
                         if (found) {
-                            FhirCoding rfstatus{};
-                            std::shared_ptr<FhirCodeableConceptValue> typeresept{};
-                            auto extensions = medicationStatement->GetExtensions();
-                            for (const auto &extension: extensions) {
-                                auto url = extension->GetUrl();
-                                std::transform(url.cbegin(), url.cend(), url.begin(),
-                                               [](char ch) { return std::tolower(ch); });
-                                if (url == "http://ehelse.no/fhir/structuredefinition/sfm-reseptamendment") {
-                                    auto extensions = extension->GetExtensions();
-                                    for (const auto &extension: extensions) {
-                                        auto url = extension->GetUrl();
-                                        if (url == "rfstatus") {
-                                            auto extensions = extension->GetExtensions();
-                                            for (const auto &extension: extensions) {
-                                                auto url = extension->GetUrl();
-                                                if (url == "status") {
-                                                    auto valueExt = std::dynamic_pointer_cast<FhirValueExtension>(
-                                                            extension);
-                                                    if (valueExt) {
-                                                        auto value = std::dynamic_pointer_cast<FhirCodeableConceptValue>(
-                                                                valueExt->GetValue());
-                                                        if (value) {
-                                                            auto codings = value->GetCoding();
-                                                            if (!codings.empty()) {
-                                                                rfstatus = codings[0];
-                                                            }
-                                                        }
-                                                    }
-                                                }
-                                            }
-                                        } else if (url == "typeresept") {
-                                            auto valueExt = std::dynamic_pointer_cast<FhirValueExtension>(extension);
-                                            if (valueExt) {
-                                                auto value = std::dynamic_pointer_cast<FhirCodeableConceptValue>(
-                                                        valueExt->GetValue());
-                                                if (value) {
-                                                    typeresept = value;
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                            if (rfstatus.GetCode().empty() && typeresept) {
-                                FhirCodeableConcept cconcept{"urn:oid:2.16.578.1.12.4.1.1.7491", "U", "Uten resept"};
-                                FhirCodeableConceptValue value{cconcept};
-                                *typeresept = std::move(value);
+                            auto statusInfo = PrescriptionChangesService::GetPrescriptionStatusInfo(*medicationStatement);
+                            if (!statusInfo.IsCeased && !statusInfo.IsValidPrescription && statusInfo.HasBeenValidPrescription) {
+                                PrescriptionChangesService::RenewRevokedOrExpiredPll(*medicationStatement);
                             }
                         }
                         if (found) {
@@ -1552,21 +1512,39 @@ void TheMasterFrame::OnSendPll(wxCommandEvent &e) {
     ctx->Finish();
 }
 
-void TheMasterFrame::OnSaveLastRequest(wxCommandEvent &e) {
-    wxFileDialog saveFileDialog(this, _("Save last request"), "", "", "Json files (*.json)|*.json", wxFD_SAVE|wxFD_OVERWRITE_PROMPT);
+void TheMasterFrame::OnSaveLastGetmedRequest(wxCommandEvent &e) {
+    wxFileDialog saveFileDialog(this, _("Save last \"get medication\" request"), "", "", "Json files (*.json)|*.json", wxFD_SAVE|wxFD_OVERWRITE_PROMPT);
     if (saveFileDialog.ShowModal() == wxID_CANCEL)
         return; // the user changed their mind
     std::ofstream ofs{saveFileDialog.GetPath().ToStdString()};
-    ofs << lastRequest;
+    ofs << lastGetmedRequest;
     ofs.close();
 }
 
-void TheMasterFrame::OnSaveLast(wxCommandEvent &e) {
-    wxFileDialog saveFileDialog(this, _("Save last response"), "", "", "Json files (*.json)|*.json", wxFD_SAVE|wxFD_OVERWRITE_PROMPT);
+void TheMasterFrame::OnSaveLastSendmedRequest(wxCommandEvent &e) {
+    wxFileDialog saveFileDialog(this, _("Save last \"send medication\" request"), "", "", "Json files (*.json)|*.json", wxFD_SAVE|wxFD_OVERWRITE_PROMPT);
     if (saveFileDialog.ShowModal() == wxID_CANCEL)
         return; // the user changed their mind
     std::ofstream ofs{saveFileDialog.GetPath().ToStdString()};
-    ofs << lastResponse;
+    ofs << lastSendmedRequest;
+    ofs.close();
+}
+
+void TheMasterFrame::OnSaveLastGetmed(wxCommandEvent &e) {
+    wxFileDialog saveFileDialog(this, _("Save last \"get medication\" response"), "", "", "Json files (*.json)|*.json", wxFD_SAVE|wxFD_OVERWRITE_PROMPT);
+    if (saveFileDialog.ShowModal() == wxID_CANCEL)
+        return; // the user changed their mind
+    std::ofstream ofs{saveFileDialog.GetPath().ToStdString()};
+    ofs << lastGetmedResponse;
+    ofs.close();
+}
+
+void TheMasterFrame::OnSaveLastSendmed(wxCommandEvent &e) {
+    wxFileDialog saveFileDialog(this, _("Save last \"send medication\" response"), "", "", "Json files (*.json)|*.json", wxFD_SAVE|wxFD_OVERWRITE_PROMPT);
+    if (saveFileDialog.ShowModal() == wxID_CANCEL)
+        return; // the user changed their mind
+    std::ofstream ofs{saveFileDialog.GetPath().ToStdString()};
+    ofs << lastSendmedResponse;
     ofs.close();
 }
 
