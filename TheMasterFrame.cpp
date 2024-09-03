@@ -298,6 +298,11 @@ private:
     std::function<void ()> finish{[] () {}};
     bool finished{false};
 public:
+    CallContext() = default;
+    CallContext(const CallContext &) = delete;
+    CallContext(CallContext &&) = delete;
+    CallContext &operator =(const CallContext &) = delete;
+    CallContext &operator =(CallContext &&) = delete;
     void SetFinish(const std::function<void ()> &);
     void Finish();
     ~CallContext();
@@ -1251,265 +1256,268 @@ void TheMasterFrame::OnSendPll(wxCommandEvent &e) {
     }
     auto subjectRef = GetSubjectRef();
     std::shared_ptr<WaitingForApiDialog> waitingDialog = std::make_shared<WaitingForApiDialog>(this, "Sending PLL", "Sending medication bundle...");
-    auto ctx = std::make_shared<CallContext>();
+    auto ctx = std::make_shared<std::unique_ptr<CallContext>>();
+    *ctx = std::make_unique<CallContext>();
     try {
-        SendMedication(*ctx, [subjectRef, selected, pllMedicationStatements, newPllIds](
-                const std::shared_ptr<FhirBundle> &bundle) {
-            auto entries = bundle->GetEntries();
-            std::vector<FhirBundleEntry> appendEntries{};
-            for (const auto &entry: entries) {
-                auto composition = std::dynamic_pointer_cast<FhirComposition>(entry.GetResource());
-                if (composition) {
-                    auto sections = composition->GetSections();
-                    for (auto &section: sections) {
-                        auto codings = section.GetCode().GetCoding();
-                        if (codings.empty()) {
-                            continue;
-                        }
-                        if (codings[0].GetCode() == "sectionPLLinfo") {
-                            auto sectionEntries = section.GetEntries();
-                            std::shared_ptr<FhirBasic> m251Message{};
-                            {
-                                std::vector<std::shared_ptr<FhirBasic>> m25Messages{};
-                                for (const auto &entry: sectionEntries) {
-                                    auto ref = entry.GetReference();
-                                    for (const auto &bundleEntry: entries) {
-                                        if (bundleEntry.GetFullUrl() == ref) {
-                                            auto fhirBasic = std::dynamic_pointer_cast<FhirBasic>(
-                                                    bundleEntry.GetResource());
-                                            if (fhirBasic) {
-                                                m25Messages.emplace_back(fhirBasic);
-                                            }
-                                        }
-                                    }
-                                }
-                                for (const auto &m25Message: m25Messages) {
-                                    std::string code{};
-                                    {
-                                        auto codings = m25Message->GetCode().GetCoding();
-                                        if (!codings.empty()) {
-                                            code = codings[0].GetCode();
-                                        }
-                                    }
-                                    if (code == "M25.1") {
-                                        m251Message = m25Message;
-                                    }
-                                }
+        wxTheApp->GetTopWindow()->GetEventHandler()->CallAfter([this, ctx, subjectRef, selected, pllMedicationStatements, newPllIds, medicationStatements, waitingDialog]() {
+            SendMedication(**ctx, [subjectRef, selected, pllMedicationStatements, newPllIds](
+                    const std::shared_ptr<FhirBundle> &bundle) {
+                auto entries = bundle->GetEntries();
+                std::vector<FhirBundleEntry> appendEntries{};
+                for (const auto &entry: entries) {
+                    auto composition = std::dynamic_pointer_cast<FhirComposition>(entry.GetResource());
+                    if (composition) {
+                        auto sections = composition->GetSections();
+                        for (auto &section: sections) {
+                            auto codings = section.GetCode().GetCoding();
+                            if (codings.empty()) {
+                                continue;
                             }
-                            if (!m251Message) {
-                                std::string url{"urn:uuid:"};
-                                m251Message = std::make_shared<FhirBasic>();
+                            if (codings[0].GetCode() == "sectionPLLinfo") {
+                                auto sectionEntries = section.GetEntries();
+                                std::shared_ptr<FhirBasic> m251Message{};
                                 {
-                                    boost::uuids::random_generator generator;
-                                    boost::uuids::uuid randomUUID = generator();
-                                    std::string uuidStr = boost::uuids::to_string(randomUUID);
-                                    m251Message->SetId(uuidStr);
-                                    url.append(uuidStr);
-                                }
-                                m251Message->SetProfile("http://ehelse.no/fhir/StructureDefinition/sfm-PLL-info");
-                                m251Message->SetCode(
-                                        FhirCodeableConcept("http://ehelse.no/fhir/CodeSystem/sfm-message-type",
-                                                            "M25.1", "PLL"));
-                                if (subjectRef.IsSet()) {
-                                    m251Message->SetSubject(subjectRef);
-                                }
-                                appendEntries.emplace_back(url, m251Message);
-                                sectionEntries.emplace_back(url,
-                                                            "http://ehelse.no/fhir/StructureDefinition/sfm-PLL-info",
-                                                            "sfm-PLL-info");
-                                section.SetEntries(sectionEntries);
-                                section.SetEmptyReason({});
-                            }
-                            std::shared_ptr<FhirExtension> metadataPll{};
-                            {
-                                auto extensions = m251Message->GetExtensions();
-                                for (const auto &extension: extensions) {
-                                    auto urlLower = extension->GetUrl();
-                                    std::transform(urlLower.begin(), urlLower.end(), urlLower.begin(),
-                                                   [](auto ch) -> char { return std::tolower(ch); });
-                                    if (urlLower == "http://ehelse.no/fhir/structuredefinition/sfm-pllinformation") {
-                                        metadataPll = extension;
+                                    std::vector<std::shared_ptr<FhirBasic>> m25Messages{};
+                                    for (const auto &entry: sectionEntries) {
+                                        auto ref = entry.GetReference();
+                                        for (const auto &bundleEntry: entries) {
+                                            if (bundleEntry.GetFullUrl() == ref) {
+                                                auto fhirBasic = std::dynamic_pointer_cast<FhirBasic>(
+                                                        bundleEntry.GetResource());
+                                                if (fhirBasic) {
+                                                    m25Messages.emplace_back(fhirBasic);
+                                                }
+                                            }
+                                        }
+                                    }
+                                    for (const auto &m25Message: m25Messages) {
+                                        std::string code{};
+                                        {
+                                            auto codings = m25Message->GetCode().GetCoding();
+                                            if (!codings.empty()) {
+                                                code = codings[0].GetCode();
+                                            }
+                                        }
+                                        if (code == "M25.1") {
+                                            m251Message = m25Message;
+                                        }
                                     }
                                 }
-                            }
-                            if (!metadataPll) {
-                                metadataPll = std::make_shared<FhirExtension>(
-                                        "http://ehelse.no/fhir/StructureDefinition/sfm-pllInformation");
-                                m251Message->AddExtension(metadataPll);
-                            }
-                            std::shared_ptr<FhirBooleanValue> createPll{};
-                            {
-                                auto extensions = metadataPll->GetExtensions();
-                                for (const auto &extension: extensions) {
-                                    auto urlLower = extension->GetUrl();
-                                    std::transform(urlLower.begin(), urlLower.end(), urlLower.begin(),
-                                                   [](auto ch) -> char { return std::tolower(ch); });
-                                    if (urlLower == "createpll") {
-                                        auto valueExtension = std::dynamic_pointer_cast<FhirValueExtension>(extension);
-                                        if (valueExtension) {
-                                            auto value = std::dynamic_pointer_cast<FhirBooleanValue>(
-                                                    valueExtension->GetValue());
-                                            if (value) {
-                                                createPll = value;
+                                if (!m251Message) {
+                                    std::string url{"urn:uuid:"};
+                                    m251Message = std::make_shared<FhirBasic>();
+                                    {
+                                        boost::uuids::random_generator generator;
+                                        boost::uuids::uuid randomUUID = generator();
+                                        std::string uuidStr = boost::uuids::to_string(randomUUID);
+                                        m251Message->SetId(uuidStr);
+                                        url.append(uuidStr);
+                                    }
+                                    m251Message->SetProfile("http://ehelse.no/fhir/StructureDefinition/sfm-PLL-info");
+                                    m251Message->SetCode(
+                                            FhirCodeableConcept("http://ehelse.no/fhir/CodeSystem/sfm-message-type",
+                                                                "M25.1", "PLL"));
+                                    if (subjectRef.IsSet()) {
+                                        m251Message->SetSubject(subjectRef);
+                                    }
+                                    appendEntries.emplace_back(url, m251Message);
+                                    sectionEntries.emplace_back(url,
+                                                                "http://ehelse.no/fhir/StructureDefinition/sfm-PLL-info",
+                                                                "sfm-PLL-info");
+                                    section.SetEntries(sectionEntries);
+                                    section.SetEmptyReason({});
+                                }
+                                std::shared_ptr<FhirExtension> metadataPll{};
+                                {
+                                    auto extensions = m251Message->GetExtensions();
+                                    for (const auto &extension: extensions) {
+                                        auto urlLower = extension->GetUrl();
+                                        std::transform(urlLower.begin(), urlLower.end(), urlLower.begin(),
+                                                       [](auto ch) -> char { return std::tolower(ch); });
+                                        if (urlLower == "http://ehelse.no/fhir/structuredefinition/sfm-pllinformation") {
+                                            metadataPll = extension;
+                                        }
+                                    }
+                                }
+                                if (!metadataPll) {
+                                    metadataPll = std::make_shared<FhirExtension>(
+                                            "http://ehelse.no/fhir/StructureDefinition/sfm-pllInformation");
+                                    m251Message->AddExtension(metadataPll);
+                                }
+                                std::shared_ptr<FhirBooleanValue> createPll{};
+                                {
+                                    auto extensions = metadataPll->GetExtensions();
+                                    for (const auto &extension: extensions) {
+                                        auto urlLower = extension->GetUrl();
+                                        std::transform(urlLower.begin(), urlLower.end(), urlLower.begin(),
+                                                       [](auto ch) -> char { return std::tolower(ch); });
+                                        if (urlLower == "createpll") {
+                                            auto valueExtension = std::dynamic_pointer_cast<FhirValueExtension>(extension);
+                                            if (valueExtension) {
+                                                auto value = std::dynamic_pointer_cast<FhirBooleanValue>(
+                                                        valueExtension->GetValue());
+                                                if (value) {
+                                                    createPll = value;
+                                                }
                                             }
                                         }
                                     }
                                 }
-                            }
-                            if (createPll) {
-                                createPll->SetValue(true);
-                            } else {
-                                createPll = std::make_shared<FhirBooleanValue>(true);
-                                metadataPll->AddExtension(std::make_shared<FhirValueExtension>("createPLL", createPll));
-                            }
-                        } else if (codings[0].GetCode() == "sectionMedication") {
-                            auto entries = section.GetEntries();
-                            auto iterator = entries.begin();
-                            while (iterator != entries.end()) {
-                                auto reference = iterator->GetReference();
-                                bool found{false};
-                                for (const auto &id: selected) {
-                                    if (reference == id) {
-                                        found = true;
-                                        break;
-                                    }
-                                }
-                                if (found) {
-                                    ++iterator;
+                                if (createPll) {
+                                    createPll->SetValue(true);
                                 } else {
-                                    iterator = entries.erase(iterator);
+                                    createPll = std::make_shared<FhirBooleanValue>(true);
+                                    metadataPll->AddExtension(std::make_shared<FhirValueExtension>("createPLL", createPll));
                                 }
-                            }
-                            section.SetEntries(entries);
-                        }
-                    }
-                    composition->SetSections(sections);
-                    continue;
-                }
-            }
-            {
-                auto iterator = entries.begin();
-                while (iterator != entries.end()) {
-                    auto medicationStatement = std::dynamic_pointer_cast<FhirMedicationStatement>(
-                            iterator->GetResource());
-                    if (medicationStatement) {
-                        std::string pllId{};
-                        {
-                            auto identifiers = medicationStatement->GetIdentifiers();
-                            auto iterator = identifiers.begin();
-                            while (iterator != identifiers.end()) {
-                                const auto &identifier = *iterator;
-                                auto key = identifier.GetType().GetText();
-                                std::transform(key.cbegin(), key.cend(), key.begin(),
-                                               [](char ch) { return std::tolower(ch); });
-                                if (key == "pll") {
-                                    pllId = identifier.GetValue();
+                            } else if (codings[0].GetCode() == "sectionMedication") {
+                                auto entries = section.GetEntries();
+                                auto iterator = entries.begin();
+                                while (iterator != entries.end()) {
+                                    auto reference = iterator->GetReference();
                                     bool found{false};
-                                    for (const auto &newId: newPllIds) {
-                                        if (newId == pllId) {
+                                    for (const auto &id: selected) {
+                                        if (reference == id) {
                                             found = true;
                                             break;
                                         }
                                     }
                                     if (found) {
-                                        iterator = identifiers.erase(iterator);
+                                        ++iterator;
+                                    } else {
+                                        iterator = entries.erase(iterator);
+                                    }
+                                }
+                                section.SetEntries(entries);
+                            }
+                        }
+                        composition->SetSections(sections);
+                        continue;
+                    }
+                }
+                {
+                    auto iterator = entries.begin();
+                    while (iterator != entries.end()) {
+                        auto medicationStatement = std::dynamic_pointer_cast<FhirMedicationStatement>(
+                                iterator->GetResource());
+                        if (medicationStatement) {
+                            std::string pllId{};
+                            {
+                                auto identifiers = medicationStatement->GetIdentifiers();
+                                auto iterator = identifiers.begin();
+                                while (iterator != identifiers.end()) {
+                                    const auto &identifier = *iterator;
+                                    auto key = identifier.GetType().GetText();
+                                    std::transform(key.cbegin(), key.cend(), key.begin(),
+                                                   [](char ch) { return std::tolower(ch); });
+                                    if (key == "pll") {
+                                        pllId = identifier.GetValue();
+                                        bool found{false};
+                                        for (const auto &newId: newPllIds) {
+                                            if (newId == pllId) {
+                                                found = true;
+                                                break;
+                                            }
+                                        }
+                                        if (found) {
+                                            iterator = identifiers.erase(iterator);
+                                        } else {
+                                            ++iterator;
+                                        }
                                     } else {
                                         ++iterator;
                                     }
-                                } else {
-                                    ++iterator;
+                                }
+                                medicationStatement->SetIdentifiers(identifiers);
+                            }
+                            bool found{false};
+                            if (!pllId.empty()) {
+                                found = pllMedicationStatements.find(pllId) != pllMedicationStatements.end();
+                            }
+                            if (found) {
+                                auto statusInfo = PrescriptionChangesService::GetPrescriptionStatusInfo(*medicationStatement);
+                                if (!statusInfo.IsCeased && !statusInfo.IsValidPrescription && statusInfo.HasBeenValidPrescription) {
+                                    PrescriptionChangesService::RenewRevokedOrExpiredPll(*medicationStatement);
                                 }
                             }
-                            medicationStatement->SetIdentifiers(identifiers);
+                            if (found) {
+                                ++iterator;
+                            } else {
+                                iterator = entries.erase(iterator);
+                            }
+                        } else {
+                            ++iterator;
                         }
-                        bool found{false};
-                        if (!pllId.empty()) {
-                            found = pllMedicationStatements.find(pllId) != pllMedicationStatements.end();
-                        }
-                        if (found) {
-                            auto statusInfo = PrescriptionChangesService::GetPrescriptionStatusInfo(*medicationStatement);
-                            if (!statusInfo.IsCeased && !statusInfo.IsValidPrescription && statusInfo.HasBeenValidPrescription) {
-                                PrescriptionChangesService::RenewRevokedOrExpiredPll(*medicationStatement);
+                    }
+                }
+                auto iterator = appendEntries.begin();
+                while (iterator != appendEntries.end()) {
+                    entries.emplace_back(std::move(*iterator));
+                    iterator = appendEntries.erase(iterator);
+                }
+                bundle->SetEntries(entries);
+            }, [medicationStatements, newPllIds, pllMedicationStatements](
+                    const std::map<std::string, FhirCoding> &pllResults) {
+                std::vector<std::string> removePllIds = newPllIds;
+                int pllsSent{0};
+                for (const auto &resultPair: pllResults) {
+                    const auto &pllId = resultPair.first;
+                    const auto &resultCode = resultPair.second;
+                    if (resultCode.GetCode() == "0") {
+                        ++pllsSent;
+                        auto iterator = removePllIds.begin();
+                        while (iterator != removePllIds.end()) {
+                            if (*iterator == pllId) {
+                                iterator = removePllIds.erase(iterator);
+                            } else {
+                                ++iterator;
                             }
                         }
-                        if (found) {
-                            ++iterator;
-                        } else {
-                            iterator = entries.erase(iterator);
-                        }
                     } else {
-                        ++iterator;
+                        std::stringstream sstr{};
+                        sstr << "Failed to send PLL with id " << pllId << " with code " << resultCode.GetCode()
+                             << " " << resultCode.GetDisplay();
+                        wxMessageBox(wxString::FromUTF8(sstr.str()), wxT("PLL result error code"), wxICON_ERROR);
                     }
                 }
-            }
-            auto iterator = appendEntries.begin();
-            while (iterator != appendEntries.end()) {
-                entries.emplace_back(std::move(*iterator));
-                iterator = appendEntries.erase(iterator);
-            }
-            bundle->SetEntries(entries);
-        }, [medicationStatements, newPllIds, pllMedicationStatements](
-                const std::map<std::string, FhirCoding> &pllResults) {
-            std::vector<std::string> removePllIds = newPllIds;
-            int pllsSent{0};
-            for (const auto &resultPair: pllResults) {
-                const auto &pllId = resultPair.first;
-                const auto &resultCode = resultPair.second;
-                if (resultCode.GetCode() == "0") {
-                    ++pllsSent;
-                    auto iterator = removePllIds.begin();
-                    while (iterator != removePllIds.end()) {
-                        if (*iterator == pllId) {
-                            iterator = removePllIds.erase(iterator);
-                        } else {
-                            ++iterator;
-                        }
+                if (pllsSent > 0) {
+                    {
+                        std::stringstream sstr{};
+                        sstr << "Successfully sent PLL with " << pllsSent << " messages.";
+                        wxMessageBox(wxString::FromUTF8(sstr.str()), wxT("PLL updated"), wxICON_INFORMATION);
+                    }
+
+                }
+            }, [this, waitingDialog, ctx](const std::string &err) {
+                if (err.empty()) {
+                    (*ctx)->Finish();
+                    waitingDialog->SetMessage("Requesting new medication bundle...");
+                    *ctx = std::make_unique<CallContext>();
+                    try {
+                        GetMedication(**ctx, [waitingDialog](const std::string &err) {
+                            waitingDialog->Close();
+                            if (!err.empty()) {
+                                wxMessageBox(wxString::FromUTF8(err), wxT("Get medication error"), wxICON_ERROR);
+                            }
+                        });
+                    } catch (SyncGetMedError &e) {
+                        waitingDialog->Close();
+                        wxMessageBox(wxString::FromUTF8(e.what()), wxT("Get medication error"), wxICON_ERROR);
+                    } catch (...) {
+                        waitingDialog->Close();
+                        wxMessageBox(wxT("Unknown error"), wxT("Get medication error"), wxICON_ERROR);
                     }
                 } else {
-                    std::stringstream sstr{};
-                    sstr << "Failed to send PLL with id " << pllId << " with code " << resultCode.GetCode()
-                         << " " << resultCode.GetDisplay();
-                    wxMessageBox(wxString::FromUTF8(sstr.str()), wxT("PLL result error code"), wxICON_ERROR);
-                }
-            }
-            if (pllsSent > 0) {
-                {
-                    std::stringstream sstr{};
-                    sstr << "Successfully sent PLL with " << pllsSent << " messages.";
-                    wxMessageBox(wxString::FromUTF8(sstr.str()), wxT("PLL updated"), wxICON_INFORMATION);
-                }
-
-            }
-        }, [this, waitingDialog, &ctx](const std::string &err) {
-            if (err.empty()) {
-                ctx->Finish();
-                waitingDialog->SetMessage("Requesting new medication bundle...");
-                ctx = std::make_shared<CallContext>();
-                try {
-                    GetMedication(*ctx, [waitingDialog](const std::string &err) {
-                        if (!err.empty()) {
-                            wxMessageBox(wxString::FromUTF8(err), wxT("Get medication error"), wxICON_ERROR);
-                        }
-                        waitingDialog->Close();
-                    });
-                } catch (SyncGetMedError &e) {
-                    wxMessageBox(wxString::FromUTF8(e.what()), wxT("Get medication error"), wxICON_ERROR);
                     waitingDialog->Close();
-                } catch (...) {
-                    wxMessageBox(wxT("Unknown error"), wxT("Get medication error"), wxICON_ERROR);
-                    waitingDialog->Close();
+                    wxMessageBox(wxString::FromUTF8(err), wxT("Send medication error"), wxICON_ERROR);
                 }
-            } else {
-                wxMessageBox(wxString::FromUTF8(err), wxT("Send medication error"), wxICON_ERROR);
-                waitingDialog->Close();
-            }
+            });
         });
     } catch (SyncSendMedError &e) {
         wxMessageBox(wxString::FromUTF8(e.what()), wxT("Send medication error"), wxICON_ERROR);
         return;
     }
     waitingDialog->ShowModal();
-    ctx->Finish();
+    (*ctx)->Finish();
 }
 
 void TheMasterFrame::OnSaveLastGetmedRequest(wxCommandEvent &e) {
