@@ -328,7 +328,7 @@ void CallContext::Finish() {
 }
 
 CallContext::~CallContext() {
-    bool finshed;
+    bool finished;
     {
         finished = this->finished;
         this->finished = true;
