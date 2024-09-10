@@ -657,7 +657,7 @@ void TheMasterFrame::GetMedication(CallContext &ctx, const std::function<void(co
             auto response = responseTask.get();
             try {
                 auto contentType = response.headers().content_type();
-                if (!contentType.starts_with("application/fhir+json")) {
+                if (!contentType.starts_with("application/fhir+json") && contentType != "application/json") {
                     std::string msg{"Wrong content type in response: "};
                     msg.append(contentType);
                     callback->Call(msg);
