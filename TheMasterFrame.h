@@ -11,11 +11,11 @@
 #include <map>
 #include "WeakRefUiDispatcher.h"
 #include "PrescriptionData.h"
+#include "MedBundleData.h"
 #include "TheMasterIds.h"
 
 class PatientStore;
 class PatientInformation;
-class MedBundleData;
 class PrescriberRef;
 class FhirBundle;
 class FhirExtension;
@@ -34,7 +34,7 @@ private:
     std::shared_ptr<PatientStore> patientStore{};
     std::shared_ptr<PatientInformation> patientInformation;
     std::unique_ptr<MedBundleData> medicationBundle{};
-    std::vector<std::shared_ptr<FhirMedicationStatement>> displayedMedicationStatements{};
+    std::vector<std::vector<std::shared_ptr<FhirMedicationStatement>>> displayedMedicationStatements{};
     std::string lastGetmedRequest{};
     std::string lastGetmedResponse{};
     std::string lastSendmedRequest{};

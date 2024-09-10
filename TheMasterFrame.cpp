@@ -169,19 +169,78 @@ void TheMasterFrame::UpdateMedications() {
     prescriptions->SetColumnWidth(0, PrescriptionNameColumnWidth);
     prescriptions->SetColumnWidth(1, PllColumnWidth);
     prescriptions->SetColumnWidth(2, PrescriptionRemoteColumnWidth);
-    std::vector<std::shared_ptr<FhirMedicationStatement>> displayedMedicationStatements{};
+    std::vector<std::vector<std::shared_ptr<FhirMedicationStatement>>> displayedMedicationStatements{};
     auto pos = 0;
+    std::map<std::string,std::shared_ptr<FhirMedicationStatement>> medicationStatementMap{};
+    FhirCompositionSection medicationSection{};
     for (const auto &bundleEntry : medicationBundle->medBundle->GetEntries()) {
         auto resource = bundleEntry.GetResource();
-        auto resourceType = resource->GetResourceType();
         auto medicationStatement = std::dynamic_pointer_cast<FhirMedicationStatement>(resource);
         if (medicationStatement) {
+            medicationStatementMap.insert_or_assign(bundleEntry.GetFullUrl(), medicationStatement);
+            continue;
+        }
+        auto composition = std::dynamic_pointer_cast<FhirComposition>(resource);
+        if (composition) {
+            auto sections = composition->GetSections();
+            for (const auto &section : sections) {
+                auto coding = section.GetCode().GetCoding();
+                if (coding.size() == 1 && coding[0].GetCode() == "sectionMedication") {
+                    medicationSection = section;
+                    break;
+                }
+            }
+        }
+    }
+    for (const auto &sectionEntry : medicationSection.GetEntries()) {
+        auto medicationStatementIterator = medicationStatementMap.find(sectionEntry.GetReference());
+        if (medicationStatementIterator == medicationStatementMap.end()) {
+            continue;
+        }
+        auto medicationStatement = medicationStatementIterator->second;
+        std::vector<std::shared_ptr<FhirMedicationStatement>> versions{};
+        versions.emplace_back(medicationStatementIterator->second);
+        auto basedOn = medicationStatement->GetBasedOn();
+        while (!basedOn.empty()) {
+            medicationStatement = {};
+            for (const auto &bo : basedOn) {
+                medicationStatementIterator = medicationStatementMap.find(bo.GetReference());
+                if (medicationStatementIterator != medicationStatementMap.end()) {
+                    medicationStatement = medicationStatementIterator->second;
+                    break;
+                }
+            }
+            if (!medicationStatement) {
+                break;
+            }
+            versions.emplace_back(medicationStatement);
+            basedOn = medicationStatement->GetBasedOn();
+        }
+        medicationStatement = versions[0];
+        if (medicationStatement) {
             auto row = pos++;
-            displayedMedicationStatements.emplace_back(medicationStatement);
+            displayedMedicationStatements.emplace_back(versions);
             prescriptions->InsertItem(row, medicationStatement->GetMedicationReference().GetDisplay());
             auto statusInfo = PrescriptionChangesService::GetPrescriptionStatusInfo(*medicationStatement);
             if (statusInfo.IsPll) {
-                prescriptions->SetItem(row, 1, wxT("PLL"));
+                if (versions.size() > 1) {
+                    prescriptions->SetItem(row, 1, wxT("PLL*"));
+                } else {
+                    prescriptions->SetItem(row, 1, wxT("PLL"));
+                }
+            } else if (versions.size() > 1) {
+                bool hidesPll{false};
+                for (const auto &v : versions) {
+                    auto statusInfo = PrescriptionChangesService::GetPrescriptionStatusInfo(*v);
+                    if (statusInfo.IsPll) {
+                        hidesPll = true;
+                    }
+                }
+                if (hidesPll) {
+                    prescriptions->SetItem(row, 1, wxT("(PLL)"));
+                } else {
+                    prescriptions->SetItem(row, 1, wxT("*"));
+                }
             } else {
                 prescriptions->SetItem(row, 1, wxT(""));
             }
@@ -1733,7 +1792,7 @@ void TheMasterFrame::OnPrescriptionContextMenu(wxContextMenuEvent &e) {
     if (selected < 0 || selected >= displayedMedicationStatements.size()) {
         return;
     }
-    auto medicationStatement = displayedMedicationStatements[selected];
+    auto medicationStatement = displayedMedicationStatements[selected][0];
     auto display = medicationStatement->GetDisplay();
     wxMenu menu(wxString::FromUTF8(display));
     menu.Append(TheMaster_PrescriptionDetails_Id, wxT("Details"));
@@ -1751,8 +1810,8 @@ void TheMasterFrame::OnPrescriptionDetails(wxCommandEvent &e) {
     if (selected < 0 || selected >= displayedMedicationStatements.size()) {
         return;
     }
-    auto medicationStatement = displayedMedicationStatements[selected];
-    PrescriptionDetailsDialog dialog{this, medicationStatement};
+    auto medicationStatements = displayedMedicationStatements[selected];
+    PrescriptionDetailsDialog dialog{this, medicationStatements};
     dialog.ShowModal();
 }
 
@@ -1764,7 +1823,7 @@ void TheMasterFrame::OnPrescriptionRecall(wxCommandEvent &e) {
     if (selected < 0 || selected >= displayedMedicationStatements.size()) {
         return;
     }
-    auto medicationStatement = displayedMedicationStatements[selected];
+    auto medicationStatement = displayedMedicationStatements[selected][0];
     std::shared_ptr<FhirExtension> reseptAmendment{};
     {
         auto extensions = medicationStatement->GetExtensions();
@@ -1900,7 +1959,7 @@ void TheMasterFrame::OnPrescriptionCease(wxCommandEvent &e) {
     if (selected < 0 || selected >= displayedMedicationStatements.size()) {
         return;
     }
-    auto medicationStatement = displayedMedicationStatements[selected];
+    auto medicationStatement = displayedMedicationStatements[selected][0];
     std::shared_ptr<FhirExtension> reseptAmendment{};
     {
         auto extensions = medicationStatement->GetExtensions();
@@ -2055,7 +2114,7 @@ void TheMasterFrame::OnPrescriptionRenew(wxCommandEvent &e) {
     if (selected < 0 || selected >= displayedMedicationStatements.size()) {
         return;
     }
-    auto medicationStatement = displayedMedicationStatements[selected];
+    auto medicationStatement = displayedMedicationStatements[selected][0];
     PrescriptionChangesService::Renew(*medicationStatement);
     UpdateMedications();
 }

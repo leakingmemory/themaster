@@ -7,15 +7,41 @@
 #include <sfmbasisapi/fhir/medstatement.h>
 
 PrescriptionDetailsDialog::PrescriptionDetailsDialog(wxWindow *parent,
-                                                     const std::shared_ptr<FhirMedicationStatement> &statement) :
-        wxDialog(parent, wxID_ANY, wxT("Prescription details")) {
+                                                     const std::vector<std::shared_ptr<FhirMedicationStatement>> &statements) :
+        wxDialog(parent, wxID_ANY, wxT("Prescription details")), statements(statements) {
     auto *sizer = new wxBoxSizer(wxVERTICAL);
-    auto *listView = new wxListView(this, wxID_ANY);
+    versionsView = new wxListView(this, wxID_ANY);
+    versionsView->AppendColumn(wxT(""));
+    {
+        int row = 0;
+        for (const auto &statement: statements) {
+            AddVersion(row++, statement);
+        }
+    }
+    versionsView->Select(0);
+    versionsView->Bind(wxEVT_LIST_ITEM_DESELECTED, &PrescriptionDetailsDialog::OnVersionSelect, this, wxID_ANY);
+    versionsView->Bind(wxEVT_LIST_ITEM_SELECTED, &PrescriptionDetailsDialog::OnVersionSelect, this, wxID_ANY);
+    sizer->Add(versionsView, 1, wxEXPAND | wxALL, 5);
+    listView = new wxListView(this, wxID_ANY);
+    if (!statements.empty()) {
+        DisplayStatement(statements[0]);
+    } else {
+        DisplayStatement({});
+    }
+    sizer->Add(listView, 2, wxEXPAND | wxALL, 5);
+    SetSizerAndFit(sizer);
+}
+
+void PrescriptionDetailsDialog::AddVersion(int row, const std::shared_ptr<FhirMedicationStatement> &statement) {
+    versionsView->InsertItem(row, wxString::FromUTF8(statement->GetDisplay()));
+}
+
+void PrescriptionDetailsDialog::DisplayStatement(const std::shared_ptr<FhirMedicationStatement> &statement) {
     listView->AppendColumn(wxT(""));
     listView->AppendColumn(wxT(""));
     int rowNum = 0;
     {
-        wxString display = wxString::FromUTF8(statement->GetDisplay());
+        wxString display = wxString::FromUTF8(statement ? statement->GetDisplay() : "");
         auto row = rowNum++;
         listView->InsertItem(row, wxT("Display: "));
         listView->SetItem(row, 1, display);
@@ -39,7 +65,7 @@ PrescriptionDetailsDialog::PrescriptionDetailsDialog(wxWindow *parent,
     bool inDoctorsName{false};
     bool lockedPrescription{false};
     std::vector<std::shared_ptr<FhirExtension>> regInfos{};
-    {
+    if (statement) {
         auto extensions = statement->GetExtensions();
         for (const auto &extension : extensions) {
             auto url = extension->GetUrl();
@@ -159,7 +185,7 @@ PrescriptionDetailsDialog::PrescriptionDetailsDialog(wxWindow *parent,
             }
         }
     }
-    {
+    if (statement) {
         auto identifiers = statement->GetIdentifiers();
         for (const auto &identifier : identifiers) {
             auto typeText = identifier.GetType().GetText();
@@ -224,7 +250,7 @@ PrescriptionDetailsDialog::PrescriptionDetailsDialog(wxWindow *parent,
             listView->SetItem(row, 1, ceaseTime);
         }
     }
-    {
+    if (statement) {
         auto dosages = statement->GetDosage();
         for (const auto &dosage : dosages) {
             auto extensions = dosage.GetExtensions();
@@ -412,6 +438,17 @@ PrescriptionDetailsDialog::PrescriptionDetailsDialog(wxWindow *parent,
     }
     listView->SetColumnWidth(0, 250);
     listView->SetColumnWidth(1, 300);
-    sizer->Add(listView, 1, wxEXPAND | wxALL, 5);
-    SetSizerAndFit(sizer);
+}
+
+void PrescriptionDetailsDialog::OnVersionSelect(wxCommandEvent &e) {
+    if (versionsView->GetSelectedItemCount() != 1) {
+        DisplayStatement({});
+        return;
+    }
+    auto selected = versionsView->GetFirstSelected();
+    if (selected < 0 || selected >= statements.size()) {
+        DisplayStatement({});
+        return;
+    }
+    DisplayStatement(statements[selected]);
 }
