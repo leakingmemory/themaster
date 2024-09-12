@@ -210,6 +210,7 @@ void PrescriptionChangesService::RenewRevokedOrExpiredPll(FhirMedicationStatemen
     std::shared_ptr<FhirExtension> recallInfo{};
     std::shared_ptr<FhirExtension> rfstatus{};
     std::shared_ptr<FhirExtension> createereseptExt{};
+    std::shared_ptr<FhirExtension> festUpdateExt{};
     for (const auto &medicationStatementExtension : medicationStatementExtensions) {
         auto url = medicationStatementExtension->GetUrl();
         std::transform(url.cbegin(), url.cend(), url.begin(), [] (char ch) { return std::tolower(ch); });
@@ -229,6 +230,9 @@ void PrescriptionChangesService::RenewRevokedOrExpiredPll(FhirMedicationStatemen
                     ++reseptAmendmentExtensionsIterator;
                 } else if (url == "createeresept") {
                     createereseptExt = reseptAmendmentExtension;
+                    ++reseptAmendmentExtensionsIterator;
+                } else if (url == "festupdate") {
+                    festUpdateExt = reseptAmendmentExtension;
                     ++reseptAmendmentExtensionsIterator;
                 } else {
                     ++reseptAmendmentExtensionsIterator;
@@ -269,6 +273,10 @@ void PrescriptionChangesService::RenewRevokedOrExpiredPll(FhirMedicationStatemen
     } else {
         createereseptExt = std::make_shared<FhirValueExtension>("createeresept", std::make_shared<FhirBooleanValue>(true));
         reseptAmendment->AddExtension(createereseptExt);
+    }
+    if (!festUpdateExt) {
+        festUpdateExt = std::make_shared<FhirValueExtension>("festupdate", std::make_shared<FhirString>("2023-12-20T11:54:48.9287539+00:00")); // TODO
+        reseptAmendment->AddExtension(festUpdateExt);
     }
     boost::uuids::random_generator generator;
     boost::uuids::uuid randomUUID = generator();
