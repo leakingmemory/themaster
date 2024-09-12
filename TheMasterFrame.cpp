@@ -2019,7 +2019,10 @@ void TheMasterFrame::OnPrescriptionCease(wxCommandEvent &e) {
                 std::string text{dialog.GetReasonText()};
                 FhirCodeableConcept codeable{std::move(codings)};
                 discontinuation->AddExtension(std::make_shared<FhirValueExtension>("reason", std::make_shared<FhirCodeableConceptValue>(codeable)));
-                discontinuation->AddExtension(std::make_shared<FhirValueExtension>("note", std::make_shared<FhirString>(text)));
+                if (!codeable.IsSet()) {
+                    discontinuation->AddExtension(
+                            std::make_shared<FhirValueExtension>("note", std::make_shared<FhirString>(text)));
+                }
             }
         }
         medicationStatement->AddExtension(discontinuation);
