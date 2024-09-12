@@ -55,6 +55,10 @@ wxBoxSizer *PrescriptionDialog::CreateAmount(wxWindow *parent) {
 
 PrescriptionDialog::PrescriptionDialog(TheMasterFrame *frame, const std::shared_ptr<FhirMedication> &medication, const std::vector<MedicalCodedValue> &amountUnit, bool package, const std::vector<MedicamentPackage> &packages) : wxDialog(frame, wxID_ANY, wxT("Prescription")), medication(medication), amountUnit(amountUnit), packages(packages) {
     auto *sizer = new wxBoxSizer(wxVERTICAL);
+    wxArrayString typeSelectionChoices{};
+    typeSelectionChoices.Add(wxT("E-prescription"));
+    typeSelectionChoices.Add(wxT("PLL-entry"));
+    typeSelection = new wxRadioBox(this, wxID_ANY, wxT("Record type:"), wxDefaultPosition, wxDefaultSize, typeSelectionChoices, typeSelectionChoices.size(), wxRA_HORIZONTAL);
     auto *dssnSizer = new wxBoxSizer(wxHORIZONTAL);
     auto *dssnLabel = new wxStaticText(this, wxID_ANY, wxT("DSSN:"));
     dssnCtrl = new wxTextCtrl(this, wxID_ANY);
@@ -103,6 +107,7 @@ PrescriptionDialog::PrescriptionDialog(TheMasterFrame *frame, const std::shared_
     proceedButton->Enable(false);
     buttonsSizer->Add(cancelButton, 0, wxEXPAND | wxALL, 5);
     buttonsSizer->Add(proceedButton, 0, wxEXPAND | wxALL, 5);
+    sizer->Add(typeSelection, 0, wxEXPAND | wxALL, 5);
     sizer->Add(dssnSizer, 0, wxEXPAND | wxALL, 5);
     if (packageAmountNotebook != nullptr) {
         sizer->Add(packageAmountNotebook, 0, wxEXPAND | wxALL, 5);
@@ -144,7 +149,13 @@ void PrescriptionDialog::OnCancel(wxCommandEvent &e) {
     EndDialog(wxID_CANCEL);
 }
 
+enum class PrescriptionRecordType {
+    EPRESCRIPTION,
+    PLLENTRY
+};
+
 struct PrescriptionDialogData {
+    PrescriptionRecordType recordType{PrescriptionRecordType::EPRESCRIPTION};
     MedicalCodedValue amountUnit{};
     std::shared_ptr<FhirMedication> package{};
     std::string dssn{};
@@ -158,6 +169,16 @@ struct PrescriptionDialogData {
 
 PrescriptionDialogData PrescriptionDialog::GetDialogData() const {
     PrescriptionDialogData dialogData{};
+    switch (typeSelection->GetSelection()) {
+        case 0:
+            dialogData.recordType = PrescriptionRecordType::EPRESCRIPTION;
+            break;
+        case 1:
+            dialogData.recordType = PrescriptionRecordType::PLLENTRY;
+            break;
+        default:
+            dialogData.recordType = PrescriptionRecordType::EPRESCRIPTION;
+    }
     dialogData.dssn = dssnCtrl->GetValue().ToStdString();
     if (selectPackage != nullptr) {
         auto selected = selectPackage->GetSelection();
@@ -275,7 +296,16 @@ static void SetPrescriptionData(PrescriptionData &prescriptionData, const Prescr
     prescriptionData.applicationArea = dialogData.applicationArea;
     prescriptionData.itemGroup = {"urn:oid:2.16.578.1.12.4.1.1.7402", "L", "Legemiddel", "Legemiddel"};
     prescriptionData.rfstatus = {"urn:oid:2.16.578.1.12.4.1.1.7408", "E", "Ekspederbar", "Ekspederbar"};
-    prescriptionData.typeresept = {"urn:oid:2.16.578.1.12.4.1.1.7491", "E", "Eresept", "Eresept"};
+    switch (dialogData.recordType) {
+        case PrescriptionRecordType::EPRESCRIPTION:
+            prescriptionData.typeresept = {"urn:oid:2.16.578.1.12.4.1.1.7491", "E", "Eresept", "Eresept"};
+            break;
+        case PrescriptionRecordType::PLLENTRY:
+            prescriptionData.typeresept = {"urn:oid:2.16.578.1.12.4.1.1.7491", "U", "Uten resept", "Uten resept"};
+            break;
+        default:
+            prescriptionData.typeresept = {"urn:oid:2.16.578.1.12.4.1.1.7491", "E", "Eresept", "Eresept"};
+    }
     prescriptionData.use = {"urn:oid:2.16.578.1.12.4.1.1.9101", "1", "Fast", "Fast"};
 
     std::ostringstream nowStream;

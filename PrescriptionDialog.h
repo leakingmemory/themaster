@@ -38,6 +38,7 @@ class PrescriptionDialog : public wxDialog {
 private:
     PrescriptionData prescriptionData{};
     wxButton *proceedButton;
+    wxRadioBox *typeSelection;
     wxTextCtrl *dssnCtrl;
     wxNotebook *packageAmountNotebook{nullptr};
     wxComboBox *selectPackage{nullptr};
