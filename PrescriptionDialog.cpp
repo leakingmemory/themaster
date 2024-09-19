@@ -5,9 +5,11 @@
 #include <wx/spinctrl.h>
 #include <wx/notebook.h>
 #include "PrescriptionDialog.h"
+#include "FestDb.h"
 #include "TheMasterFrame.h"
 #include <iomanip>
 #include <sstream>
+#include <medfest/Struct/Decoded/OppfKodeverk.h>
 
 struct NumPackagesSizers {
     wxBoxSizer *packageSelectorSizer;
@@ -53,17 +55,54 @@ wxBoxSizer *PrescriptionDialog::CreateAmount(wxWindow *parent) {
     return amountSizer;
 }
 
-PrescriptionDialog::PrescriptionDialog(TheMasterFrame *frame, const std::shared_ptr<FhirMedication> &medication, const std::vector<MedicalCodedValue> &amountUnit, bool package, const std::vector<MedicamentPackage> &packages) : wxDialog(frame, wxID_ANY, wxT("Prescription")), medication(medication), amountUnit(amountUnit), packages(packages) {
+PrescriptionDialog::PrescriptionDialog(TheMasterFrame *frame, const std::shared_ptr<FestDb> &festDb, const std::shared_ptr<FhirMedication> &medication, const std::vector<MedicalCodedValue> &amountUnit, bool package, const std::vector<MedicamentPackage> &packages, const std::vector<MedicalCodedValue> &dosingUnit, const std::vector<MedicalCodedValue> &kortdoser) : wxDialog(frame, wxID_ANY, wxT("Prescription")), festDb(festDb), medication(medication), amountUnit(amountUnit), packages(packages), dosingUnit(dosingUnit), kortdoser(kortdoser) {
     auto *sizer = new wxBoxSizer(wxVERTICAL);
     wxArrayString typeSelectionChoices{};
     typeSelectionChoices.Add(wxT("E-prescription"));
     typeSelectionChoices.Add(wxT("PLL-entry"));
     typeSelection = new wxRadioBox(this, wxID_ANY, wxT("Record type:"), wxDefaultPosition, wxDefaultSize, typeSelectionChoices, typeSelectionChoices.size(), wxRA_HORIZONTAL);
+    dosingNotebook = new wxNotebook(this, wxID_ANY, wxDefaultPosition, wxDefaultSize, wxNB_TOP);
+    auto *dssnPage = new wxPanel(dosingNotebook, wxID_ANY);
     auto *dssnSizer = new wxBoxSizer(wxHORIZONTAL);
-    auto *dssnLabel = new wxStaticText(this, wxID_ANY, wxT("DSSN:"));
-    dssnCtrl = new wxTextCtrl(this, wxID_ANY);
+    auto *dssnLabel = new wxStaticText(dssnPage, wxID_ANY, wxT("DSSN:"));
+    dssnCtrl = new wxTextCtrl(dssnPage, wxID_ANY);
     dssnSizer->Add(dssnLabel, 0, wxEXPAND | wxALL, 5);
     dssnSizer->Add(dssnCtrl, 1, wxEXPAND | wxALL, 5);
+    dssnPage->SetSizerAndFit(dssnSizer);
+    dosingNotebook->AddPage(dssnPage, wxT("DSSN"));
+    auto *kortdoserPage = new wxPanel(dosingNotebook, wxID_ANY);
+    auto *kortdoserPageSizer = new wxBoxSizer(wxVERTICAL);
+    auto *kortdoseDosingUnitSizer = new wxBoxSizer(wxHORIZONTAL);
+    auto *kortdoseDosingUnitLabel = new wxStaticText(kortdoserPage, wxID_ANY, wxT("Doseringsenhet:"));
+    kortdoseDosingUnitCtrl = new wxComboBox(kortdoserPage, wxID_ANY);
+    kortdoseDosingUnitCtrl->SetEditable(false);
+    for (auto &unit : dosingUnit) {
+        auto display{unit.GetCode()};
+        display.append(" ");
+        display.append(unit.GetDisplay());
+        kortdoseDosingUnitCtrl->Append(display);
+    }
+    if (dosingUnit.size() == 1) {
+        kortdoseDosingUnitCtrl->SetSelection(0);
+    }
+    kortdoseDosingUnitSizer->Add(kortdoseDosingUnitLabel, 0, wxEXPAND | wxALL, 5);
+    kortdoseDosingUnitSizer->Add(kortdoseDosingUnitCtrl, 1, wxEXPAND | wxALL, 5);
+    kortdoserPageSizer->Add(kortdoseDosingUnitSizer, 0, wxEXPAND | wxALL, 5);
+    auto *kortdoserSizer = new wxBoxSizer(wxHORIZONTAL);
+    auto *kortdoserLabel = new wxStaticText(kortdoserPage, wxID_ANY, wxT("Kortdoser:"));
+    kortdoserCtrl = new wxComboBox(kortdoserPage, wxID_ANY);
+    kortdoserCtrl->SetEditable(false);
+    for (const auto &kd : kortdoser) {
+        std::string label{kd.GetCode()};
+        label.append(" ");
+        label.append(kd.GetDisplay());
+        kortdoserCtrl->Append(label);
+    }
+    kortdoserSizer->Add(kortdoserLabel, 0, wxEXPAND | wxALL, 5);
+    kortdoserSizer->Add(kortdoserCtrl, 1, wxEXPAND | wxALL, 5);
+    kortdoserPageSizer->Add(kortdoserSizer, 0, wxEXPAND | wxALL, 5);
+    kortdoserPage->SetSizerAndFit(kortdoserPageSizer);
+    dosingNotebook->AddPage(kortdoserPage, wxT("Kortdose"));
     wxBoxSizer *packageSelectorSizer = nullptr;
     wxBoxSizer *numPackagesSizer = nullptr;
     wxBoxSizer *amountSizer = nullptr;
@@ -108,7 +147,7 @@ PrescriptionDialog::PrescriptionDialog(TheMasterFrame *frame, const std::shared_
     buttonsSizer->Add(cancelButton, 0, wxEXPAND | wxALL, 5);
     buttonsSizer->Add(proceedButton, 0, wxEXPAND | wxALL, 5);
     sizer->Add(typeSelection, 0, wxEXPAND | wxALL, 5);
-    sizer->Add(dssnSizer, 0, wxEXPAND | wxALL, 5);
+    sizer->Add(dosingNotebook, 0, wxEXPAND | wxALL, 5);
     if (packageAmountNotebook != nullptr) {
         sizer->Add(packageAmountNotebook, 0, wxEXPAND | wxALL, 5);
     }
@@ -154,10 +193,21 @@ enum class PrescriptionRecordType {
     PLLENTRY
 };
 
+enum class DosingType {
+    NOT_SET,
+    DSSN,
+    KORTDOSE
+};
+
 struct PrescriptionDialogData {
     PrescriptionRecordType recordType{PrescriptionRecordType::EPRESCRIPTION};
     MedicalCodedValue amountUnit{};
     std::shared_ptr<FhirMedication> package{};
+    DosingType dosingType{};
+    MedicalCodedValue dosingUnit{};
+    MedicalCodedValue kortdose{};
+    std::string dosingUnitPlural{};
+    std::string dosingText{};
     std::string dssn{};
     std::string applicationArea{};
     double numberOfPackages{0};
@@ -179,7 +229,33 @@ PrescriptionDialogData PrescriptionDialog::GetDialogData() const {
         default:
             dialogData.recordType = PrescriptionRecordType::EPRESCRIPTION;
     }
-    dialogData.dssn = dssnCtrl->GetValue().ToStdString();
+    {
+        auto page = dosingNotebook->GetSelection();
+        if (page == 0) {
+            dialogData.dssn = dssnCtrl->GetValue().ToStdString();
+            dialogData.dosingType = dialogData.dssn.empty() ? DosingType::NOT_SET : DosingType::DSSN;
+        } else if (page == 1) {
+            {
+                auto selection = kortdoseDosingUnitCtrl->GetSelection();
+                if (selection >= 0 && selection < dosingUnit.size()) {
+                    dialogData.dosingUnit = dosingUnit[selection];
+                } else {
+                    dialogData.dosingUnit = {};
+                }
+            }
+            {
+                auto selection = kortdoserCtrl->GetSelection();
+                if (!dialogData.dosingUnit.GetCode().empty() && selection >= 0 && selection < kortdoser.size()) {
+                    dialogData.kortdose = kortdoser[selection];
+                    dialogData.dosingType = DosingType::KORTDOSE;
+                } else {
+                    dialogData.dosingType = DosingType::NOT_SET;
+                }
+            }
+        } else {
+            dialogData.dosingType = DosingType::NOT_SET;
+        }
+    }
     if (selectPackage != nullptr) {
         auto selected = selectPackage->GetSelection();
         if (selected >= 0 && selected < packages.size()) {
@@ -221,8 +297,79 @@ PrescriptionDialogData PrescriptionDialog::GetDialogData() const {
     return dialogData;
 }
 
+static Element GetCodeSetElement(const std::shared_ptr<FestDb> &festDb, const MedicalCodedValue &codedValue) {
+    auto codeSet = festDb->GetKodeverkById(codedValue.GetSystem());
+    for (const auto &element : codeSet.GetElement()) {
+        if (element.GetKode() == codedValue.GetCode()) {
+            return element;
+        }
+    }
+    return {};
+}
+
+static Term GetNorwegianTerm(const Element &element) {
+    auto termList = element.GetTermList();
+    for (const auto &term : termList) {
+        auto sprak = term.GetSprak().GetValue();
+        std::transform(sprak.cbegin(), sprak.cend(), sprak.begin(), [] (char ch) { return std::tolower(ch); });
+        if (sprak == "no") {
+            return term;
+        }
+    }
+    if (!termList.empty()) {
+        return termList[0];
+    }
+    return {};
+}
+
+void PrescriptionDialog::ProcessDialogData(PrescriptionDialogData &dialogData) const {
+    if (!dialogData.dosingUnit.GetCode().empty() && !dialogData.dosingUnit.GetSystem().empty()) {
+        auto dosingUnitElement = GetCodeSetElement(festDb, dialogData.dosingUnit);
+        dialogData.dosingUnitPlural = GetNorwegianTerm(dosingUnitElement).GetBeskrivelseTerm();
+    }
+    if (dialogData.dosingType == DosingType::KORTDOSE) {
+        auto kortdoseElement = GetCodeSetElement(festDb, dialogData.kortdose);
+        dialogData.dosingText = GetNorwegianTerm(kortdoseElement).GetBeskrivelseTerm();
+        auto dosingUnitSingular = dialogData.dosingUnit.GetDisplay();
+        auto dosingUnitPlural = dialogData.dosingUnitPlural;
+        if (dosingUnitSingular.empty()) {
+            dosingUnitSingular = dosingUnitPlural;
+        }
+        if (dosingUnitPlural.empty()) {
+            dosingUnitPlural = dosingUnitSingular;
+        }
+        if (!dosingUnitSingular.empty()) {
+            {
+                std::string repl = "<dose>";
+                typeof(dialogData.dosingText.find(repl)) dose;
+                while ((dose = dialogData.dosingText.find(repl)) != std::string::npos) {
+                    dialogData.dosingText.erase(dose, repl.size());
+                    dialogData.dosingText.insert(dose, dosingUnitSingular);
+                }
+            }
+            {
+                std::string repl = "<doser>";
+                typeof(dialogData.dosingText.find(repl)) dose;
+                while ((dose = dialogData.dosingText.find(repl)) != std::string::npos) {
+                    dialogData.dosingText.erase(dose, repl.size());
+                    dialogData.dosingText.insert(dose, dosingUnitPlural);
+                }
+            }
+        }
+        dialogData.dssn = dialogData.dosingText;
+    }
+}
+
 bool PrescriptionDialog::IsValid(const PrescriptionDialogData &dialogData) const {
-    if (dialogData.dssn.empty()) {
+    if (dialogData.dosingType == DosingType::DSSN) {
+        if (dialogData.dssn.empty()) {
+            return false;
+        }
+    } else if (dialogData.dosingType == DosingType::KORTDOSE) {
+        if (dialogData.kortdose.GetCode().empty()) {
+            return false;
+        }
+    } else {
         return false;
     }
     if (dialogData.numberOfPackagesSet) {
@@ -286,6 +433,10 @@ static void SetPrescriptionData(PrescriptionData &prescriptionData, const Prescr
     prescriptionData.reseptdate = date;
     std::strftime(date, sizeof(date), "%Y-%m-%d", &endtm);
     prescriptionData.expirationdate = date;
+    if (dialogData.dosingType == DosingType::KORTDOSE) {
+        prescriptionData.kortdose = dialogData.kortdose;
+    }
+    prescriptionData.dosingText = dialogData.dosingText;
     prescriptionData.dssn = dialogData.dssn;
     prescriptionData.numberOfPackages = dialogData.numberOfPackages;
     prescriptionData.numberOfPackagesSet = dialogData.numberOfPackagesSet;
@@ -324,6 +475,7 @@ static void SetPrescriptionData(PrescriptionData &prescriptionData, const Prescr
 
 void PrescriptionDialog::OnProceed(wxCommandEvent &e) {
     auto dialogData = GetDialogData();
+    ProcessDialogData(dialogData);
     SetPrescriptionData(prescriptionData, dialogData);
     if (dialogData.package) {
         medication = dialogData.package;

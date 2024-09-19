@@ -10,6 +10,8 @@
 #include "WaitingForApiDialog.h"
 #include "MagistralBuilderDialog.h"
 #include "PrescriptionDialog.h"
+#include "GetLegemiddelKortdoser.h"
+#include "GetMedicamentDosingUnit.h"
 #include <boost/uuid/uuid.hpp>
 #include <boost/uuid/uuid_generators.hpp>
 #include <boost/uuid/uuid_io.hpp>
@@ -1708,7 +1710,7 @@ void TheMasterFrame::PrescribeMedicament(const PrescriptionDialog &prescriptionD
 void TheMasterFrame::OnPrescribeMagistral(wxCommandEvent &e) {
     MagistralBuilderDialog magistralBuilderDialog{this};
     if (magistralBuilderDialog.ShowModal() == wxID_OK) {
-        PrescriptionDialog prescriptionDialog{this, std::make_shared<FhirMedication>(magistralBuilderDialog.GetMagistralMedicament().ToFhir()), {}, true};
+        PrescriptionDialog prescriptionDialog{this, std::make_shared<FestDb>(), std::make_shared<FhirMedication>(magistralBuilderDialog.GetMagistralMedicament().ToFhir()), {}, true};
         auto res = prescriptionDialog.ShowModal();
         if (res != wxID_OK) {
             return;
@@ -1740,7 +1742,9 @@ void TheMasterFrame::OnPrescribeMedicament(wxCommandEvent &e) {
                 packages.emplace_back(std::make_shared<FhirMedication>(packageMapper.GetMedication()), description);
             }
         }
-        PrescriptionDialog prescriptionDialog{this, std::make_shared<FhirMedication>(medicamentMapper.GetMedication()), medicamentMapper.GetPrescriptionUnit(), medicamentMapper.IsPackage(), packages};
+        std::vector<MedicalCodedValue> dosingUnits = GetMedicamentDosingUnit(festDb, *medicament).operator std::vector<MedicalCodedValue>();
+        std::vector<MedicalCodedValue> kortdoser = GetLegemiddelKortdoser(festDb, *medicament).operator std::vector<MedicalCodedValue>();
+        PrescriptionDialog prescriptionDialog{this, festDb, std::make_shared<FhirMedication>(medicamentMapper.GetMedication()), medicamentMapper.GetPrescriptionUnit(), medicamentMapper.IsPackage(), packages, dosingUnits, kortdoser};
         auto res = prescriptionDialog.ShowModal();
         if (res != wxID_OK) {
             return;

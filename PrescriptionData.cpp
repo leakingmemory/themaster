@@ -18,7 +18,14 @@ FhirMedicationStatement PrescriptionData::ToFhir() {
         fhir.SetId(uuidStr);
     }
     {
-        FhirDosage dosage{dssn, 1};
+        FhirDosage dosage{dosingText.empty() ? dssn : dosingText, 1};
+        if (!kortdose.GetCode().empty()) {
+            std::shared_ptr<FhirValueExtension> kortdoseExt = std::make_shared<FhirValueExtension>(
+                    "http://ehelse.no/fhir/StructureDefinition/sfm-shortdosage",
+                    std::make_shared<FhirCodeableConceptValue>(kortdose.ToCodeableConcept())
+            );
+            dosage.AddExtension(kortdoseExt);
+        }
         {
             std::shared_ptr<FhirValueExtension> useExt = std::make_shared<FhirValueExtension>(
                     "http://ehelse.no/fhir/StructureDefinition/sfm-use",

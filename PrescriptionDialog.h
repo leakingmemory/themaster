@@ -33,13 +33,17 @@ public:
 
 struct NumPackagesSizers;
 struct PrescriptionDialogData;
+class FestDb;
 
 class PrescriptionDialog : public wxDialog {
 private:
     PrescriptionData prescriptionData{};
     wxButton *proceedButton;
     wxRadioBox *typeSelection;
+    wxNotebook *dosingNotebook;
     wxTextCtrl *dssnCtrl;
+    wxComboBox *kortdoseDosingUnitCtrl;
+    wxComboBox *kortdoserCtrl;
     wxNotebook *packageAmountNotebook{nullptr};
     wxComboBox *selectPackage{nullptr};
     wxSpinCtrlDouble *numberOfPackagesCtrl{nullptr};
@@ -47,17 +51,21 @@ private:
     wxComboBox *amountUnitCtrl{nullptr};
     wxSpinCtrl *reitCtrl{};
     wxTextCtrl *applicationAreaCtrl{};
+    std::shared_ptr<FestDb> festDb;
     std::shared_ptr<FhirMedication> medication;
     std::vector<MedicamentPackage> packages;
     std::vector<MedicalCodedValue> amountUnit;
+    std::vector<MedicalCodedValue> dosingUnit;
+    std::vector<MedicalCodedValue> kortdoser;
 private:
     NumPackagesSizers CreateNumPackages(wxWindow *parent);
     wxBoxSizer *CreateAmount(wxWindow *parent);
 public:
-    PrescriptionDialog(TheMasterFrame *, const std::shared_ptr<FhirMedication> &, const std::vector<MedicalCodedValue> &, bool package = false, const std::vector<MedicamentPackage> &packages = {});
+    PrescriptionDialog(TheMasterFrame *, const std::shared_ptr<FestDb> &festDb, const std::shared_ptr<FhirMedication> &, const std::vector<MedicalCodedValue> &amountUnit, bool package = false, const std::vector<MedicamentPackage> &packages = {}, const std::vector<MedicalCodedValue> &dosingUnit = {}, const std::vector<MedicalCodedValue> &kortdoser = {});
     void OnCancel(wxCommandEvent &e);
 private:
     [[nodiscard]] PrescriptionDialogData GetDialogData() const;
+    void ProcessDialogData(PrescriptionDialogData &) const;
     bool IsValid(const PrescriptionDialogData &dialogData) const;
     void OnModified();
 public:

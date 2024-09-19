@@ -17,6 +17,10 @@ FhirCodeableConcept MedicalCodedValue::ToCodeableConcept() const {
             return {};
         }
     }
+    auto system = this->system;
+    if (!system.empty() && !system.starts_with("urn:oid:")) {
+        system.insert(0, "urn:oid:");
+    }
     if (!shortDisplay.empty()) {
         FhirCodeableConcept codeableConcept{system, code, shortDisplay};
         return codeableConcept;

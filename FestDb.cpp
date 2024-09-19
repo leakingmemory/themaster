@@ -148,6 +148,31 @@ std::vector<LegemiddelMerkevare> FestDb::FindLegemiddelMerkevare(const std::stri
     return results;
 }
 
+std::vector<LegemiddelMerkevare> FestDb::FindLegemiddelMerkevare(const std::vector<FestUuid> &uuids) const {
+    std::vector<LegemiddelMerkevare> results{};
+    std::vector<FestUuid> remainingUuids = uuids;
+    FestDbContainer festDbContainer = GetActiveFestDb();
+    if (!festDbContainer.festVectors) {
+        return {};
+    }
+    auto oppfs = festDbContainer.festVectors->GetLegemiddelMerkevare(*festDeserializer);
+    for (const auto &poppf : oppfs) {
+        auto idIterator = remainingUuids.begin();
+        if (idIterator == remainingUuids.end()) {
+            return results;
+        }
+        do {
+            if (*idIterator == festDeserializer->Unpack(poppf.GetId())) {
+                idIterator = remainingUuids.erase(idIterator);
+                results.emplace_back(festDeserializer->Unpack(static_cast<const PLegemiddelMerkevare &>(poppf)));
+                break;
+            }
+            ++idIterator;
+        } while (idIterator != remainingUuids.end());
+    }
+    return results;
+}
+
 std::vector<Legemiddelpakning> FestDb::FindLegemiddelpakning(const std::string &i_term) const {
     std::vector<Legemiddelpakning> results{};
     std::string term{i_term};
@@ -238,6 +263,21 @@ Legemiddelpakning FestDb::GetLegemiddelpakning(FestUuid id) const {
         if (legemiddelpakningId == id) {
             PLegemiddelpakning pLegemiddelpakning = poppf;
             return festDeserializer->Unpack(pLegemiddelpakning);
+        }
+    }
+    return {};
+}
+
+OppfKodeverk FestDb::GetKodeverkById(const std::string &id) const {
+    FestDbContainer festDbContainer = GetActiveFestDb();
+    if (!festDbContainer.festVectors) {
+        return {};
+    }
+    auto poppfs = festDbContainer.festVectors->GetKodeverk(*festDeserializer);
+    for (const auto &poppf : poppfs) {
+        auto info = festDeserializer->Unpack(static_cast<const PInfo &>(poppf));
+        if (info.GetId() == id) {
+            return festDeserializer->Unpack(poppf);
         }
     }
     return {};

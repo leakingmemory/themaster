@@ -17,6 +17,8 @@ struct PrescriptionData {
     bool guardianTransparencyReservation{false};
     bool inDoctorsName{false};
     bool lockedPrescription{false};
+    MedicalCodedValue kortdose{};
+    std::string dosingText{};
     std::string dssn{};
     bool numberOfPackagesSet{false};
     double numberOfPackages{};

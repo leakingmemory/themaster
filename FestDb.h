@@ -55,12 +55,14 @@ public:
     [[nodiscard]] std::vector<LegemiddelVirkestoff> FindLegemiddelVirkestoff(const std::vector<POppfLegemiddelVirkestoff> &oppfs, const std::string &term) const;
     [[nodiscard]] std::vector<LegemiddelVirkestoff> FindLegemiddelVirkestoff(const std::string &term) const;
     [[nodiscard]] std::vector<LegemiddelMerkevare> FindLegemiddelMerkevare(const std::string &term) const;
+    [[nodiscard]] std::vector<LegemiddelMerkevare> FindLegemiddelMerkevare(const std::vector<FestUuid> &) const;
     [[nodiscard]] std::vector<Legemiddelpakning> FindLegemiddelpakning(const std::string &term) const;
     [[nodiscard]] LegemiddelVirkestoff GetLegemiddelVirkestoff(FestUuid) const;
     [[nodiscard]] LegemiddelVirkestoff GetLegemiddelVirkestoff(const PLegemiddelVirkestoff &packed) const;
     [[nodiscard]] LegemiddelVirkestoff GetLegemiddelVirkestoffForMerkevare(FestUuid uuid) const;
     [[nodiscard]] LegemiddelMerkevare GetLegemiddelMerkevare(FestUuid) const;
     [[nodiscard]] Legemiddelpakning GetLegemiddelpakning(FestUuid ) const;
+    [[nodiscard]] OppfKodeverk GetKodeverkById(const std::string &) const;
     [[nodiscard]] std::vector<Legemiddelpakning> GetLegemiddelpakningForMerkevare(FestUuid uuid) const;
     [[nodiscard]] FestUuid GetVirkestoffForVirkestoffMedStyrkeId(FestUuid virkestoffMedStyrkeId) const;
     [[nodiscard]] std::vector<FestUuid> GetVirkestoffMedStyrkeForVirkestoffId(FestUuid virkestoffId);
