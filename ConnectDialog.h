@@ -21,6 +21,9 @@ private:
     wxTextCtrl *helseidUrlCtrl;
     wxTextCtrl *helseidClientIdCtrl;
     wxTextCtrl *helseidSecretJwkCtrl;
+    wxTextCtrl *journalIdCtrl;
+    wxTextCtrl *orgNoCtrl;
+    wxTextCtrl *childOrgNoCtrl;
 public:
     ConnectDialog(TheMasterFrame *);
     void OnSelect(wxCommandEvent &);

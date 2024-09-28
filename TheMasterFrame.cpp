@@ -306,6 +306,15 @@ pplx::task<std::string> TheMasterFrame::GetAccessToken() {
     }
     if (!helseidRefreshToken.empty()) {
         OidcTokenRequest tokenRequest{helseidUrl, helseidClientId, helseidSecretJwk, helseidScopes, helseidRefreshToken};
+        if (!journalId.empty()) {
+            tokenRequest.AddHelseIdJournalId(journalId);
+        }
+        if (!orgNo.empty()) {
+            tokenRequest.AddHelseIdConsumerOrgNo(orgNo);
+        }
+        if (!childOrgNo.empty()) {
+            tokenRequest.AddHelseIdConsumerChildOrgNo(childOrgNo);
+        }
         auto requestData = tokenRequest.GetTokenRequest();
         web::http::client::http_client client{helseidUrl};
         web::http::http_request req{web::http::methods::POST};
@@ -1297,7 +1306,7 @@ void TheMasterFrame::OnSendPll(wxCommandEvent &e) {
                             if (valueExtension) {
                                 auto value = std::dynamic_pointer_cast<FhirDateTimeValue>(valueExtension->GetValue());
                                 if (value) {
-                                    value->SetDateTime(lastChanged);
+                                    //value->SetDateTime(lastChanged);
                                     found = true;
                                 }
                             }
@@ -1316,18 +1325,27 @@ void TheMasterFrame::OnSendPll(wxCommandEvent &e) {
         }
     }
     auto subjectRef = GetSubjectRef();
+    auto prescriberRef = GetPrescriber();
     std::shared_ptr<WaitingForApiDialog> waitingDialog = std::make_shared<WaitingForApiDialog>(this, "Sending PLL", "Sending medication bundle...");
     auto ctx = std::make_shared<std::unique_ptr<CallContext>>();
     *ctx = std::make_unique<CallContext>();
     try {
-        wxTheApp->GetTopWindow()->GetEventHandler()->CallAfter([this, ctx, subjectRef, selected, pllMedicationStatements, newPllIds, medicationStatements, waitingDialog]() {
-            SendMedication(**ctx, [subjectRef, selected, pllMedicationStatements, newPllIds](
+        wxTheApp->GetTopWindow()->GetEventHandler()->CallAfter([this, ctx, subjectRef, prescriberRef, selected, pllMedicationStatements, newPllIds, medicationStatements, waitingDialog]() {
+            SendMedication(**ctx, [subjectRef, prescriberRef, selected, pllMedicationStatements, newPllIds](
                     const std::shared_ptr<FhirBundle> &bundle) {
                 auto entries = bundle->GetEntries();
                 std::vector<FhirBundleEntry> appendEntries{};
                 for (const auto &entry: entries) {
                     auto composition = std::dynamic_pointer_cast<FhirComposition>(entry.GetResource());
                     if (composition) {
+                        {
+                            std::vector<FhirAttester> attesterVec{};
+                            auto &attester = attesterVec.emplace_back();
+                            attester.SetMode("legal");
+                            attester.SetDateTime(DateTimeOffset::Now().to_iso8601());
+                            attester.SetParty(FhirReference(prescriberRef.uuid, "http://ehelse.no/fhir/StructureDefinition/sfm-Practitioner", prescriberRef.name));
+                            composition->SetAttester(attesterVec);
+                        }
                         auto sections = composition->GetSections();
                         for (auto &section: sections) {
                             auto codings = section.GetCode().GetCoding();
@@ -1406,6 +1424,7 @@ void TheMasterFrame::OnSendPll(wxCommandEvent &e) {
                                     m251Message->AddExtension(metadataPll);
                                 }
                                 std::shared_ptr<FhirBooleanValue> createPll{};
+                                std::shared_ptr<FhirDateTimeValue> pllDate{};
                                 {
                                     auto extensions = metadataPll->GetExtensions();
                                     for (const auto &extension: extensions) {
@@ -1422,6 +1441,16 @@ void TheMasterFrame::OnSendPll(wxCommandEvent &e) {
                                                 }
                                             }
                                         }
+                                        if (urlLower == "plldate") {
+                                            auto valueExtension = std::dynamic_pointer_cast<FhirValueExtension>(extension);
+                                            if (valueExtension) {
+                                                auto value = std::dynamic_pointer_cast<FhirDateTimeValue>(
+                                                        valueExtension->GetValue());
+                                                if (value) {
+                                                    pllDate = value;
+                                                }
+                                            }
+                                        }
                                     }
                                 }
                                 if (createPll) {
@@ -1429,6 +1458,9 @@ void TheMasterFrame::OnSendPll(wxCommandEvent &e) {
                                 } else {
                                     createPll = std::make_shared<FhirBooleanValue>(true);
                                     metadataPll->AddExtension(std::make_shared<FhirValueExtension>("createPLL", createPll));
+                                }
+                                if (pllDate) {
+                                    //pllDate->SetDateTime(DateTimeOffset::Now().to_iso8601());
                                 }
                             } else if (codings[0].GetCode() == "sectionMedication") {
                                 auto entries = section.GetEntries();
@@ -1495,10 +1527,10 @@ void TheMasterFrame::OnSendPll(wxCommandEvent &e) {
                                 found = pllMedicationStatements.find(pllId) != pllMedicationStatements.end();
                             }
                             if (found) {
-                                auto statusInfo = PrescriptionChangesService::GetPrescriptionStatusInfo(*medicationStatement);
-                                if (!statusInfo.IsCeased && !statusInfo.IsValidPrescription && statusInfo.HasBeenValidPrescription) {
-                                    PrescriptionChangesService::RenewRevokedOrExpiredPll(*medicationStatement);
-                                }
+                                //auto statusInfo = PrescriptionChangesService::GetPrescriptionStatusInfo(*medicationStatement);
+                                //if (!statusInfo.IsCeased && !statusInfo.IsValidPrescription && statusInfo.HasBeenValidPrescription) {
+                                //    PrescriptionChangesService::RenewRevokedOrExpiredPll(*medicationStatement);
+                                //}
                             }
                             if (found) {
                                 ++iterator;
@@ -1759,7 +1791,8 @@ WeakRefUiDispatcherRef<TheMasterFrame> TheMasterFrame::GetWeakRefDispatcher() {
 
 void TheMasterFrame::SetHelseid(const std::string &url, const std::string &clientId, const std::string &secretJwk,
                                 const std::vector<std::string> &scopes, const std::string &refreshToken,
-                                long expiresIn, const std::string &idToken) {
+                                long expiresIn, const std::string &idToken, const std::string &journalId,
+                                const std::string &orgNo, const std::string &childOrgNo) {
     helseidUrl = url;
     helseidClientId = clientId;
     helseidSecretJwk = secretJwk;
@@ -1767,6 +1800,9 @@ void TheMasterFrame::SetHelseid(const std::string &url, const std::string &clien
     helseidRefreshToken = refreshToken;
     helseidRefreshTokenValidTo = std::time(NULL) + expiresIn - 60;
     helseidIdToken = idToken;
+    this->journalId = journalId;
+    this->orgNo = orgNo;
+    this->childOrgNo = childOrgNo;
 }
 
 void TheMasterFrame::Connect(const std::string &url) {

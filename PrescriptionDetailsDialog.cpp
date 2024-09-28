@@ -48,6 +48,9 @@ void PrescriptionDetailsDialog::DisplayStatement(const std::shared_ptr<FhirMedic
     }
     wxString ePrescriptionId{};
     wxString pllId{};
+    wxString typeOfUse{};
+    wxString shortDose{};
+    wxString dosageText{};
     wxString dssn{};
     wxString prescriptionDate{};
     wxString expirationDate{};
@@ -66,6 +69,53 @@ void PrescriptionDetailsDialog::DisplayStatement(const std::shared_ptr<FhirMedic
     bool lockedPrescription{false};
     std::vector<std::shared_ptr<FhirExtension>> regInfos{};
     if (statement) {
+        auto dosageItems = statement->GetDosage();
+        if (!dosageItems.empty()) {
+            auto &dosage = dosageItems[0];
+            dosageText = wxString::FromUTF8(dosage.GetText());
+            auto extensions = dosage.GetExtensions();
+            for (const auto &extension : extensions) {
+                auto url = extension->GetUrl();
+                std::transform(url.cbegin(), url.cend(), url.begin(), [] (char ch) { return std::tolower(ch); });
+                if (url == "http://ehelse.no/fhir/structuredefinition/sfm-use") {
+                    auto valueExtension = std::dynamic_pointer_cast<FhirValueExtension>(extension);
+                    if (valueExtension) {
+                        auto value = std::dynamic_pointer_cast<FhirCodeableConceptValue>(valueExtension->GetValue());
+                        if (value) {
+                            auto codings = value->GetCoding();
+                            if (!codings.empty()) {
+                                auto &coding = codings[0];
+                                std::string str{coding.GetCode()};
+                                str.append(" ");
+                                str.append(coding.GetDisplay());
+                                typeOfUse = wxString::FromUTF8(str);
+                            }
+                        }
+                    }
+                } else if (url == "http://ehelse.no/fhir/structuredefinition/sfm-shortdosage") {
+                    auto valueExtension = std::dynamic_pointer_cast<FhirValueExtension>(extension);
+                    if (valueExtension) {
+                        auto value = std::dynamic_pointer_cast<FhirCodeableConceptValue>(valueExtension->GetValue());
+                        if (value) {
+                            auto codings = value->GetCoding();
+                            if (!codings.empty()) {
+                                auto &coding = codings[0];
+                                std::string str{coding.GetCode()};
+                                str.append(" ");
+                                str.append(coding.GetDisplay());
+                                shortDose = wxString::FromUTF8(str);
+                            }
+                        }
+                    }
+                } else if (url == "http://ehelse.no/fhir/structuredefinition/sfm-application-area") {
+                    auto subexts = extension->GetExtensions();
+                    for (const auto &subext : subexts) {
+                        auto url = subext->GetUrl();
+                        std::transform(url.cbegin(), url.cend(), url.begin(), [] (char ch) { return std::tolower(ch); });
+                    }
+                }
+            }
+        }
         auto extensions = statement->GetExtensions();
         for (const auto &extension : extensions) {
             auto url = extension->GetUrl();

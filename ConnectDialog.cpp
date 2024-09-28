@@ -19,6 +19,9 @@ public:
     std::string helseidUrl{};
     std::string helseidClientId{};
     std::string helseidSecretJwk{};
+    std::string journalId{};
+    std::string orgNo;
+    std::string childOrgNo{};
 
     void FromJson(const std::string &json);
     std::string ToJson() const;
@@ -31,6 +34,9 @@ void ConnectionConfig::FromJson(const std::string &json) {
     helseidUrl = obj.value("helseidurl", "");
     helseidClientId = obj.value("helseidclientid", "");
     helseidSecretJwk = obj.value("helseidsecretjwt", "");
+    journalId = obj.value("journalid", "");
+    orgNo = obj.value("orgno", "");
+    childOrgNo = obj.value("childorgno", "");
 }
 
 std::string ConnectionConfig::ToJson() const {
@@ -40,6 +46,9 @@ std::string ConnectionConfig::ToJson() const {
     obj["helseidurl"] = helseidUrl;
     obj["helseidclientid"] = helseidClientId;
     obj["helseidsecretjwt"] = helseidSecretJwk;
+    obj["journalid"] = journalId;
+    obj["orgno"] = orgNo;
+    obj["childorgno"] = childOrgNo;
     return obj.dump();
 }
 
@@ -110,6 +119,24 @@ ConnectDialog::ConnectDialog(TheMasterFrame *parent) : wxDialog(parent, wxID_ANY
     helseidSecretJwkSizer->Add(helseidSecretJwkLabel, 0, wxALL, 5);
     helseidSecretJwkSizer->Add(helseidSecretJwkCtrl, 0, wxALL, 5);
 
+    wxBoxSizer *journalIdSizer = new wxBoxSizer(wxHORIZONTAL);
+    wxStaticText *journalIdLabel = new wxStaticText(this, wxID_ANY, "Journal ID: ");
+    journalIdCtrl = new wxTextCtrl(this, wxID_ANY);
+    journalIdSizer->Add(journalIdLabel, 0, wxALL, 5);
+    journalIdSizer->Add(journalIdCtrl, 0, wxALL, 5);
+
+    wxBoxSizer *orgNoSizer = new wxBoxSizer(wxHORIZONTAL);
+    wxStaticText *orgNoLabel = new wxStaticText(this, wxID_ANY, "Org no: ");
+    orgNoCtrl = new wxTextCtrl(this, wxID_ANY);
+    orgNoSizer->Add(orgNoLabel, 0, wxALL, 5);
+    orgNoSizer->Add(orgNoCtrl, 0, wxALL, 5);
+
+    wxBoxSizer *childOrgNoSizer = new wxBoxSizer(wxHORIZONTAL);
+    wxStaticText *childOrgNoLabel = new wxStaticText(this, wxID_ANY, "Child org no: ");
+    childOrgNoCtrl = new wxTextCtrl(this, wxID_ANY);
+    childOrgNoSizer->Add(childOrgNoLabel, 0, wxALL, 5);
+    childOrgNoSizer->Add(childOrgNoCtrl, 0, wxALL, 5);
+
     // Create sizer for buttons
     wxBoxSizer *buttonSizer = new wxBoxSizer(wxHORIZONTAL);
     wxButton *connectButton = new wxButton(this, wxID_ANY, "Connect");
@@ -124,6 +151,9 @@ ConnectDialog::ConnectDialog(TheMasterFrame *parent) : wxDialog(parent, wxID_ANY
     mainSizer->Add(helseidUrlSizer, 1, wxEXPAND | wxALL, 5);
     mainSizer->Add(helseidClientIdSizer, 1, wxEXPAND | wxALL, 5);
     mainSizer->Add(helseidSecretJwkSizer, 1, wxEXPAND | wxALL, 5);
+    mainSizer->Add(journalIdSizer, 1, wxEXPAND | wxALL, 5);
+    mainSizer->Add(orgNoSizer, 1, wxEXPAND | wxALL, 5);
+    mainSizer->Add(childOrgNoSizer, 1, wxEXPAND | wxALL, 5);
     mainSizer->Add(buttonSizer, 0, wxALIGN_CENTER | wxALL, 5);
     this->SetSizerAndFit(mainSizer);
 
@@ -141,6 +171,9 @@ void ConnectDialog::OnSelect(wxCommandEvent &) {
             helseidUrlCtrl->SetValue(config->helseidUrl);
             helseidClientIdCtrl->SetValue(config->helseidClientId);
             helseidSecretJwkCtrl->SetValue(config->helseidSecretJwk);
+            journalIdCtrl->SetValue(config->journalId);
+            orgNoCtrl->SetValue(config->orgNo);
+            childOrgNoCtrl->SetValue(config->childOrgNo);
             return;
         }
     }
@@ -152,6 +185,9 @@ void ConnectDialog::OnConnect(wxCommandEvent &) {
     wxString helseidUrl = helseidUrlCtrl->GetValue();
     wxString helseidClientId = helseidClientIdCtrl->GetValue();
     wxString helseidSecretJwk = helseidSecretJwkCtrl->GetValue();
+    wxString journalId = journalIdCtrl->GetValue();
+    wxString orgNo = orgNoCtrl->GetValue();
+    wxString childOrgNo = childOrgNoCtrl->GetValue();
     if (!configName.empty() && (!url.empty() || !helseidUrl.empty())) {
         try {
             std::string configsJson{};
@@ -167,6 +203,9 @@ void ConnectDialog::OnConnect(wxCommandEvent &) {
                             config.helseidUrl = helseidUrl.ToStdString();
                             config.helseidClientId = helseidClientId.ToStdString();
                             config.helseidSecretJwk = helseidSecretJwk.ToStdString();
+                            config.journalId = journalId.ToStdString();
+                            config.orgNo = orgNo.ToStdString();
+                            config.childOrgNo = childOrgNo.ToStdString();
                         }
                     }
                     if (!found) {
@@ -176,6 +215,9 @@ void ConnectDialog::OnConnect(wxCommandEvent &) {
                         config.helseidUrl = helseidUrl.ToStdString();
                         config.helseidClientId = helseidClientId.ToStdString();
                         config.helseidSecretJwk = helseidSecretJwk.ToStdString();
+                        config.journalId = journalId.ToStdString();
+                        config.orgNo = orgNo.ToStdString();
+                        config.childOrgNo = childOrgNo.ToStdString();
                         configs.push_back(config);
                     }
                 }
@@ -252,11 +294,11 @@ void ConnectDialog::OnConnect(wxCommandEvent &) {
                     auto respTask = client.request(req);
                     auto frameWeakRefDispatcher = frame->GetWeakRefDispatcher();
                     auto helseidScopes = helseidLoginDialog.GetScopes();
-                    respTask.then([frameWeakRefDispatcher, helseidUrl, helseidClientId, helseidSecretJwk, helseidScopes](const pplx::task<web::http::http_response> &task) {
+                    respTask.then([frameWeakRefDispatcher, helseidUrl, helseidClientId, helseidSecretJwk, helseidScopes, journalId, orgNo, childOrgNo](const pplx::task<web::http::http_response> &task) {
                         try {
                             auto response = task.get();
                             if ((response.status_code() / 100) == 2) {
-                                response.extract_json().then([frameWeakRefDispatcher, helseidUrl, helseidClientId, helseidSecretJwk, helseidScopes](const pplx::task<web::json::value> &jsonTask) {
+                                response.extract_json().then([frameWeakRefDispatcher, helseidUrl, helseidClientId, helseidSecretJwk, helseidScopes, journalId, orgNo, childOrgNo](const pplx::task<web::json::value> &jsonTask) {
                                     try {
                                         auto json = jsonTask.get();
                                         if (json.has_string_field("refresh_token") && json.has_number_field("rt_expires_in")) {
@@ -265,9 +307,9 @@ void ConnectDialog::OnConnect(wxCommandEvent &) {
                                             std::string id_token = json.at("id_token").as_string();
                                             std::cout << "Refresh token: " << refresh_token << "\n";
                                             std::cout << "Expires: " << rt_expires << "\n";
-                                            wxTheApp->GetTopWindow()->GetEventHandler()->CallAfter([frameWeakRefDispatcher, helseidUrl, helseidClientId, helseidSecretJwk, helseidScopes, refresh_token, rt_expires, id_token]() {
-                                                frameWeakRefDispatcher.Invoke([helseidUrl, helseidClientId, helseidSecretJwk, helseidScopes, refresh_token, rt_expires, id_token] (TheMasterFrame *frame) {
-                                                    frame->SetHelseid(helseidUrl.ToStdString(), helseidClientId.ToStdString(), helseidSecretJwk.ToStdString(), helseidScopes, refresh_token, rt_expires, id_token);
+                                            wxTheApp->GetTopWindow()->GetEventHandler()->CallAfter([frameWeakRefDispatcher, helseidUrl, helseidClientId, helseidSecretJwk, helseidScopes, refresh_token, rt_expires, id_token, journalId, orgNo, childOrgNo]() {
+                                                frameWeakRefDispatcher.Invoke([helseidUrl, helseidClientId, helseidSecretJwk, helseidScopes, refresh_token, rt_expires, id_token, journalId, orgNo, childOrgNo] (TheMasterFrame *frame) {
+                                                    frame->SetHelseid(helseidUrl.ToStdString(), helseidClientId.ToStdString(), helseidSecretJwk.ToStdString(), helseidScopes, refresh_token, rt_expires, id_token, journalId.ToStdString(), orgNo.ToStdString(), childOrgNo.ToStdString());
                                                 });
                                             });
                                         } else {
