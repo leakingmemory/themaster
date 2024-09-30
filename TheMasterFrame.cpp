@@ -1301,24 +1301,38 @@ void TheMasterFrame::OnSendPll(wxCommandEvent &e) {
                     auto extensions = extension->GetExtensions();
                     auto extensionIterator = extensions.begin();
                     auto replaceIterator = extensions.end();
-                    bool found{false};
+                    std::shared_ptr<FhirDateTimeValue> lastChangedValue{};
+                    bool createeresept{false};
                     while (extensionIterator != extensions.end()) {
                         auto &extension = *extensionIterator;
                         auto url = extension->GetUrl();
+                        std::transform(url.cbegin(), url.cend(), url.begin(), [] (char ch) { return std::tolower(ch); });
+                        if (url == "createeresept") {
+                            auto valueExtension = std::dynamic_pointer_cast<FhirValueExtension>(extension);
+                            if (valueExtension) {
+                                auto value = std::dynamic_pointer_cast<FhirBooleanValue>(valueExtension->GetValue());
+                                if (value && value->IsTrue()) {
+                                    createeresept = true;
+                                }
+                            }
+                        }
                         if (url == "lastchanged") {
                             replaceIterator = extensionIterator;
                             auto valueExtension = std::dynamic_pointer_cast<FhirValueExtension>(extension);
                             if (valueExtension) {
                                 auto value = std::dynamic_pointer_cast<FhirDateTimeValue>(valueExtension->GetValue());
                                 if (value) {
-                                    //value->SetDateTime(lastChanged);
-                                    found = true;
+                                    lastChangedValue = value;
                                 }
                             }
                         }
                         ++extensionIterator;
                     }
-                    if (!found) {
+                    if (lastChangedValue) {
+                        if (createeresept) {
+                            lastChangedValue->SetDateTime(lastChanged);
+                        }
+                    } else {
                         if (replaceIterator != extensions.end()) {
                             extensions.erase(replaceIterator);
                         }
