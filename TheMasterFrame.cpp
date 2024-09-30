@@ -894,6 +894,11 @@ void TheMasterFrame::SendMedication(CallContext &ctx,
                         if (!relatesTo.IsSet()) {
                             relatesTo = composition->GetIdentifier();
                             if (relatesTo.IsSet()) {
+                                boost::uuids::random_generator generator;
+                                boost::uuids::uuid randomUUID = generator();
+                                std::string uuidStr = boost::uuids::to_string(randomUUID);
+                                FhirIdentifier identifier{"official", uuidStr};
+                                composition->SetIdentifier(identifier);
                                 composition->SetRelatesToCode("replaces");
                                 composition->SetRelatesTo(relatesTo);
                             }
