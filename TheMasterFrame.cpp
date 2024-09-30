@@ -1527,21 +1527,7 @@ void TheMasterFrame::OnSendPll(wxCommandEvent &e) {
                                 }
                                 medicationStatement->SetIdentifiers(identifiers);
                             }
-                            bool found{false};
-                            if (!pllId.empty()) {
-                                found = pllMedicationStatements.find(pllId) != pllMedicationStatements.end();
-                            }
-                            if (found) {
-                                //auto statusInfo = PrescriptionChangesService::GetPrescriptionStatusInfo(*medicationStatement);
-                                //if (!statusInfo.IsCeased && !statusInfo.IsValidPrescription && statusInfo.HasBeenValidPrescription) {
-                                //    PrescriptionChangesService::RenewRevokedOrExpiredPll(*medicationStatement);
-                                //}
-                            }
-                            if (found) {
-                                ++iterator;
-                            } else {
-                                iterator = entries.erase(iterator);
-                            }
+                            ++iterator;
                         } else {
                             ++iterator;
                         }
