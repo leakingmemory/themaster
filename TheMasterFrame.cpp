@@ -2021,6 +2021,7 @@ void TheMasterFrame::OnPrescriptionCease(wxCommandEvent &e) {
     }
     bool recall{true};
     {
+        FhirCodeableConcept typeResept{};
         auto extensions = reseptAmendment->GetExtensions();
         for (const auto &extension : extensions) {
             auto url = extension->GetUrl();
@@ -2028,6 +2029,24 @@ void TheMasterFrame::OnPrescriptionCease(wxCommandEvent &e) {
                 recall = false;
                 break;
             }
+            if (url == "typeresept") {
+                auto valueExtension = std::dynamic_pointer_cast<FhirValueExtension>(extension);
+                if (valueExtension) {
+                    auto value = std::dynamic_pointer_cast<FhirCodeableConceptValue>(valueExtension->GetValue());
+                    if (value) {
+                        typeResept = *value;
+                    }
+                }
+            }
+        }
+        auto typeReseptCodings = typeResept.GetCoding();
+        if (typeReseptCodings.size() == 1) {
+            auto typeReseptCoding = typeReseptCodings[0];
+            if (typeReseptCoding.GetCode() != "E") {
+                recall = false;
+            }
+        } else {
+            recall = false;
         }
     }
     CeasePrescriptionDialog dialog{this, medicationStatement};
