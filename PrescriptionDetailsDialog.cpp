@@ -337,6 +337,11 @@ void PrescriptionDetailsDialog::DisplayStatement(const std::shared_ptr<FhirMedic
                     }
                 }
             }
+            if (!shortDose.empty()) {
+                auto row = rowNum++;
+                listView->InsertItem(row, wxT("Short dose: "));
+                listView->SetItem(row, 1, shortDose);
+            }
             auto dosageText = wxString::FromUTF8(dosage.GetText());
             auto row = rowNum++;
             listView->InsertItem(row, wxT("Dosage: "));
