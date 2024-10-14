@@ -1182,8 +1182,16 @@ void TheMasterFrame::OnSendMedication(wxCommandEvent &e) {
     );
 }
 
+#define SENDPLL_UPDATE_RENEWAL_SETID
+#define SENDPLL_UPDATE_RENEWAL_REMOVEID
+
 void TheMasterFrame::OnSendPll(wxCommandEvent &e) {
     std::vector<std::string> selected{};
+    std::vector<std::string> heads{};
+    std::vector<std::string> headIsPll{};
+    std::vector<std::string> headIsAheadOfPll{};
+    std::vector<std::vector<std::string>> medicationStatementRefChains{};
+    std::map<std::string,std::string> headMap{};
     std::map<std::string,std::shared_ptr<FhirMedicationStatement>> medicationStatements{};
     std::map<std::string,std::shared_ptr<FhirMedicationStatement>> pllMedicationStatements{};
     std::vector<std::string> newPllIds{};
@@ -1193,6 +1201,7 @@ void TheMasterFrame::OnSendPll(wxCommandEvent &e) {
             return;
         }
         {
+            std::shared_ptr<FhirComposition> composition{};
             auto bundleEntries = bundle->GetEntries();
             for (const auto &bundleEntry : bundleEntries) {
                 auto url = bundleEntry.GetFullUrl();
@@ -1200,7 +1209,83 @@ void TheMasterFrame::OnSendPll(wxCommandEvent &e) {
                 std::shared_ptr<FhirMedicationStatement> medStatement = std::dynamic_pointer_cast<FhirMedicationStatement>(resource);
                 if (medStatement) {
                     medicationStatements.insert_or_assign(url, medStatement);
+                    continue;
                 }
+                std::shared_ptr<FhirComposition> comp = std::dynamic_pointer_cast<FhirComposition>(resource);
+                if (comp) {
+                    composition = comp;
+                }
+            }
+            std::vector<FhirReference> medicationEntries{};
+            if (composition) {
+                auto sections = composition->GetSections();
+                for (const auto &section : sections) {
+                    std::string code{};
+                    {
+                        auto codings = section.GetCode().GetCoding();
+                        if (!codings.empty()) {
+                            code = codings[0].GetCode();
+                        }
+                    }
+                    std::transform(code.cbegin(), code.cend(), code.begin(), [] (char ch) { return std::tolower(ch); });
+                    if (code == "sectionmedication") {
+                        medicationEntries = section.GetEntries();
+                    }
+                }
+            }
+            for (const auto &entry : medicationEntries) {
+                std::shared_ptr<FhirMedicationStatement> medicationStatement{};
+                std::string firstRef{};
+                std::string ref{};
+                bool headIsPllValue{false};
+                {
+                    auto iterator = medicationStatements.find(entry.GetReference());
+                    if (iterator == medicationStatements.end()) {
+                        continue;
+                    }
+                    medicationStatement = iterator->second;
+                    ref = iterator->first;
+                    firstRef = ref;
+                    heads.emplace_back(ref);
+                    auto firstStatementIdentifiers = medicationStatement->GetIdentifiers();
+                    if (std::find_if(firstStatementIdentifiers.cbegin(), firstStatementIdentifiers.cend(), [] (const FhirIdentifier &identifier) -> bool{
+                        auto type = identifier.GetType().GetText();
+                        std::transform(type.cbegin(), type.cend(), type.begin(), [] (char ch) { return std::tolower(ch); });
+                        return type == "pll" && !identifier.GetValue().empty();
+                    }) != firstStatementIdentifiers.cend()) {
+                        headIsPll.emplace_back(ref);
+                        headIsPllValue = true;
+                    }
+                }
+                std::vector<std::string> chain{};
+                do {
+                    chain.emplace_back(ref);
+                    auto basedOn = medicationStatement->GetBasedOn();
+                    if (basedOn.empty()) {
+                        break;
+                    }
+                    ref = basedOn[0].GetReference();
+                    headMap.insert_or_assign(ref, firstRef);
+                    auto iterator = medicationStatements.find(ref);
+                    if (iterator == medicationStatements.end()) {
+                        break;
+                    }
+                    medicationStatement = iterator->second;
+                    if (!headIsPllValue) {
+                        auto statementIdentifiers = medicationStatement->GetIdentifiers();
+                        if (std::find_if(statementIdentifiers.cbegin(), statementIdentifiers.cend(),
+                                         [](const FhirIdentifier &identifier) -> bool {
+                                             auto type = identifier.GetType().GetText();
+                                             std::transform(type.cbegin(), type.cend(), type.begin(),
+                                                            [](char ch) { return std::tolower(ch); });
+                                             return type == "pll" && !identifier.GetValue().empty();
+                                         }) != statementIdentifiers.cend()) {
+                            headIsAheadOfPll.emplace_back(firstRef);
+                            headIsPllValue = true;
+                        }
+                    }
+                } while (medicationStatement);
+                medicationStatementRefChains.emplace_back(std::move(chain));
             }
         }
         {
@@ -1208,6 +1293,9 @@ void TheMasterFrame::OnSendPll(wxCommandEvent &e) {
             std::vector<std::string> idsToPreselect{};
             for (const auto &statement : medicationStatements) {
                 auto id = statement.first;
+                if (std::find(heads.cbegin(), heads.cend(), id) == heads.cend()) {
+                    continue;
+                }
                 auto medstat = statement.second;
                 auto statusInfo = PrescriptionChangesService::GetPrescriptionStatusInfo(*medstat);
                 std::string display{medstat->GetDisplay()};
@@ -1224,8 +1312,16 @@ void TheMasterFrame::OnSendPll(wxCommandEvent &e) {
                     display.append(")");
                 }
                 idToDisplay.insert_or_assign(id, display);
-                if (statusInfo.IsPll) {
-                    idsToPreselect.emplace_back(id);
+                if (std::find(headIsPll.cbegin(), headIsPll.cend(), id) != headIsPll.cend() ||
+                    std::find(headIsAheadOfPll.cbegin(), headIsAheadOfPll.cend(), id) != headIsAheadOfPll.cend()) {
+                    auto idToSelect = id;
+                    auto headIterator = headMap.find(idToSelect);
+                    if (headIterator != headMap.end()) {
+                        idToSelect = headIterator->second;
+                    }
+                    if (std::find(idsToPreselect.cbegin(), idsToPreselect.cend(), idToSelect) == idsToPreselect.cend()) {
+                        idsToPreselect.emplace_back(idToSelect);
+                    }
                 }
             }
             SignPllDialog signPllDialog{this, idToDisplay, idsToPreselect};
@@ -1234,6 +1330,12 @@ void TheMasterFrame::OnSendPll(wxCommandEvent &e) {
             }
             selected = signPllDialog.GetSelected();
             for (const auto &id : selected) {
+                if (std::find(headIsPll.cbegin(), headIsPll.cend(), id) != headIsPll.cend()) {
+                    continue;
+                }
+                if (std::find(headIsAheadOfPll.cbegin(), headIsAheadOfPll.cend(), id) != headIsAheadOfPll.cend()) {
+                    continue;
+                }
                 auto iterator = medicationStatements.find(id);
                 if (iterator != medicationStatements.end()) {
                     auto medicationStatement = iterator->second;
@@ -1270,6 +1372,7 @@ void TheMasterFrame::OnSendPll(wxCommandEvent &e) {
         }
         auto lastChanged = DateTimeOffset::Now().to_iso8601();
         for (const auto &pair : medicationStatements) {
+            auto &medicationStatementUrl = pair.first;
             auto &medicationStatement = *(pair.second);
             auto extensions = medicationStatement.GetExtensions();
             {
@@ -1299,44 +1402,70 @@ void TheMasterFrame::OnSendPll(wxCommandEvent &e) {
                 auto url = extension->GetUrl();
                 if (url == "http://ehelse.no/fhir/StructureDefinition/sfm-reseptamendment") {
                     auto extensions = extension->GetExtensions();
-                    auto extensionIterator = extensions.begin();
-                    auto replaceIterator = extensions.end();
-                    std::shared_ptr<FhirDateTimeValue> lastChangedValue{};
-                    bool createeresept{false};
-                    while (extensionIterator != extensions.end()) {
-                        auto &extension = *extensionIterator;
-                        auto url = extension->GetUrl();
-                        std::transform(url.cbegin(), url.cend(), url.begin(), [] (char ch) { return std::tolower(ch); });
-                        if (url == "createeresept") {
-                            auto valueExtension = std::dynamic_pointer_cast<FhirValueExtension>(extension);
-                            if (valueExtension) {
-                                auto value = std::dynamic_pointer_cast<FhirBooleanValue>(valueExtension->GetValue());
-                                if (value && value->IsTrue()) {
-                                    createeresept = true;
+                    bool changedExtensions{false};
+                    {
+                        auto extensionIterator = extensions.begin();
+                        auto replaceIterator = extensions.end();
+                        std::shared_ptr<FhirDateTimeValue> lastChangedValue{};
+                        bool createeresept{false};
+                        while (extensionIterator != extensions.end()) {
+                            auto &extension = *extensionIterator;
+                            auto url = extension->GetUrl();
+                            std::transform(url.cbegin(), url.cend(), url.begin(),
+                                           [](char ch) { return std::tolower(ch); });
+                            if (url == "createeresept") {
+                                auto valueExtension = std::dynamic_pointer_cast<FhirValueExtension>(extension);
+                                if (valueExtension) {
+                                    auto value = std::dynamic_pointer_cast<FhirBooleanValue>(
+                                            valueExtension->GetValue());
+                                    if (value && value->IsTrue()) {
+                                        createeresept = true;
+                                    }
                                 }
                             }
-                        }
-                        if (url == "lastchanged") {
-                            replaceIterator = extensionIterator;
-                            auto valueExtension = std::dynamic_pointer_cast<FhirValueExtension>(extension);
-                            if (valueExtension) {
-                                auto value = std::dynamic_pointer_cast<FhirDateTimeValue>(valueExtension->GetValue());
-                                if (value) {
-                                    lastChangedValue = value;
+                            if (url == "lastchanged") {
+                                replaceIterator = extensionIterator;
+                                auto valueExtension = std::dynamic_pointer_cast<FhirValueExtension>(extension);
+                                if (valueExtension) {
+                                    auto value = std::dynamic_pointer_cast<FhirDateTimeValue>(
+                                            valueExtension->GetValue());
+                                    if (value) {
+                                        lastChangedValue = value;
+                                    }
                                 }
                             }
+                            ++extensionIterator;
                         }
-                        ++extensionIterator;
+                        if (lastChangedValue) {
+                            if (createeresept) {
+                                lastChangedValue->SetDateTime(lastChanged);
+                            }
+                        } else {
+                            if (replaceIterator != extensions.end()) {
+                                extensions.erase(replaceIterator);
+                            }
+                            extensions.emplace_back(std::make_shared<FhirValueExtension>("lastchanged",
+                                                                                         std::make_shared<FhirDateTimeValue>(
+                                                                                                 lastChanged)));
+                            changedExtensions = true;
+                        }
                     }
-                    if (lastChangedValue) {
-                        if (createeresept) {
-                            lastChangedValue->SetDateTime(lastChanged);
+                    {
+                        auto extensionIterator = extensions.begin();
+                        while (extensionIterator != extensions.end()) {
+                            auto url = (*extensionIterator)->GetUrl();
+                            std::transform(url.cbegin(), url.cend(), url.begin(), [] (char ch) { return std::tolower(ch); });
+                            if (url == "recallinfo") {
+                                if (std::find(heads.cbegin(), heads.cend(), medicationStatementUrl) == heads.cend()) {
+                                    extensionIterator = extensions.erase(extensionIterator);
+                                    changedExtensions = true;
+                                    continue;
+                                }
+                            }
+                            ++extensionIterator;
                         }
-                    } else {
-                        if (replaceIterator != extensions.end()) {
-                            extensions.erase(replaceIterator);
-                        }
-                        extensions.emplace_back(std::make_shared<FhirValueExtension>("lastchanged", std::make_shared<FhirDateTimeValue>(lastChanged)));
+                    }
+                    if (changedExtensions) {
                         extension->SetExtensions(extensions);
                     }
                 }
@@ -1349,12 +1478,17 @@ void TheMasterFrame::OnSendPll(wxCommandEvent &e) {
     auto ctx = std::make_shared<std::unique_ptr<CallContext>>();
     *ctx = std::make_unique<CallContext>();
     try {
-        wxTheApp->GetTopWindow()->GetEventHandler()->CallAfter([this, ctx, subjectRef, prescriberRef, selected, pllMedicationStatements, newPllIds, medicationStatements, waitingDialog]() {
-            SendMedication(**ctx, [subjectRef, prescriberRef, selected, pllMedicationStatements, newPllIds](
+        wxTheApp->GetTopWindow()->GetEventHandler()->CallAfter([this, ctx, subjectRef, prescriberRef, selected, medicationStatementRefChains, pllMedicationStatements, newPllIds, medicationStatements, waitingDialog]() {
+            SendMedication(**ctx, [subjectRef, prescriberRef, selected, medicationStatementRefChains, pllMedicationStatements, newPllIds](
                     const std::shared_ptr<FhirBundle> &bundle) {
                 auto entries = bundle->GetEntries();
                 std::vector<FhirBundleEntry> appendEntries{};
+                std::map<std::string,std::shared_ptr<FhirMedicationStatement>> medStatementMap{};
                 for (const auto &entry: entries) {
+                    auto medstat = std::dynamic_pointer_cast<FhirMedicationStatement>(entry.GetResource());
+                    if (medstat) {
+                        medStatementMap.insert_or_assign(entry.GetFullUrl(), medstat);
+                    }
                     auto composition = std::dynamic_pointer_cast<FhirComposition>(entry.GetResource());
                     if (composition) {
                         {
@@ -1504,6 +1638,54 @@ void TheMasterFrame::OnSendPll(wxCommandEvent &e) {
                         }
                         composition->SetSections(sections);
                         continue;
+                    }
+                }
+                for (const auto &firstRef : selected) {
+                    for (const auto &chain : medicationStatementRefChains) {
+                        auto iterator = chain.begin();
+                        while (iterator != chain.end()) {
+                            if (*iterator == firstRef) {
+                                break;
+                            }
+                            ++iterator;
+                        }
+                        if (iterator != chain.end()) {
+                            auto firstStatement = medStatementMap.find(*iterator)->second;
+                            auto firstStatementIdentifiers = firstStatement->GetIdentifiers();
+                            if (std::find_if(firstStatementIdentifiers.cbegin(), firstStatementIdentifiers.cend(), [] (const FhirIdentifier &identifier) -> bool{
+                                auto type = identifier.GetType().GetText();
+                                std::transform(type.cbegin(), type.cend(), type.begin(), [] (char ch) { return std::tolower(ch); });
+                                return type == "pll" && !identifier.GetValue().empty();
+                            }) != firstStatementIdentifiers.cend()) {
+                                continue;
+                            }
+                            ++iterator;
+                            while (iterator != chain.end()) {
+                                auto statement = medStatementMap.find(*iterator)->second;
+                                auto statementIdentifiers = statement->GetIdentifiers();
+                                auto pllIdIterator = std::find_if(statementIdentifiers.cbegin(), statementIdentifiers.cend(), [] (const FhirIdentifier &identifier) -> bool{
+                                    auto type = identifier.GetType().GetText();
+                                    std::transform(type.cbegin(), type.cend(), type.begin(), [] (char ch) { return std::tolower(ch); });
+                                    return type == "pll" && !identifier.GetValue().empty();
+                                });
+                                if (pllIdIterator != statementIdentifiers.cend()) {
+#ifdef SENDPLL_UPDATE_RENEWAL_SETID
+                                    std::vector<FhirIdentifier> newIdentifiers{};
+                                    newIdentifiers.emplace_back(*pllIdIterator);
+                                    for (const auto &identifier : firstStatementIdentifiers) {
+                                        newIdentifiers.emplace_back(identifier);
+                                    }
+                                    firstStatement->SetIdentifiers(newIdentifiers);
+#endif
+#ifdef SENDPLL_UPDATE_RENEWAL_REMOVEID
+                                    statementIdentifiers.erase(pllIdIterator);
+                                    statement->SetIdentifiers(statementIdentifiers);
+#endif
+                                    break;
+                                }
+                                ++iterator;
+                            }
+                        }
                     }
                 }
                 {
