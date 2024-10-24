@@ -8,7 +8,9 @@
 #include <wx/wx.h>
 #include "MedicalCodedValue.h"
 #include "PrescriptionData.h"
+#include "AdvancedDosingPeriod.h"
 #include <memory>
+#include <functional>
 
 class TheMasterFrame;
 class wxSpinCtrl;
@@ -44,6 +46,8 @@ private:
     wxTextCtrl *dssnCtrl;
     wxComboBox *kortdoseDosingUnitCtrl;
     wxComboBox *kortdoserCtrl;
+    wxComboBox *dosingPeriodsDosingUnitCtrl;
+    wxListView *dosingPeriodsView;
     wxNotebook *packageAmountNotebook{nullptr};
     wxComboBox *selectPackage{nullptr};
     wxSpinCtrlDouble *numberOfPackagesCtrl{nullptr};
@@ -57,6 +61,11 @@ private:
     std::vector<MedicalCodedValue> amountUnit;
     std::vector<MedicalCodedValue> dosingUnit;
     std::vector<MedicalCodedValue> kortdoser;
+    std::vector<std::shared_ptr<AdvancedDosingPeriod>> dosingPeriods{};
+    std::function<void (std::shared_ptr<AdvancedDosingPeriod> &&)> addDosingPeriod{[] (std::shared_ptr<AdvancedDosingPeriod> &&) {}};
+    std::function<void ()> moveUp{[] () {}};
+    std::function<void ()> moveDown{[] () {}};
+    std::function<void ()> deleteDosingPeriod{[] () {}};
 private:
     NumPackagesSizers CreateNumPackages(wxWindow *parent);
     wxBoxSizer *CreateAmount(wxWindow *parent);
@@ -72,6 +81,11 @@ public:
     void OnModified(wxCommandEvent &e);
     void OnModifiedPC(wxBookCtrlEvent &e);
     void OnProceed(wxCommandEvent &e);
+    void OnDosingPeriodsContextMenu(wxContextMenuEvent &e);
+    void OnAddDosingPeriod(wxCommandEvent &e);
+    void OnMoveUp(wxCommandEvent &e);
+    void OnMoveDown(wxCommandEvent &e);
+    void OnDeleteDosingPeriod(wxCommandEvent &e);
     [[nodiscard]] PrescriptionData GetPrescriptionData() const {
         return prescriptionData;
     }

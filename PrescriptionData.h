@@ -6,18 +6,24 @@
 #define DRWHATSNOT_PRESCRIPTIONDATA_H
 
 #include <string>
+#include <memory>
+#include <vector>
 #include "MedicalCodedValue.h"
+#include "DateOnly.h"
 
 class FhirMedicationStatement;
+class AdvancedDosingPeriod;
 
 struct PrescriptionData {
-    std::string reseptdate{}; // I dag, YYYY-MM-DD
-    std::string expirationdate{}; // Gyldig til (typ 1 år), YYYY-MM-DD
+    DateOnly reseptdate{}; // I dag, YYYY-MM-DD
+    DateOnly expirationdate{}; // Gyldig til (typ 1 år), YYYY-MM-DD
     std::string festUpdate{"2023-12-20T11:54:48.9287539+00:00"}; // TODO
     bool guardianTransparencyReservation{false};
     bool inDoctorsName{false};
     bool lockedPrescription{false};
+    MedicalCodedValue dosingUnit{};
     MedicalCodedValue kortdose{};
+    std::vector<std::shared_ptr<AdvancedDosingPeriod>> dosingPeriods{};
     std::string dosingText{};
     std::string dssn{};
     bool numberOfPackagesSet{false};

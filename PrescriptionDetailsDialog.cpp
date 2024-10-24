@@ -5,6 +5,8 @@
 #include "PrescriptionDetailsDialog.h"
 #include <wx/listctrl.h>
 #include <sfmbasisapi/fhir/medstatement.h>
+#include <sfmbasisapi/fhir/extension.h>
+#include "EreseptdosingDialog.h"
 
 PrescriptionDetailsDialog::PrescriptionDetailsDialog(wxWindow *parent,
                                                      const std::vector<std::shared_ptr<FhirMedicationStatement>> &statements) :
@@ -22,6 +24,11 @@ PrescriptionDetailsDialog::PrescriptionDetailsDialog(wxWindow *parent,
     versionsView->Bind(wxEVT_LIST_ITEM_DESELECTED, &PrescriptionDetailsDialog::OnVersionSelect, this, wxID_ANY);
     versionsView->Bind(wxEVT_LIST_ITEM_SELECTED, &PrescriptionDetailsDialog::OnVersionSelect, this, wxID_ANY);
     sizer->Add(versionsView, 1, wxEXPAND | wxALL, 5);
+    auto buttonsSizer = new wxBoxSizer(wxHORIZONTAL);
+    structuredDosing = new wxButton(this, wxID_ANY, wxT("Structured dosing"));
+    structuredDosing->Bind(wxEVT_BUTTON, &PrescriptionDetailsDialog::OnStructuredDosing, this, wxID_ANY);
+    buttonsSizer->Add(structuredDosing, 1, wxEXPAND | wxALL, 5);
+    sizer->Add(buttonsSizer, 0, wxEXPAND | wxALL, 5);
     listView = new wxListView(this, wxID_ANY);
     if (!statements.empty()) {
         DisplayStatement(statements[0]);
@@ -68,6 +75,7 @@ void PrescriptionDetailsDialog::DisplayStatement(const std::shared_ptr<FhirMedic
     bool inDoctorsName{false};
     bool lockedPrescription{false};
     std::vector<std::shared_ptr<FhirExtension>> regInfos{};
+    std::vector<std::shared_ptr<FhirExtension>> ereseptdosing{};
     if (statement) {
         auto dosageItems = statement->GetDosage();
         if (!dosageItems.empty()) {
@@ -208,6 +216,8 @@ void PrescriptionDetailsDialog::DisplayStatement(const std::shared_ptr<FhirMedic
                         if (value) {
                             typeOfPrescription = *value;
                         }
+                    } else if (url == "ereseptdosing") {
+                        ereseptdosing.emplace_back(extension);
                     }
                 }
             } else if (url == "http://ehelse.no/fhir/StructureDefinition/sfm-regInfo") {
@@ -247,6 +257,8 @@ void PrescriptionDetailsDialog::DisplayStatement(const std::shared_ptr<FhirMedic
             }
         }
     }
+    this->ereseptdosing = ereseptdosing;
+    structuredDosing->Enable(!ereseptdosing.empty());
     {
         auto row = rowNum++;
         listView->InsertItem(row, wxT("EPrescriptionId:"));
@@ -506,4 +518,9 @@ void PrescriptionDetailsDialog::OnVersionSelect(wxCommandEvent &e) {
         return;
     }
     DisplayStatement(statements[selected]);
+}
+
+void PrescriptionDetailsDialog::OnStructuredDosing(wxCommandEvent &e) {
+    EreseptdosingDialog ereseptdosingDialog{this, ereseptdosing};
+    ereseptdosingDialog.ShowModal();
 }

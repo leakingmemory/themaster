@@ -32,7 +32,9 @@ add_executable(themaster TheMasterApp.cpp TheMasterApp.h TheMasterFrame.cpp TheM
     CeasePrescriptionDialog.cpp CeasePrescriptionDialog.h DateTime.cpp DateTime.h SignPllDialog.cpp SignPllDialog.h
     MedBundleData.cpp MedBundleData.h PrescriptionChangesService.cpp PrescriptionChangesService.h
     GetLegemiddelKortdoser.cpp GetLegemiddelKortdoser.h MedicamentVisitor.cpp MedicamentVisitor.h
-    GetMedicamentDosingUnit.cpp GetMedicamentDosingUnit.h)
+    GetMedicamentDosingUnit.cpp GetMedicamentDosingUnit.h AdvancedDosingPeriod.cpp AdvancedDosingPeriod.h
+    AdvancedDosingPeriodDialog.cpp AdvancedDosingPeriodDialog.h EreseptdosingDialog.cpp EreseptdosingDialog.h
+    DateOnly.cpp DateOnly.h)
 target_link_libraries(themaster PRIVATE -lsfmbasisapi -ljjwtid -lmedfest)
 target_link_libraries(themaster PRIVATE cpprestsdk::cpprest -lcrypto)
 target_link_libraries(themaster PRIVATE ${wxWidgets_LIBRARIES})

@@ -3,6 +3,7 @@
 //
 
 #include "PrescriptionData.h"
+#include "AdvancedDosingPeriod.h"
 #include <sfmbasisapi/fhir/medstatement.h>
 #include <boost/uuid/uuid_generators.hpp> // for random_generator
 #include <boost/uuid/uuid_io.hpp> // for to_string
@@ -50,11 +51,11 @@ FhirMedicationStatement PrescriptionData::ToFhir() {
         std::shared_ptr<FhirExtension> reseptAmendment = std::make_shared<FhirExtension>("http://ehelse.no/fhir/StructureDefinition/sfm-reseptamendment");
         reseptAmendment->AddExtension(std::make_shared<FhirValueExtension>(
                 "reseptdate",
-                std::make_shared<FhirDateValue>(reseptdate)
+                std::make_shared<FhirDateValue>(reseptdate.ToString())
         ));
         reseptAmendment->AddExtension(std::make_shared<FhirValueExtension>(
                 "expirationdate",
-                std::make_shared<FhirDateValue>(expirationdate)
+                std::make_shared<FhirDateValue>(expirationdate.ToString())
         ));
         reseptAmendment->AddExtension(std::make_shared<FhirValueExtension>(
                 "festUpdate",
@@ -91,6 +92,32 @@ FhirMedicationStatement PrescriptionData::ToFhir() {
                 "itemgroup",
                 std::make_shared<FhirCodeableConceptValue>(itemGroup.ToCodeableConcept())
         ));
+        {
+            auto dpStart = reseptdate;
+            auto iterator = dosingPeriods.begin();
+            while (iterator != dosingPeriods.end()) {
+                const auto &dosingPeriod = *iterator;
+                dosingPeriod->SetDosingUnit(dosingUnit);
+                ++iterator;
+                auto isNotLast = iterator != dosingPeriods.end();
+                auto ereseptdosing = std::make_shared<FhirExtension>("ereseptdosing");
+                ereseptdosing->AddExtension(std::make_shared<FhirValueExtension>("starttime",
+                                                                                 std::make_shared<FhirDateValue>(
+                                                                                         dpStart.ToString())));
+                auto days = dosingPeriod->GetDays();
+                if (days <= 0 && isNotLast) {
+                    days = 1;
+                }
+                if (days > 0) {
+                    dpStart.AddDays(days);
+                    ereseptdosing->AddExtension(std::make_shared<FhirValueExtension>("endtime",
+                                                                                     std::make_shared<FhirDateValue>(
+                                                                                             dpStart.ToString())));
+                }
+                dosingPeriod->Apply(*ereseptdosing);
+                reseptAmendment->AddExtension(ereseptdosing);
+            }
+        }
         {
             std::shared_ptr<FhirExtension> rfstatusExt = std::make_shared<FhirExtension>("rfstatus");
             rfstatusExt->AddExtension(std::make_shared<FhirValueExtension>(
