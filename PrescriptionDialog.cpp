@@ -57,144 +57,176 @@ wxBoxSizer *PrescriptionDialog::CreateAmount(wxWindow *parent) {
     return amountSizer;
 }
 
-PrescriptionDialog::PrescriptionDialog(TheMasterFrame *frame, const std::shared_ptr<FestDb> &festDb, const std::shared_ptr<FhirMedication> &medication, const std::vector<MedicalCodedValue> &amountUnit, bool package, const std::vector<MedicamentPackage> &packages, const std::vector<MedicalCodedValue> &dosingUnit, const std::vector<MedicalCodedValue> &kortdoser) : wxDialog(frame, wxID_ANY, wxT("Prescription")), festDb(festDb), medication(medication), amountUnit(amountUnit), packages(packages), dosingUnit(dosingUnit), kortdoser(kortdoser) {
-    auto *sizer = new wxBoxSizer(wxVERTICAL);
-    wxArrayString typeSelectionChoices{};
-    typeSelectionChoices.Add(wxT("E-prescription"));
-    typeSelectionChoices.Add(wxT("PLL-entry"));
-    typeSelection = new wxRadioBox(this, wxID_ANY, wxT("Record type:"), wxDefaultPosition, wxDefaultSize, typeSelectionChoices, typeSelectionChoices.size(), wxRA_HORIZONTAL);
-    dosingNotebook = new wxNotebook(this, wxID_ANY, wxDefaultPosition, wxDefaultSize, wxNB_TOP);
-    auto *dssnPage = new wxPanel(dosingNotebook, wxID_ANY);
-    auto *dssnSizer = new wxBoxSizer(wxHORIZONTAL);
-    auto *dssnLabel = new wxStaticText(dssnPage, wxID_ANY, wxT("DSSN:"));
-    dssnCtrl = new wxTextCtrl(dssnPage, wxID_ANY);
-    dssnSizer->Add(dssnLabel, 0, wxEXPAND | wxALL, 5);
-    dssnSizer->Add(dssnCtrl, 1, wxEXPAND | wxALL, 5);
-    dssnPage->SetSizerAndFit(dssnSizer);
-    dosingNotebook->AddPage(dssnPage, wxT("DSSN"));
-    auto *kortdoserPage = new wxPanel(dosingNotebook, wxID_ANY);
-    auto *kortdoserPageSizer = new wxBoxSizer(wxVERTICAL);
+PrescriptionDialog::PrescriptionDialog(TheMasterFrame *frame, const std::shared_ptr<FestDb> &festDb, const std::shared_ptr<FhirMedication> &medication, const std::vector<MedicalCodedValue> &amountUnit, const std::vector<MedicalCodedValue> &medicamentType, bool package, const std::vector<MedicamentPackage> &packages, const std::vector<MedicalCodedValue> &dosingUnit, const std::vector<MedicalCodedValue> &kortdoser) : wxDialog(frame, wxID_ANY, wxT("Prescription")), festDb(festDb), medication(medication), amountUnit(amountUnit), packages(packages), dosingUnit(dosingUnit), kortdoser(kortdoser) {
+    auto *vSizer = new wxBoxSizer(wxVERTICAL);
+    auto *hzSizer = new wxBoxSizer(wxHORIZONTAL);
     {
-        auto *kortdoseDosingUnitSizer = new wxBoxSizer(wxHORIZONTAL);
-        auto *kortdoseDosingUnitLabel = new wxStaticText(kortdoserPage, wxID_ANY, wxT("Doseringsenhet:"));
-        kortdoseDosingUnitCtrl = new wxComboBox(kortdoserPage, wxID_ANY);
-        kortdoseDosingUnitCtrl->SetEditable(false);
-        for (auto &unit: dosingUnit) {
-            auto display{unit.GetCode()};
-            display.append(" ");
-            display.append(unit.GetDisplay());
-            kortdoseDosingUnitCtrl->Append(display);
+        auto *sizer = new wxBoxSizer(wxVERTICAL);
+        wxArrayString typeSelectionChoices{};
+        typeSelectionChoices.Add(wxT("E-prescription"));
+        typeSelectionChoices.Add(wxT("PLL-entry"));
+        typeSelection = new wxRadioBox(this, wxID_ANY, wxT("Record type:"), wxDefaultPosition, wxDefaultSize,
+                                       typeSelectionChoices, typeSelectionChoices.size(), wxRA_HORIZONTAL);
+        wxArrayString useSelectionChoices{};
+        useSelectionChoices.Add(wxT("Permanent"));
+        useSelectionChoices.Add(wxT("When needed"));
+        useSelectionChoices.Add(wxT("Cure"));
+        useSelectionChoices.Add(wxT("Vaccine"));
+        useSelectionChoices.Add(wxT("Nutrition"));
+        useSelection = new wxRadioBox(this, wxID_ANY, wxT("Use:"), wxDefaultPosition, wxDefaultSize,
+                                      useSelectionChoices, useSelectionChoices.size(), wxRA_HORIZONTAL);
+        if (!medicamentType.empty()) {
+            auto mt = medicamentType[0];
+            auto mtCode = mt.GetCode();
+            if (mtCode == "6") {
+                useSelection->SetSelection(3);
+            } else if (mtCode == "16") {
+                useSelection->SetSelection(4);
+            }
         }
-        if (dosingUnit.size() == 1) {
-            kortdoseDosingUnitCtrl->SetSelection(0);
+        wxBoxSizer *packageSelectorSizer = nullptr;
+        wxBoxSizer *numPackagesSizer = nullptr;
+        wxBoxSizer *amountSizer = nullptr;
+        if (!package && !packages.empty()) {
+            packageAmountNotebook = new wxNotebook(this, wxID_ANY, wxDefaultPosition, wxDefaultSize, wxNB_TOP);
+            auto packagesPage = new wxPanel(packageAmountNotebook, wxID_ANY);
+            {
+                auto sizers = CreateNumPackages(packagesPage);
+                auto *pageSizer = new wxBoxSizer(wxVERTICAL);
+                pageSizer->Add(sizers.packageSelectorSizer, 0, wxEXPAND | wxALL, 5);
+                pageSizer->Add(sizers.numPackagesSizer, 0, wxEXPAND | wxALL, 5);
+                packagesPage->SetSizerAndFit(pageSizer);
+            }
+            packageAmountNotebook->AddPage(packagesPage, wxT("Package"));
+            auto amountPage = new wxPanel(packageAmountNotebook, wxID_ANY);
+            {
+                auto *sizer = CreateAmount(amountPage);
+                amountPage->SetSizerAndFit(sizer);
+            }
+            packageAmountNotebook->AddPage(amountPage, wxT("Amount"));
+        } else if (package || !packages.empty()) {
+            auto sizers = CreateNumPackages(this);
+            packageSelectorSizer = sizers.packageSelectorSizer;
+            numPackagesSizer = sizers.numPackagesSizer;
+        } else {
+            amountSizer = CreateAmount(this);
         }
-        kortdoseDosingUnitSizer->Add(kortdoseDosingUnitLabel, 0, wxEXPAND | wxALL, 5);
-        kortdoseDosingUnitSizer->Add(kortdoseDosingUnitCtrl, 1, wxEXPAND | wxALL, 5);
-        kortdoserPageSizer->Add(kortdoseDosingUnitSizer, 0, wxEXPAND | wxALL, 5);
+        auto *reitSizer = new wxBoxSizer(wxHORIZONTAL);
+        auto *reitLabel = new wxStaticText(this, wxID_ANY, wxT("Reit:"));
+        reitCtrl = new wxSpinCtrl(this, wxID_ANY);
+        reitSizer->Add(reitLabel, 0, wxEXPAND | wxALL, 5);
+        reitSizer->Add(reitCtrl, 1, wxEXPAND | wxALL, 5);
+        auto *applicationAreaSizer = new wxBoxSizer(wxHORIZONTAL);
+        auto *applicationAreaLabel = new wxStaticText(this, wxID_ANY, wxT("Application:"));
+        applicationAreaCtrl = new wxTextCtrl(this, wxID_ANY);
+        applicationAreaSizer->Add(applicationAreaLabel, 0, wxEXPAND | wxALL, 5);
+        applicationAreaSizer->Add(applicationAreaCtrl, 1, wxEXPAND | wxALL, 5);
+        sizer->Add(typeSelection, 0, wxEXPAND | wxALL, 5);
+        sizer->Add(useSelection, 0, wxEXPAND | wxALL, 5);
+        if (packageAmountNotebook != nullptr) {
+            sizer->Add(packageAmountNotebook, 0, wxEXPAND | wxALL, 5);
+        }
+        if (packageSelectorSizer != nullptr) {
+            sizer->Add(packageSelectorSizer, 0, wxEXPAND | wxALL, 5);
+        }
+        if (numPackagesSizer != nullptr) {
+            sizer->Add(numPackagesSizer, 0, wxEXPAND | wxALL, 5);
+        }
+        if (amountSizer != nullptr) {
+            sizer->Add(amountSizer, 0, wxEXPAND | wxALL, 5);
+        }
+        sizer->Add(reitSizer, 0, wxEXPAND | wxALL, 5);
+        sizer->Add(applicationAreaSizer, 0, wxEXPAND | wxALL, 5);
+        hzSizer->Add(sizer, 0, wxEXPAND | wxALL, 5);
     }
-    auto *kortdoserSizer = new wxBoxSizer(wxHORIZONTAL);
-    auto *kortdoserLabel = new wxStaticText(kortdoserPage, wxID_ANY, wxT("Kortdoser:"));
-    kortdoserCtrl = new wxComboBox(kortdoserPage, wxID_ANY);
-    kortdoserCtrl->SetEditable(false);
-    for (const auto &kd : kortdoser) {
-        std::string label{kd.GetCode()};
-        label.append(" ");
-        label.append(kd.GetDisplay());
-        kortdoserCtrl->Append(label);
-    }
-    kortdoserSizer->Add(kortdoserLabel, 0, wxEXPAND | wxALL, 5);
-    kortdoserSizer->Add(kortdoserCtrl, 1, wxEXPAND | wxALL, 5);
-    kortdoserPageSizer->Add(kortdoserSizer, 0, wxEXPAND | wxALL, 5);
-    kortdoserPage->SetSizerAndFit(kortdoserPageSizer);
-    dosingNotebook->AddPage(kortdoserPage, wxT("Kortdose"));
-    auto *advancedDosingPage = new wxPanel(dosingNotebook, wxID_ANY);
-    auto *advancedDosingSizer = new wxBoxSizer(wxVERTICAL);
     {
-        auto *dosingPeriodsDosingUnitSizer = new wxBoxSizer(wxHORIZONTAL);
-        auto *dosingPeriodsDosingUnitLabel = new wxStaticText(advancedDosingPage, wxID_ANY, wxT("Doseringsenhet:"));
-        dosingPeriodsDosingUnitCtrl = new wxComboBox(advancedDosingPage, wxID_ANY);
-        dosingPeriodsDosingUnitCtrl->SetEditable(false);
-        for (auto &unit: dosingUnit) {
-            auto display{unit.GetCode()};
-            display.append(" ");
-            display.append(unit.GetDisplay());
-            dosingPeriodsDosingUnitCtrl->Append(display);
-        }
-        if (dosingUnit.size() == 1) {
-            dosingPeriodsDosingUnitCtrl->SetSelection(0);
-        }
-        dosingPeriodsDosingUnitSizer->Add(dosingPeriodsDosingUnitLabel, 0, wxEXPAND | wxALL, 5);
-        dosingPeriodsDosingUnitSizer->Add(dosingPeriodsDosingUnitCtrl, 1, wxEXPAND | wxALL, 5);
-        advancedDosingSizer->Add(dosingPeriodsDosingUnitSizer, 0, wxEXPAND | wxALL, 5);
-    }
-    dosingPeriodsView = new wxListView(advancedDosingPage, wxID_ANY);
-    dosingPeriodsView->AppendColumn(wxT("Dosing periods"));
-    dosingPeriodsView->Bind(wxEVT_CONTEXT_MENU, &PrescriptionDialog::OnDosingPeriodsContextMenu, this, wxID_ANY);
-    advancedDosingSizer->Add(dosingPeriodsView, 0, wxALL | wxEXPAND, 5);
-    advancedDosingPage->SetSizerAndFit(advancedDosingSizer);
-    dosingNotebook->AddPage(advancedDosingPage, wxT("Avansert"));
-    wxBoxSizer *packageSelectorSizer = nullptr;
-    wxBoxSizer *numPackagesSizer = nullptr;
-    wxBoxSizer *amountSizer = nullptr;
-    if (!package && !packages.empty()) {
-        packageAmountNotebook = new wxNotebook(this, wxID_ANY, wxDefaultPosition, wxDefaultSize, wxNB_TOP);
-        auto packagesPage = new wxPanel(packageAmountNotebook, wxID_ANY);
+        auto *sizer = new wxBoxSizer(wxVERTICAL);
+        dosingNotebook = new wxNotebook(this, wxID_ANY, wxDefaultPosition, wxDefaultSize, wxNB_TOP);
+        auto *dssnPage = new wxPanel(dosingNotebook, wxID_ANY);
+        auto *dssnSizer = new wxBoxSizer(wxHORIZONTAL);
+        auto *dssnLabel = new wxStaticText(dssnPage, wxID_ANY, wxT("DSSN:"));
+        dssnCtrl = new wxTextCtrl(dssnPage, wxID_ANY);
+        dssnSizer->Add(dssnLabel, 0, wxEXPAND | wxALL, 5);
+        dssnSizer->Add(dssnCtrl, 1, wxEXPAND | wxALL, 5);
+        dssnPage->SetSizerAndFit(dssnSizer);
+        dosingNotebook->AddPage(dssnPage, wxT("DSSN"));
+        auto *kortdoserPage = new wxPanel(dosingNotebook, wxID_ANY);
+        auto *kortdoserPageSizer = new wxBoxSizer(wxVERTICAL);
         {
-            auto sizers = CreateNumPackages(packagesPage);
-            auto *pageSizer = new wxBoxSizer(wxVERTICAL);
-            pageSizer->Add(sizers.packageSelectorSizer, 0, wxEXPAND | wxALL, 5);
-            pageSizer->Add(sizers.numPackagesSizer, 0, wxEXPAND | wxALL, 5);
-            packagesPage->SetSizerAndFit(pageSizer);
+            auto *kortdoseDosingUnitSizer = new wxBoxSizer(wxHORIZONTAL);
+            auto *kortdoseDosingUnitLabel = new wxStaticText(kortdoserPage, wxID_ANY, wxT("Doseringsenhet:"));
+            kortdoseDosingUnitCtrl = new wxComboBox(kortdoserPage, wxID_ANY);
+            kortdoseDosingUnitCtrl->SetEditable(false);
+            for (auto &unit: dosingUnit) {
+                auto display{unit.GetCode()};
+                display.append(" ");
+                display.append(unit.GetDisplay());
+                kortdoseDosingUnitCtrl->Append(display);
+            }
+            if (dosingUnit.size() == 1) {
+                kortdoseDosingUnitCtrl->SetSelection(0);
+            }
+            kortdoseDosingUnitSizer->Add(kortdoseDosingUnitLabel, 0, wxEXPAND | wxALL, 5);
+            kortdoseDosingUnitSizer->Add(kortdoseDosingUnitCtrl, 1, wxEXPAND | wxALL, 5);
+            kortdoserPageSizer->Add(kortdoseDosingUnitSizer, 0, wxEXPAND | wxALL, 5);
         }
-        packageAmountNotebook->AddPage(packagesPage, wxT("Package"));
-        auto amountPage = new wxPanel(packageAmountNotebook, wxID_ANY);
+        auto *kortdoserSizer = new wxBoxSizer(wxHORIZONTAL);
+        auto *kortdoserLabel = new wxStaticText(kortdoserPage, wxID_ANY, wxT("Kortdoser:"));
+        kortdoserCtrl = new wxComboBox(kortdoserPage, wxID_ANY);
+        kortdoserCtrl->SetEditable(false);
+        for (const auto &kd: kortdoser) {
+            std::string label{kd.GetCode()};
+            label.append(" ");
+            label.append(kd.GetDisplay());
+            kortdoserCtrl->Append(label);
+        }
+        kortdoserSizer->Add(kortdoserLabel, 0, wxEXPAND | wxALL, 5);
+        kortdoserSizer->Add(kortdoserCtrl, 1, wxEXPAND | wxALL, 5);
+        kortdoserPageSizer->Add(kortdoserSizer, 0, wxEXPAND | wxALL, 5);
+        kortdoserPage->SetSizerAndFit(kortdoserPageSizer);
+        dosingNotebook->AddPage(kortdoserPage, wxT("Kortdose"));
+        auto *advancedDosingPage = new wxPanel(dosingNotebook, wxID_ANY);
+        auto *advancedDosingSizer = new wxBoxSizer(wxVERTICAL);
         {
-            auto *sizer = CreateAmount(amountPage);
-            amountPage->SetSizerAndFit(sizer);
+            auto *dosingPeriodsDosingUnitSizer = new wxBoxSizer(wxHORIZONTAL);
+            auto *dosingPeriodsDosingUnitLabel = new wxStaticText(advancedDosingPage, wxID_ANY, wxT("Doseringsenhet:"));
+            dosingPeriodsDosingUnitCtrl = new wxComboBox(advancedDosingPage, wxID_ANY);
+            dosingPeriodsDosingUnitCtrl->SetEditable(false);
+            for (auto &unit: dosingUnit) {
+                auto display{unit.GetCode()};
+                display.append(" ");
+                display.append(unit.GetDisplay());
+                dosingPeriodsDosingUnitCtrl->Append(display);
+            }
+            if (dosingUnit.size() == 1) {
+                dosingPeriodsDosingUnitCtrl->SetSelection(0);
+            }
+            dosingPeriodsDosingUnitSizer->Add(dosingPeriodsDosingUnitLabel, 0, wxEXPAND | wxALL, 5);
+            dosingPeriodsDosingUnitSizer->Add(dosingPeriodsDosingUnitCtrl, 1, wxEXPAND | wxALL, 5);
+            advancedDosingSizer->Add(dosingPeriodsDosingUnitSizer, 0, wxEXPAND | wxALL, 5);
         }
-        packageAmountNotebook->AddPage(amountPage, wxT("Amount"));
-    } else if (package || !packages.empty()) {
-        auto sizers = CreateNumPackages(this);
-        packageSelectorSizer = sizers.packageSelectorSizer;
-        numPackagesSizer = sizers.numPackagesSizer;
-    } else {
-        amountSizer = CreateAmount(this);
+        dosingPeriodsView = new wxListView(advancedDosingPage, wxID_ANY);
+        dosingPeriodsView->AppendColumn(wxT("Dosing periods"));
+        dosingPeriodsView->Bind(wxEVT_CONTEXT_MENU, &PrescriptionDialog::OnDosingPeriodsContextMenu, this, wxID_ANY);
+        advancedDosingSizer->Add(dosingPeriodsView, 0, wxALL | wxEXPAND, 5);
+        advancedDosingPage->SetSizerAndFit(advancedDosingSizer);
+        dosingNotebook->AddPage(advancedDosingPage, wxT("Avansert"));
+        sizer->Add(dosingNotebook, 0, wxEXPAND | wxALL, 5);
+        hzSizer->Add(sizer, 0, wxEXPAND | wxALL, 5);
     }
-    auto *reitSizer = new wxBoxSizer(wxHORIZONTAL);
-    auto *reitLabel = new wxStaticText(this, wxID_ANY, wxT("Reit:"));
-    reitCtrl = new wxSpinCtrl(this, wxID_ANY);
-    reitSizer->Add(reitLabel, 0, wxEXPAND | wxALL, 5);
-    reitSizer->Add(reitCtrl, 1, wxEXPAND | wxALL, 5);
-    auto *applicationAreaSizer = new wxBoxSizer(wxHORIZONTAL);
-    auto *applicationAreaLabel = new wxStaticText(this, wxID_ANY, wxT("Application:"));
-    applicationAreaCtrl = new wxTextCtrl(this, wxID_ANY);
-    applicationAreaSizer->Add(applicationAreaLabel, 0, wxEXPAND | wxALL, 5);
-    applicationAreaSizer->Add(applicationAreaCtrl, 1, wxEXPAND | wxALL, 5);
+    vSizer->Add(hzSizer, 0, wxEXPAND | wxALL, 5);
     auto *buttonsSizer = new wxBoxSizer(wxHORIZONTAL);
     auto *cancelButton = new wxButton(this, wxID_ANY, wxT("Cancel"));
     proceedButton = new wxButton(this, wxID_ANY, wxT("Finish"));
     proceedButton->Enable(false);
     buttonsSizer->Add(cancelButton, 0, wxEXPAND | wxALL, 5);
     buttonsSizer->Add(proceedButton, 0, wxEXPAND | wxALL, 5);
-    sizer->Add(typeSelection, 0, wxEXPAND | wxALL, 5);
-    sizer->Add(dosingNotebook, 0, wxEXPAND | wxALL, 5);
-    if (packageAmountNotebook != nullptr) {
-        sizer->Add(packageAmountNotebook, 0, wxEXPAND | wxALL, 5);
-    }
-    if (packageSelectorSizer != nullptr) {
-        sizer->Add(packageSelectorSizer, 0, wxEXPAND | wxALL, 5);
-    }
-    if (numPackagesSizer != nullptr) {
-        sizer->Add(numPackagesSizer, 0, wxEXPAND | wxALL, 5);
-    }
-    if (amountSizer != nullptr) {
-        sizer->Add(amountSizer, 0, wxEXPAND | wxALL, 5);
-    }
-    sizer->Add(reitSizer, 0, wxEXPAND | wxALL, 5);
-    sizer->Add(applicationAreaSizer, 0, wxEXPAND | wxALL, 5);
-    sizer->Add(buttonsSizer, 0, wxEXPAND | wxALL, 5);
-    SetSizerAndFit(sizer);
+    vSizer->Add(buttonsSizer, 0, wxEXPAND | wxALL, 5);
+    SetSizerAndFit(vSizer);
+    dosingNotebook->Bind(wxEVT_NOTEBOOK_PAGE_CHANGED, &PrescriptionDialog::OnModified, this);
     dssnCtrl->Bind(wxEVT_TEXT, &PrescriptionDialog::OnModified, this);
+    kortdoseDosingUnitCtrl->Bind(wxEVT_COMBOBOX, &PrescriptionDialog::OnModified, this);
+    kortdoserCtrl->Bind(wxEVT_COMBOBOX, &PrescriptionDialog::OnModified, this);
     if (packageAmountNotebook != nullptr) {
         packageAmountNotebook->Bind(wxEVT_NOTEBOOK_PAGE_CHANGED, &PrescriptionDialog::OnModifiedPC, this);
     }
@@ -227,6 +259,14 @@ enum class PrescriptionRecordType {
     PLLENTRY
 };
 
+enum class UseType {
+    PERMANENT,
+    WHEN_NEEDED,
+    CURE,
+    VACCINE,
+    NUTRITION
+};
+
 enum class DosingType {
     NOT_SET,
     DSSN,
@@ -236,6 +276,7 @@ enum class DosingType {
 
 struct PrescriptionDialogData {
     PrescriptionRecordType recordType{PrescriptionRecordType::EPRESCRIPTION};
+    UseType useType{UseType::PERMANENT};
     MedicalCodedValue amountUnit{};
     std::shared_ptr<FhirMedication> package{};
     DosingType dosingType{};
@@ -264,6 +305,25 @@ PrescriptionDialogData PrescriptionDialog::GetDialogData() const {
             break;
         default:
             dialogData.recordType = PrescriptionRecordType::EPRESCRIPTION;
+    }
+    switch (useSelection->GetSelection()) {
+        case 0:
+            dialogData.useType = UseType::PERMANENT;
+            break;
+        case 1:
+            dialogData.useType = UseType::WHEN_NEEDED;
+            break;
+        case 2:
+            dialogData.useType = UseType::CURE;
+            break;
+        case 3:
+            dialogData.useType = UseType::VACCINE;
+            break;
+        case 4:
+            dialogData.useType = UseType::NUTRITION;
+            break;
+        default:
+            dialogData.useType = UseType::PERMANENT;
     }
     {
         auto page = dosingNotebook->GetSelection();
@@ -507,7 +567,36 @@ static void SetPrescriptionData(PrescriptionData &prescriptionData, const Prescr
         default:
             prescriptionData.typeresept = {"urn:oid:2.16.578.1.12.4.1.1.7491", "E", "Eresept", "Eresept"};
     }
-    prescriptionData.use = {"urn:oid:2.16.578.1.12.4.1.1.9101", "1", "Fast", "Fast"};
+    {
+        std::string useCode{};
+        std::string useName{};
+        switch (dialogData.useType) {
+            case UseType::PERMANENT:
+                useCode = "1";
+                useName = "Fast";
+                break;
+            case UseType::WHEN_NEEDED:
+                useCode = "3";
+                useName = "Ved behov";
+                break;
+            case UseType::CURE:
+                useCode = "2";
+                useName = "Kur";
+                break;
+            case UseType::VACCINE:
+                useCode = "4";
+                useName = "Vaksine";
+                break;
+            case UseType::NUTRITION:
+                useCode = "5";
+                useName = "Næringsmiddel/vitaminer";
+                break;
+            default:
+                useCode = "1";
+                useName = "Fast";
+        }
+        prescriptionData.use = {"urn:oid:2.16.578.1.12.4.1.1.9101", useCode, useName, useName};
+    }
 
     std::ostringstream nowStream;
     std::tm tm{};
@@ -610,17 +699,21 @@ void PrescriptionDialog::OnAddDosingPeriod(wxCommandEvent &e) {
     if (advancedDosingPeriodDialog.ShowModal() == wxID_OK) {
         std::shared_ptr<AdvancedDosingPeriod> dosingPeriod = advancedDosingPeriodDialog.GetDosingPeriod();
         addDosingPeriod(std::move(dosingPeriod));
+        OnModified();
     }
 }
 
 void PrescriptionDialog::OnMoveUp(wxCommandEvent &e) {
     moveUp();
+    OnModified();
 }
 
 void PrescriptionDialog::OnMoveDown(wxCommandEvent &e) {
     moveDown();
+    OnModified();
 }
 
 void PrescriptionDialog::OnDeleteDosingPeriod(wxCommandEvent &e) {
     deleteDosingPeriod();
+    OnModified();
 }

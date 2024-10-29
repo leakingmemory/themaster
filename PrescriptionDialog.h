@@ -42,6 +42,7 @@ private:
     PrescriptionData prescriptionData{};
     wxButton *proceedButton;
     wxRadioBox *typeSelection;
+    wxRadioBox *useSelection;
     wxNotebook *dosingNotebook;
     wxTextCtrl *dssnCtrl;
     wxComboBox *kortdoseDosingUnitCtrl;
@@ -70,7 +71,7 @@ private:
     NumPackagesSizers CreateNumPackages(wxWindow *parent);
     wxBoxSizer *CreateAmount(wxWindow *parent);
 public:
-    PrescriptionDialog(TheMasterFrame *, const std::shared_ptr<FestDb> &festDb, const std::shared_ptr<FhirMedication> &, const std::vector<MedicalCodedValue> &amountUnit, bool package = false, const std::vector<MedicamentPackage> &packages = {}, const std::vector<MedicalCodedValue> &dosingUnit = {}, const std::vector<MedicalCodedValue> &kortdoser = {});
+    PrescriptionDialog(TheMasterFrame *, const std::shared_ptr<FestDb> &festDb, const std::shared_ptr<FhirMedication> &, const std::vector<MedicalCodedValue> &amountUnit, const std::vector<MedicalCodedValue> &medicamentType, bool package = false, const std::vector<MedicamentPackage> &packages = {}, const std::vector<MedicalCodedValue> &dosingUnit = {}, const std::vector<MedicalCodedValue> &kortdoser = {});
     void OnCancel(wxCommandEvent &e);
 private:
     [[nodiscard]] PrescriptionDialogData GetDialogData() const;

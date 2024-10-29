@@ -97,6 +97,10 @@ void SfmMedicamentMapper::Map(const LegemiddelMerkevare &legemiddelMerkevare) {
                 if (!found) {
                     prescriptionUnit.emplace_back(packingUnit.GetCodeSet(), packingUnitCode, packingUnit.GetDistinguishedName(), "");
                 }
+                {
+                    auto preparatType = legemiddelMerkevare.GetPreparattype();
+                    medicamentType.emplace_back("2.16.578.1.12.4.1.1.9101", preparatType.GetValue(), preparatType.GetDistinguishedName(), preparatType.GetDistinguishedName());
+                }
             }
         }
     }
@@ -142,6 +146,20 @@ void SfmMedicamentMapper::Map(const LegemiddelVirkestoff &legemiddelVirkestoff) 
         medicationDetails->AddExtension(std::make_shared<FhirValueExtension>("registreringstype", std::make_shared<FhirCodeableConceptValue>(FhirCodeableConcept("http://ehelse.no/fhir/CodeSystem/sfm-festregistrationtype", "1", "Legemiddelvirkestoff"))));
         medication.AddExtension(medicationDetails);
     }
+    {
+        auto merkevareIds = legemiddelVirkestoff.GetRefLegemiddelMerkevare();
+        for (const auto &merkevareId : merkevareIds) {
+            auto merkevare = festDb->GetLegemiddelMerkevare(merkevareId);
+            {
+                auto preparatType = merkevare.GetPreparattype();
+                if (std::find_if(medicamentType.cbegin(), medicamentType.cend(), [&preparatType] (const MedicalCodedValue &mcv) { return mcv.GetCode() == preparatType.GetValue(); }) == medicamentType.cend()) {
+                    medicamentType.emplace_back("2.16.578.1.12.4.1.1.9101", preparatType.GetValue(),
+                                                preparatType.GetDistinguishedName(),
+                                                preparatType.GetDistinguishedName());
+                }
+            }
+        }
+    }
 }
 
 void SfmMedicamentMapper::Map(const Legemiddelpakning &legemiddelpakning) {
@@ -184,6 +202,14 @@ void SfmMedicamentMapper::Map(const Legemiddelpakning &legemiddelpakning) {
                 packageDescription.append(", ");
             }
             packageDescription.append(pi.GetPakningsstr());
+            {
+                auto preparatType = merkevare.GetPreparattype();
+                if (std::find_if(medicamentType.cbegin(), medicamentType.cend(), [&preparatType] (const MedicalCodedValue &mcv) { return mcv.GetCode() == preparatType.GetValue(); }) == medicamentType.cend()) {
+                    medicamentType.emplace_back("2.16.578.1.12.4.1.1.9101", preparatType.GetValue(),
+                                                preparatType.GetDistinguishedName(),
+                                                preparatType.GetDistinguishedName());
+                }
+            }
         }
         medication.AddExtension(medicationDetails);
     }
