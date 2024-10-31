@@ -74,6 +74,7 @@ TheMasterFrame::TheMasterFrame() : wxFrame(nullptr, wxID_ANY, "The Master"),
     patientMenu->Append(TheMaster_CreatePatient_Id, "Create patient");
     auto *serverMenu = new wxMenu();
     serverMenu->Append(TheMaster_Connect_Id, "Connect");
+    serverMenu->Append(TheMaster_ResetMedication_Id, "Reset local changes");
     serverMenu->Append(TheMaster_GetMedication_Id, "Get medication");
     serverMenu->Append(TheMaster_SendMedication_Id, "Send medication");
     serverMenu->Append(TheMaster_SendPll_Id, "Send PLL");
@@ -121,6 +122,7 @@ TheMasterFrame::TheMasterFrame() : wxFrame(nullptr, wxID_ANY, "The Master"),
     Bind(wxEVT_MENU, &TheMasterFrame::OnConnect, this, TheMaster_Connect_Id);
     Bind(wxEVT_MENU, &TheMasterFrame::OnFindPatient, this, TheMaster_FindPatient_Id);
     Bind(wxEVT_MENU, &TheMasterFrame::OnCreatePatient, this, TheMaster_CreatePatient_Id);
+    Bind(wxEVT_MENU, &TheMasterFrame::OnResetMedication, this, TheMaster_ResetMedication_Id);
     Bind(wxEVT_MENU, &TheMasterFrame::OnGetMedication, this, TheMaster_GetMedication_Id);
     Bind(wxEVT_MENU, &TheMasterFrame::OnSendMedication, this, TheMaster_SendMedication_Id);
     Bind(wxEVT_MENU, &TheMasterFrame::OnSendPll, this, TheMaster_SendPll_Id);
@@ -175,21 +177,23 @@ void TheMasterFrame::UpdateMedications() {
     auto pos = 0;
     std::map<std::string,std::shared_ptr<FhirMedicationStatement>> medicationStatementMap{};
     FhirCompositionSection medicationSection{};
-    for (const auto &bundleEntry : medicationBundle->medBundle->GetEntries()) {
-        auto resource = bundleEntry.GetResource();
-        auto medicationStatement = std::dynamic_pointer_cast<FhirMedicationStatement>(resource);
-        if (medicationStatement) {
-            medicationStatementMap.insert_or_assign(bundleEntry.GetFullUrl(), medicationStatement);
-            continue;
-        }
-        auto composition = std::dynamic_pointer_cast<FhirComposition>(resource);
-        if (composition) {
-            auto sections = composition->GetSections();
-            for (const auto &section : sections) {
-                auto coding = section.GetCode().GetCoding();
-                if (coding.size() == 1 && coding[0].GetCode() == "sectionMedication") {
-                    medicationSection = section;
-                    break;
+    if (medicationBundle && medicationBundle->medBundle) {
+        for (const auto &bundleEntry: medicationBundle->medBundle->GetEntries()) {
+            auto resource = bundleEntry.GetResource();
+            auto medicationStatement = std::dynamic_pointer_cast<FhirMedicationStatement>(resource);
+            if (medicationStatement) {
+                medicationStatementMap.insert_or_assign(bundleEntry.GetFullUrl(), medicationStatement);
+                continue;
+            }
+            auto composition = std::dynamic_pointer_cast<FhirComposition>(resource);
+            if (composition) {
+                auto sections = composition->GetSections();
+                for (const auto &section: sections) {
+                    auto coding = section.GetCode().GetCoding();
+                    if (coding.size() == 1 && coding[0].GetCode() == "sectionMedication") {
+                        medicationSection = section;
+                        break;
+                    }
                 }
             }
         }
@@ -262,6 +266,10 @@ void TheMasterFrame::OnFindPatient(wxCommandEvent &e) {
     FindPatientDialog dialog{patientStore, this};
     if (dialog.ShowModal() == wxID_OK) {
         patientInformation = dialog.GetPatient();
+        medicationBundleResetData = "";
+        medicationBundle = {};
+        UpdateHeader();
+        UpdateMedications();
     }
 }
 
@@ -271,6 +279,10 @@ void TheMasterFrame::OnCreatePatient(wxCommandEvent &e) {
         auto patient = dialog.GetPatientInformation();
         patientStore->AddPatient(patient);
         patientInformation = std::make_shared<PatientInformation>(std::move(patient));
+        medicationBundleResetData = "";
+        medicationBundle = {};
+        UpdateHeader();
+        UpdateMedications();
     }
 }
 
@@ -639,6 +651,7 @@ void TheMasterFrame::GetMedication(CallContext &ctx, const std::function<void(co
                 if (medicationBundle && medicationBundle->patientInformation == *patientInformation) {
                     previousBundle = medicationBundle->medBundle;
                 }
+                medicationBundleResetData = medBundle->ToJson().serialize();
                 medicationBundle = std::make_unique<MedBundleData>();
                 *medicationBundle = {
                         .patientInformation = *patientInformation,
@@ -717,6 +730,16 @@ void TheMasterFrame::GetMedication(CallContext &ctx, const std::function<void(co
             callback->Call("Error: Get medications request failed");
         }
     });
+}
+
+void TheMasterFrame::OnResetMedication(wxCommandEvent &e) {
+    if (medicationBundleResetData.empty() || !medicationBundle || !medicationBundle->medBundle) {
+        wxMessageBox(wxT("Please run 'get medication' before reset local changes"), wxT("Run get medication"), wxICON_ERROR);
+        return;
+    }
+    *(medicationBundle->medBundle) = FhirBundle::Parse(web::json::value::parse(medicationBundleResetData));
+    UpdateHeader();
+    UpdateMedications();
 }
 
 void TheMasterFrame::OnGetMedication(wxCommandEvent &e) {
@@ -843,6 +866,7 @@ void TheMasterFrame::SendMedication(CallContext &ctx,
     pplx::task<web::http::http_response> responseTask{};
     auto accessTokenTask = GetAccessToken();
     std::shared_ptr<std::string> rawRequest = std::make_shared<std::string>();
+    medicationBundleResetData = "";
     responseTask = accessTokenTask.then([apiUrl, bundle, preprocessing, rawRequest] (const std::string &accessToken) {
         web::http::http_request request{web::http::methods::POST};
         if (!accessToken.empty()) {
@@ -1928,6 +1952,10 @@ void TheMasterFrame::PrescribeMedicament(const PrescriptionDialog &prescriptionD
 
 void TheMasterFrame::OnPrescribeMagistral(wxCommandEvent &e) {
     MagistralBuilderDialog magistralBuilderDialog{this};
+    if (!medicationBundle || !medicationBundle->medBundle) {
+        wxMessageBox(wxT("Select patient and run 'get medication' to prescribe medication"), wxT("No open patient"), wxICON_ERROR);
+        return;
+    }
     if (magistralBuilderDialog.ShowModal() == wxID_OK) {
         PrescriptionDialog prescriptionDialog{this, std::make_shared<FestDb>(), std::make_shared<FhirMedication>(magistralBuilderDialog.GetMagistralMedicament().ToFhir()), {}, {}, true};
         auto res = prescriptionDialog.ShowModal();
@@ -1942,6 +1970,10 @@ void TheMasterFrame::OnPrescribeMedicament(wxCommandEvent &e) {
     FindMedicamentDialog findMedicamentDialog{this};
     if (!findMedicamentDialog.CanOpen()) {
         wxMessageBox(wxT("Prescribe medicament requires a FEST DB. Please update FEST and try again."), wxT("No FEST DB"), wxICON_ERROR);
+        return;
+    }
+    if (!medicationBundle || !medicationBundle->medBundle) {
+        wxMessageBox(wxT("Select patient and run 'get medication' to prescribe medication"), wxT("No open patient"), wxICON_ERROR);
         return;
     }
     findMedicamentDialog.ShowModal();

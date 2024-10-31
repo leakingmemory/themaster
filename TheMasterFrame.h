@@ -33,6 +33,7 @@ private:
     std::shared_ptr<WeakRefUiDispatcher<TheMasterFrame>> weakRefDispatcher;
     std::shared_ptr<PatientStore> patientStore{};
     std::shared_ptr<PatientInformation> patientInformation;
+    std::string medicationBundleResetData{};
     std::unique_ptr<MedBundleData> medicationBundle{};
     std::vector<std::vector<std::shared_ptr<FhirMedicationStatement>>> displayedMedicationStatements{};
     std::string lastGetmedRequest{};
@@ -64,6 +65,7 @@ public:
 private:
     void GetMedication(CallContext &ctx, const std::function<void (const std::string &err)> &callback);
 public:
+    void OnResetMedication(wxCommandEvent &e);
     void OnGetMedication(wxCommandEvent &e);
     static void FilterRecallInfos(FhirBundle &bundle, const std::function<bool (const std::string &,const std::shared_ptr<FhirExtension> &)> &predicate);
     static std::map<std::string,std::shared_ptr<FhirExtension>> GetRecallInfos(FhirBundle &bundle);
