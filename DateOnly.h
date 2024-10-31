@@ -24,6 +24,15 @@ public:
     constexpr DateOnly(int32_t year, uint8_t month, uint8_t day) : year(year), month(month), day(day) {}
     DateOnly(const std::string &str);
     std::string ToString() const;
+    [[nodiscard]] constexpr typeof(year) GetYear() const {
+        return year;
+    }
+    [[nodiscard]] constexpr int GetMonth() const {
+        return month;
+    }
+    [[nodiscard]] constexpr int GetDayOfMonth() const {
+        return day;
+    }
     static DateOnly Today();
     void AddDays(int days);
     void AddYears(int years);

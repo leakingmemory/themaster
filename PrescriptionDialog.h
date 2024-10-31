@@ -58,6 +58,8 @@ private:
     wxComboBox *amountUnitCtrl{nullptr};
     wxSpinCtrl *reitCtrl{};
     wxTextCtrl *applicationAreaCtrl{};
+    wxDatePickerCtrl *startDate{};
+    wxDatePickerCtrl *expirationDate{};
     wxCheckBox *ceaseDateSet{};
     wxDatePickerCtrl *ceaseDate{};
     std::shared_ptr<FestDb> festDb;
