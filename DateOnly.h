@@ -30,7 +30,58 @@ public:
     constexpr void SubtractDays(int days) {
         AddDays(0 - days);
     }
+    time_t GetStartOfDaySecondsFromEpoch() const;
+    constexpr explicit operator bool () const {
+        return year != 0 && month != 0 && day != 0;
+    }
+    constexpr bool operator < (const DateOnly &other) const {
+        if (other.year < year) {
+            return false;
+        } else if (other.year > year) {
+            if (other.year == 0 || year == 0) {
+                return false;
+            }
+            return true;
+        } else {
+            if (year == 0) {
+                return false;
+            }
+            if (other.month < month) {
+                return false;
+            } else if (other.month > month) {
+                if (other.month == 0 || month == 0) {
+                    return false;
+                }
+                return true;
+            } else {
+                if (month == 0) {
+                    return false;
+                }
+                if (other.day < day) {
+                    return false;
+                } else if (other.day > day) {
+                    if (other.day == 0 || day == 0) {
+                        return false;
+                    }
+                    return true;
+                } else {
+                    return false;
+                }
+            }
+        }
+    }
+    constexpr bool operator > (const DateOnly &other) const {
+        return other < *this;
+    }
+    constexpr bool operator == (const DateOnly &other) const {
+        return other.year == year && other.month == month && other.day == day;
+    }
+    constexpr bool operator <= (const DateOnly &other) const {
+        return *this == other || *this < other;
+    }
+    constexpr bool operator >= (const DateOnly &other) const {
+        return *this == other || *this > other;
+    }
 };
-
 
 #endif //THEMASTER_DATEONLY_H

@@ -5,6 +5,8 @@
 #include <wx/spinctrl.h>
 #include <wx/notebook.h>
 #include <wx/listctrl.h>
+#include <wx/datectrl.h>
+#include <wx/dateevt.h>
 #include "PrescriptionDialog.h"
 #include "FestDb.h"
 #include "TheMasterFrame.h"
@@ -212,6 +214,12 @@ PrescriptionDialog::PrescriptionDialog(TheMasterFrame *frame, const std::shared_
         advancedDosingPage->SetSizerAndFit(advancedDosingSizer);
         dosingNotebook->AddPage(advancedDosingPage, wxT("Avansert"));
         sizer->Add(dosingNotebook, 0, wxEXPAND | wxALL, 5);
+        auto *ceaseSizer = new wxBoxSizer(wxHORIZONTAL);
+        ceaseDateSet = new wxCheckBox(this, wxID_ANY, wxT("Cease: "));
+        ceaseSizer->Add(ceaseDateSet, 0, wxEXPAND | wxALL, 5);
+        ceaseDate = new wxDatePickerCtrl(this, wxID_ANY);
+        ceaseSizer->Add(ceaseDate, 0, wxEXPAND | wxALL, 5);
+        sizer->Add(ceaseSizer, 0, wxEXPAND | wxALL, 5);
         hzSizer->Add(sizer, 0, wxEXPAND | wxALL, 5);
     }
     vSizer->Add(hzSizer, 0, wxEXPAND | wxALL, 5);
@@ -227,6 +235,8 @@ PrescriptionDialog::PrescriptionDialog(TheMasterFrame *frame, const std::shared_
     dssnCtrl->Bind(wxEVT_TEXT, &PrescriptionDialog::OnModified, this);
     kortdoseDosingUnitCtrl->Bind(wxEVT_COMBOBOX, &PrescriptionDialog::OnModified, this);
     kortdoserCtrl->Bind(wxEVT_COMBOBOX, &PrescriptionDialog::OnModified, this);
+    ceaseDateSet->Bind(wxEVT_CHECKBOX, &PrescriptionDialog::OnModifiedCeaseIsSet, this);
+    ceaseDate->Bind(wxEVT_DATE_CHANGED, &PrescriptionDialog::OnModifiedDate, this);
     if (packageAmountNotebook != nullptr) {
         packageAmountNotebook->Bind(wxEVT_NOTEBOOK_PAGE_CHANGED, &PrescriptionDialog::OnModifiedPC, this);
     }
@@ -289,9 +299,11 @@ struct PrescriptionDialogData {
     std::string applicationArea{};
     double numberOfPackages{0};
     double amount{0};
+    DateOnly ceaseDate{};
     int reit{0};
     bool numberOfPackagesSet{false};
     bool amountIsSet{false};
+    bool invalidField{false};
 };
 
 PrescriptionDialogData PrescriptionDialog::GetDialogData() const {
@@ -403,6 +415,60 @@ PrescriptionDialogData PrescriptionDialog::GetDialogData() const {
             dialogData.numberOfPackagesSet = false;
         }
     }
+    if (ceaseDateSet->GetValue()) {
+        auto dateTime = ceaseDate->GetValue();
+        auto year = dateTime.GetYear();
+        auto month = dateTime.GetMonth();
+        auto day = dateTime.GetDay();
+        if (year != wxDateTime::Inv_Year && month != wxDateTime::Inv_Month && day > 0 && day < 32) {
+            uint8_t monthNum;
+            switch (month) {
+                case wxDateTime::Jan:
+                    monthNum = 1;
+                    break;
+                case wxDateTime::Feb:
+                    monthNum = 2;
+                    break;
+                case wxDateTime::Mar:
+                    monthNum = 3;
+                    break;
+                case wxDateTime::Apr:
+                    monthNum = 4;
+                    break;
+                case wxDateTime::May:
+                    monthNum = 5;
+                    break;
+                case wxDateTime::Jun:
+                    monthNum = 6;
+                    break;
+                case wxDateTime::Jul:
+                    monthNum = 7;
+                    break;
+                case wxDateTime::Aug:
+                    monthNum = 8;
+                    break;
+                case wxDateTime::Sep:
+                    monthNum = 9;
+                    break;
+                case wxDateTime::Oct:
+                    monthNum = 10;
+                    break;
+                case wxDateTime::Nov:
+                    monthNum = 11;
+                    break;
+                case wxDateTime::Dec:
+                    monthNum = 12;
+                    break;
+                default:
+                    monthNum = 1;
+                    dialogData.invalidField = true;
+            }
+            DateOnly dateOnly{year, monthNum, static_cast<uint8_t>(day)};
+            dialogData.ceaseDate = dateOnly;
+        } else {
+            dialogData.invalidField = true;
+        }
+    }
     dialogData.reit = reitCtrl->GetValue();
     dialogData.applicationArea = applicationAreaCtrl->GetValue();
     return dialogData;
@@ -477,6 +543,9 @@ void PrescriptionDialog::ProcessDialogData(PrescriptionDialogData &dialogData) c
 }
 
 bool PrescriptionDialog::IsValid(const PrescriptionDialogData &dialogData) const {
+    if (dialogData.invalidField) {
+        return false;
+    }
     if (dialogData.dosingType == DosingType::DSSN) {
         if (dialogData.dssn.empty()) {
             return false;
@@ -490,6 +559,9 @@ bool PrescriptionDialog::IsValid(const PrescriptionDialogData &dialogData) const
             return false;
         }
     } else {
+        return false;
+    }
+    if (dialogData.ceaseDate && dialogData.ceaseDate <= DateOnly::Today()) {
         return false;
     }
     if (dialogData.numberOfPackagesSet) {
@@ -526,11 +598,24 @@ void PrescriptionDialog::OnModified() {
     proceedButton->Enable(isValid);
 }
 
+void PrescriptionDialog::OnModifiedCeaseIsSet() {
+    ceaseDate->Enable(ceaseDateSet->GetValue());
+    OnModified();
+}
+
 void PrescriptionDialog::OnModified(wxCommandEvent &e) {
     OnModified();
 }
 
 void PrescriptionDialog::OnModifiedPC(wxBookCtrlEvent &e) {
+    OnModified();
+}
+
+void PrescriptionDialog::OnModifiedCeaseIsSet(wxCommandEvent &e) {
+    OnModifiedCeaseIsSet();
+}
+
+void PrescriptionDialog::OnModifiedDate(wxDateEvent &e) {
     OnModified();
 }
 
@@ -540,6 +625,7 @@ static void SetPrescriptionData(PrescriptionData &prescriptionData, const Prescr
     endDate.AddYears(1);
     prescriptionData.reseptdate = startDate;
     prescriptionData.expirationdate = endDate;
+    prescriptionData.ceaseDate = dialogData.ceaseDate;
     if (dialogData.dosingType == DosingType::KORTDOSE) {
         prescriptionData.kortdose = dialogData.kortdose;
     } else if (dialogData.dosingType == DosingType::DOSINGPERIODS) {

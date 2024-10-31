@@ -17,6 +17,8 @@ class wxSpinCtrl;
 class wxSpinCtrlDouble;
 class wxNotebook;
 class wxBookCtrlEvent;
+class wxDatePickerCtrl;
+class wxDateEvent;
 class FhirMedication;
 
 class MedicamentPackage {
@@ -56,6 +58,8 @@ private:
     wxComboBox *amountUnitCtrl{nullptr};
     wxSpinCtrl *reitCtrl{};
     wxTextCtrl *applicationAreaCtrl{};
+    wxCheckBox *ceaseDateSet{};
+    wxDatePickerCtrl *ceaseDate{};
     std::shared_ptr<FestDb> festDb;
     std::shared_ptr<FhirMedication> medication;
     std::vector<MedicamentPackage> packages;
@@ -78,9 +82,12 @@ private:
     void ProcessDialogData(PrescriptionDialogData &) const;
     bool IsValid(const PrescriptionDialogData &dialogData) const;
     void OnModified();
+    void OnModifiedCeaseIsSet();
 public:
     void OnModified(wxCommandEvent &e);
     void OnModifiedPC(wxBookCtrlEvent &e);
+    void OnModifiedCeaseIsSet(wxCommandEvent &e);
+    void OnModifiedDate(wxDateEvent &e);
     void OnProceed(wxCommandEvent &e);
     void OnDosingPeriodsContextMenu(wxContextMenuEvent &e);
     void OnAddDosingPeriod(wxCommandEvent &e);

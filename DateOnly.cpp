@@ -335,6 +335,52 @@ static_assert(Test400YearsAlwaysSameAmountOfDays(100, 200));
 static_assert(Test400YearsAlwaysSameAmountOfDays(200, 300));
 static_assert(Test400YearsAlwaysSameAmountOfDays(300, 400));
 
+template <typename T, typename Y> constexpr T GetDaysFromEpoch(Y year) {
+    if (year >= 1970) {
+        auto years = year - 1970;
+        Y n400 = years / 400;
+        T days = n400;
+        days = days * daysPer400Years;
+        auto y = n400 * 400;
+        y += 1970;
+        years = years % 400;
+        days += GetDaysPerYears<T>(y, years);
+        return days;
+    } else {
+        auto years = 1970 - year;
+        Y n400 = years / 400;
+        T days = ((T) 0) - n400;
+        days = days * daysPer400Years;
+        years = years % 400;
+        days -= GetDaysPerYears<T>(year, years);
+        return days;
+    }
+}
+
+static_assert(GetDaysFromEpoch<int32_t>(1969) == -365);
+static_assert(GetDaysFromEpoch<int32_t>(1970) == 0);
+static_assert(GetDaysFromEpoch<int32_t>(1971) == 365);
+
+template <typename T, typename Y, typename M, typename D> constexpr T GetDaysFromEpoch(Y year, M month, D day) {
+    T days = GetDaysFromEpoch<T>(year);
+    days += GetDayOfYear(year, month, day) - 1;
+    return days;
+}
+
+static_assert(GetDaysFromEpoch<int32_t>(1969, 12, 31) == -1);
+static_assert(GetDaysFromEpoch<int32_t>(1970, 1, 1) == 0);
+static_assert(GetDaysFromEpoch<int32_t>(1970, 1, 2) == 1);
+
+template <typename T, typename Y, typename M, typename D> constexpr T InlineStartOfDaySecondsFromEpoch(Y year, M month, D day) {
+    T tm = GetDaysFromEpoch<T>(year, month, day);
+    tm = tm * (24*60*60);
+    return tm;
+}
+
+static_assert(InlineStartOfDaySecondsFromEpoch<int32_t>(1969, 12, 31) == -(24*60*60));
+static_assert(InlineStartOfDaySecondsFromEpoch<int32_t>(1970, 1, 1) == 0);
+static_assert(InlineStartOfDaySecondsFromEpoch<int32_t>(1970, 1, 2) == (24*60*60));
+
 DateOnly::DateOnly(const std::string &str) {
     {
         uint32_t y;
@@ -512,3 +558,49 @@ void DateOnly::AddDays(int days) {
 void DateOnly::AddYears(int years) {
     InlineAddYears(year, month, day, years);
 }
+
+time_t DateOnly::GetStartOfDaySecondsFromEpoch() const {
+    return InlineStartOfDaySecondsFromEpoch<time_t>(year, month, day);
+}
+
+static_assert(!DateOnly());
+static_assert(DateOnly(2024, 10, 30));
+static_assert(!(DateOnly(2024, 10, 31) < DateOnly(2024, 10, 30)));
+static_assert(!(DateOnly(2024, 10, 30) < DateOnly(2024, 10, 30)));
+static_assert(DateOnly(2024, 10, 30) < DateOnly(2024, 10, 31));
+static_assert(!(DateOnly(2024, 11, 30) < DateOnly(2024, 10, 30)));
+static_assert(DateOnly(2024, 10, 30) < DateOnly(2024, 11, 30));
+static_assert(!(DateOnly(2025, 10, 30) < DateOnly(2024, 10, 30)));
+static_assert(DateOnly(2024, 10, 30) < DateOnly(2025, 10, 30));
+
+static_assert(DateOnly(2024, 10, 31) > DateOnly(2024, 10, 30));
+static_assert(!(DateOnly(2024, 10, 30) > DateOnly(2024, 10, 30)));
+static_assert(!(DateOnly(2024, 10, 30) > DateOnly(2024, 10, 31)));
+static_assert(DateOnly(2024, 11, 30) > DateOnly(2024, 10, 30));
+static_assert(!(DateOnly(2024, 10, 30) > DateOnly(2024, 11, 30)));
+static_assert(DateOnly(2025, 10, 30) > DateOnly(2024, 10, 30));
+static_assert(!(DateOnly(2024, 10, 30) > DateOnly(2025, 10, 30)));
+
+static_assert(!(DateOnly(2024, 10, 31) <= DateOnly(2024, 10, 30)));
+static_assert(DateOnly(2024, 10, 30) <= DateOnly(2024, 10, 30));
+static_assert(DateOnly(2024, 10, 30) <= DateOnly(2024, 10, 31));
+static_assert(!(DateOnly(2024, 11, 30) <= DateOnly(2024, 10, 30)));
+static_assert(DateOnly(2024, 10, 30) <= DateOnly(2024, 11, 30));
+static_assert(!(DateOnly(2025, 10, 30) <= DateOnly(2024, 10, 30)));
+static_assert(DateOnly(2024, 10, 30) <= DateOnly(2025, 10, 30));
+
+static_assert(DateOnly(2024, 10, 31) >= DateOnly(2024, 10, 30));
+static_assert(DateOnly(2024, 10, 30) >= DateOnly(2024, 10, 30));
+static_assert(!(DateOnly(2024, 10, 30) >= DateOnly(2024, 10, 31)));
+static_assert(DateOnly(2024, 11, 30) >= DateOnly(2024, 10, 30));
+static_assert(!(DateOnly(2024, 10, 30) >= DateOnly(2024, 11, 30)));
+static_assert(DateOnly(2025, 10, 30) >= DateOnly(2024, 10, 30));
+static_assert(!(DateOnly(2024, 10, 30) >= DateOnly(2025, 10, 30)));
+
+static_assert(DateOnly(2024, 10, 31) != DateOnly(2024, 10, 30));
+static_assert(DateOnly(2024, 10, 30) == DateOnly(2024, 10, 30));
+static_assert(DateOnly(2024, 10, 30) != DateOnly(2024, 10, 31));
+static_assert(DateOnly(2024, 11, 30) != DateOnly(2024, 10, 30));
+static_assert(DateOnly(2024, 10, 30) != DateOnly(2024, 11, 30));
+static_assert(DateOnly(2025, 10, 30) != DateOnly(2024, 10, 30));
+static_assert(DateOnly(2024, 10, 30) != DateOnly(2025, 10, 30));

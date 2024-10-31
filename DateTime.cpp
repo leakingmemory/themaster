@@ -4,6 +4,7 @@
 
 #include <time.h>
 #include "DateTime.h"
+#include "DateOnly.h"
 #include <sstream>
 #include <array>
 #include <cstdint>
@@ -197,13 +198,44 @@ constexpr void TimeOffsets(int32_t offset, int &hours, int &minutes) {
     minutes = (offset / 60) % 60;
 }
 
-DateTimeOffset DateTimeOffset::Now() {
-    auto secondsSinceEpochZ = time(nullptr);
+int32_t DateTimeOffset::OffsetForTime(time_t tim) {
     struct tm t{};
-    if (localtime_r(&secondsSinceEpochZ, &t) != &t) {
+    if (localtime_r(&tim, &t) != &t) {
         throw std::exception();
     }
-    return {secondsSinceEpochZ + t.tm_gmtoff, (int32_t) t.tm_gmtoff};
+    return t.tm_gmtoff;
+}
+
+DateTimeOffset DateTimeOffset::Now() {
+    auto secondsSinceEpochZ = time(nullptr);
+    auto off = OffsetForTime(secondsSinceEpochZ);
+    return {secondsSinceEpochZ + off, (int32_t) off};
+}
+
+template <typename F> concept OffsetForTimeFunc = requires (F f) {
+    { f(std::declval<std::time_t>()) } -> std::convertible_to<int32_t>;
+};
+
+template <OffsetForTimeFunc F> constexpr DateTimeOffset InlineFromLocaltime(std::time_t timeInSecondsSinceEpoch, F offsetForTime) {
+    auto off0 = offsetForTime(timeInSecondsSinceEpoch);
+    auto ref0 = timeInSecondsSinceEpoch - off0;
+    auto off1 = offsetForTime(ref0);
+    return {timeInSecondsSinceEpoch, off1};
+}
+
+constexpr int32_t FixedPlus1(std::time_t) {
+    return 3600;
+}
+
+static_assert(InlineFromLocaltime(1730381994, FixedPlus1).GetTimeInSecondsSinceEpoch() == 1730381994);
+static_assert(InlineFromLocaltime(1730381994, FixedPlus1).GetOffsetSeconds() == 3600);
+
+DateTimeOffset DateTimeOffset::FromLocaltime(std::time_t timeInSecondsSinceEpoch) {
+    return InlineFromLocaltime(timeInSecondsSinceEpoch, OffsetForTime);
+}
+
+DateTimeOffset DateTimeOffset::FromDate(DateOnly dateOnly) {
+    return InlineFromLocaltime(dateOnly.GetStartOfDaySecondsFromEpoch(), OffsetForTime);
 }
 
 std::string DateTimeOffset::to_iso8601() const {

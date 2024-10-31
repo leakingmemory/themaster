@@ -4,6 +4,7 @@
 
 #include "PrescriptionData.h"
 #include "AdvancedDosingPeriod.h"
+#include "DateTime.h"
 #include <sfmbasisapi/fhir/medstatement.h>
 #include <boost/uuid/uuid_generators.hpp> // for random_generator
 #include <boost/uuid/uuid_io.hpp> // for to_string
@@ -142,6 +143,23 @@ FhirMedicationStatement PrescriptionData::ToFhir() {
             std::make_shared<FhirBooleanValue>(true)
         ));
         fhir.AddExtension(reseptAmendment);
+    }
+    if (ceaseDate) {
+        auto discontinuation = std::make_shared<FhirExtension>("http://ehelse.no/fhir/StructureDefinition/sfm-discontinuation");
+        {
+            {
+                auto dt = DateTimeOffset::FromDate(ceaseDate);
+                auto timedate = std::make_shared<FhirValueExtension>("timedate", std::make_shared<FhirDateTimeValue>(dt.to_iso8601()));
+                discontinuation->AddExtension(timedate);
+            }
+            {
+                std::vector<FhirCoding> codings{};
+                codings.emplace_back("urn:oid:2.16.578.1.12.4.1.1.7494", "A", "Avsluttet behandling");
+                FhirCodeableConcept codeable{std::move(codings)};
+                discontinuation->AddExtension(std::make_shared<FhirValueExtension>("reason", std::make_shared<FhirCodeableConceptValue>(codeable)));
+            }
+        }
+        fhir.AddExtension(discontinuation);
     }
     {
         std::shared_ptr<FhirExtension> regInfo = std::make_shared<FhirExtension>("http://ehelse.no/fhir/StructureDefinition/sfm-regInfo");
