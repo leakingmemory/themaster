@@ -14,6 +14,8 @@ public:
     const char * what() const noexcept override;
 };
 
+class Duration;
+
 class DateOnly {
 private:
     int32_t year;
@@ -35,7 +37,9 @@ public:
     }
     static DateOnly Today();
     void AddDays(int days);
+    void AddMonths(int months);
     void AddYears(int years);
+    DateOnly &operator += (Duration);
     constexpr void SubtractDays(int days) {
         AddDays(0 - days);
     }
@@ -92,5 +96,7 @@ public:
         return *this == other || *this > other;
     }
 };
+
+DateOnly operator + (DateOnly, Duration);
 
 #endif //THEMASTER_DATEONLY_H

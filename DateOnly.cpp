@@ -3,6 +3,8 @@
 //
 
 #include "DateOnly.h"
+#include "TimeConst.h"
+#include "Duration.h"
 #include <limits>
 #include <time.h>
 
@@ -88,50 +90,6 @@ static constexpr bool TestParsing(const std::string &str, int expectedYear, int 
 
 static_assert(TestParsing("2024-10-21", 2024, 10, 21));
 
-template <typename T> static constexpr void AppendAsString(std::string &str, T num, int minDigits = 1) {
-    typeof(num) dec = 1;
-    for (int i = 1; (num / dec) > 9 || i < minDigits; i++) {
-        dec *= 10;
-    }
-    while (dec > 0) {
-        auto d = (num / dec) % 10;
-        dec = dec / 10;
-        char substr[2] = {static_cast<char>(d + '0'), '\0'};
-        str.append(substr);
-    }
-}
-
-static constexpr std::string IntToString(int num, int minDigits = 1) {
-    std::string str{};
-    if (num >= 0) {
-        AppendAsString(str, static_cast<unsigned int>(num), minDigits);
-    } else {
-        char neg[2] = {'-', '\0'};
-        str.append(neg);
-        AppendAsString(str, static_cast<unsigned int>(-num), minDigits);
-    }
-    return str;
-}
-
-static_assert(IntToString(0) == "0");
-static_assert(IntToString(1) == "1");
-static_assert(IntToString(9) == "9");
-static_assert(IntToString(0, 2) == "00");
-static_assert(IntToString(1, 2) == "01");
-static_assert(IntToString(9, 2) == "09");
-static_assert(IntToString(10) == "10");
-static_assert(IntToString(10, 2) == "10");
-static_assert(IntToString(10, 4) == "0010");
-static_assert(IntToString(2024) == "2024");
-static_assert(IntToString(-1) == "-1");
-static_assert(IntToString(-9) == "-9");
-static_assert(IntToString(-1, 2) == "-01");
-static_assert(IntToString(-9, 2) == "-09");
-static_assert(IntToString(-10) == "-10");
-static_assert(IntToString(-10, 2) == "-10");
-static_assert(IntToString(-10, 4) == "-0010");
-static_assert(IntToString(-2024) == "-2024");
-
 static constexpr std::string DateToString(int32_t year, uint8_t month, uint8_t day) {
     std::string str{};
     str.reserve(10);
@@ -146,29 +104,6 @@ static constexpr std::string DateToString(int32_t year, uint8_t month, uint8_t d
 
 static_assert(DateToString(2024, 10, 21) == "2024-10-21");
 static_assert(DateToString(2024, 1, 2) == "2024-01-02");
-
-template <typename T> static constexpr bool IsLeapYear(T year) {
-    if ((year % 4) == 0) {
-        if ((year % 100) == 0) {
-            if ((year % 400) == 0) {
-                return true;
-            }
-            return false;
-        }
-        return true;
-    }
-    return false;
-}
-
-static_assert(IsLeapYear(1600) == true);
-static_assert(IsLeapYear(1700) == false);
-static_assert(IsLeapYear(1800) == false);
-static_assert(IsLeapYear(1900) == false);
-static_assert(IsLeapYear(2000) == true);
-static_assert(IsLeapYear(2021) == false);
-static_assert(IsLeapYear(2022) == false);
-static_assert(IsLeapYear(2023) == false);
-static_assert(IsLeapYear(2024) == true);
 
 template <typename T, typename M> static constexpr int GetDaysPerMonth(T year, M month) {
     --month;
@@ -213,10 +148,6 @@ static_assert(GetDaysPerMonth(2024, 10) == 31);
 static_assert(GetDaysPerMonth(2024, 11) == 30);
 static_assert(GetDaysPerMonth(2024, 12) == 31);
 static_assert(GetDaysPerMonth(2025, 2) == 28);
-
-template <typename T> static constexpr int GetDaysPerYear(T year) {
-    return IsLeapYear(year) ?  366 : 365;
-}
 
 template <typename T, typename M, typename D> static constexpr int GetRemainingDaysPerYear(T year, M month, D day) {
     if (day < 1 || month < 1 || month > 12) {
@@ -307,33 +238,6 @@ template <typename Y> static constexpr bool TestBidirDayOfYear(Y year) {
 
 static_assert(TestBidirDayOfYear(2023));
 static_assert(TestBidirDayOfYear(2024));
-
-template <typename T, typename Y, typename N> static constexpr T GetDaysPerYears(Y year, N n) {
-    if (n <= 0) {
-        return 0;
-    }
-    T total = 0;
-    for (N i = 0; i < n; i++) {
-        total += GetDaysPerYear(year + i);
-    }
-    return total;
-}
-
-static constexpr uint32_t daysPer400Years = GetDaysPerYears<uint32_t>(0, 400);
-
-static constexpr bool Test400YearsAlwaysSameAmountOfDays(int from, int to) {
-    for (auto i = from; i < to; i++) {
-        if (daysPer400Years != GetDaysPerYears<uint32_t>(i, 400)) {
-            return false;
-        }
-    }
-    return true;
-}
-
-static_assert(Test400YearsAlwaysSameAmountOfDays(1, 100));
-static_assert(Test400YearsAlwaysSameAmountOfDays(100, 200));
-static_assert(Test400YearsAlwaysSameAmountOfDays(200, 300));
-static_assert(Test400YearsAlwaysSameAmountOfDays(300, 400));
 
 template <typename T, typename Y> constexpr T GetDaysFromEpoch(Y year) {
     if (year >= 1970) {
@@ -549,18 +453,70 @@ static_assert(TestAddYears(2024, 2, 29, -1, 2023, 2, 28));
 static_assert(TestAddYears(2024, 2, 29, -4, 2020, 2, 29));
 static_assert(TestAddYears(2024, 10, 23, 1, 2025, 10, 23));
 
+template <typename Y, typename M, typename D, typename T> static constexpr void InlineAddMonths(Y &year, M &month, D &day, T months) {
+    typeof(months) years = months / 12;
+    months = months % 12;
+    months += month - 1;
+    years += months / 12;
+    months = months % 12;
+    year += years;
+    month = months + 1;
+    auto max = GetDaysPerMonth(year, month);
+    if (day > max) {
+        day = max;
+    }
+}
+
+template <typename Y, typename M, typename D, typename T> static constexpr bool TestAddMonths(Y year, M month, D day, T months, Y expectedYear, M expectedMonth, D expectedDay) {
+    InlineAddMonths(year, month, day, months);
+    return year == expectedYear && month == expectedMonth && day == expectedDay;
+}
+
+static_assert(TestAddMonths(2024, 10, 31, -16, 2023, 6, 30));
+static_assert(TestAddMonths(2024, 10, 31, -15, 2023, 7, 31));
+static_assert(TestAddMonths(2024, 10, 31, -14, 2023, 8, 31));
+static_assert(TestAddMonths(2024, 10, 31, -13, 2023, 9, 30));
+static_assert(TestAddMonths(2024, 10, 31, -12, 2023, 10, 31));
+static_assert(TestAddMonths(2024, 10, 31, -1, 2024, 9, 30));
+static_assert(TestAddMonths(2024, 10, 31, 0, 2024, 10, 31));
+static_assert(TestAddMonths(2024, 10, 31, 1, 2024, 11, 30));
+static_assert(TestAddMonths(2024, 10, 31, 12, 2025, 10, 31));
+static_assert(TestAddMonths(2024, 10, 31, 13, 2025, 11, 30));
+static_assert(TestAddMonths(2024, 10, 31, 14, 2025, 12, 31));
+static_assert(TestAddMonths(2024, 10, 31, 15, 2026, 1, 31));
+static_assert(TestAddMonths(2024, 10, 31, 16, 2026, 2, 28));
+
 void DateOnly::AddDays(int days) {
     if (!InlineAddDays(year, month, day, days)) {
         throw std::exception();
     }
 }
 
+void DateOnly::AddMonths(int months) {
+    InlineAddMonths(year, month, day, months);
+}
+
 void DateOnly::AddYears(int years) {
     InlineAddYears(year, month, day, years);
 }
 
+DateOnly &DateOnly::operator+=(Duration duration) {
+    if (duration) {
+        InlineAddYears(year, month, day, duration.GetYears());
+        InlineAddMonths(year, month, day, duration.GetMonths());
+        InlineAddDays(year, month, day, duration.GetDays());
+    }
+    return *this;
+}
+
 time_t DateOnly::GetStartOfDaySecondsFromEpoch() const {
     return InlineStartOfDaySecondsFromEpoch<time_t>(year, month, day);
+}
+
+DateOnly operator + (DateOnly orig, Duration dur) {
+    DateOnly dateOnly{orig};
+    dateOnly += dur;
+    return dateOnly;
 }
 
 static_assert(!DateOnly());
