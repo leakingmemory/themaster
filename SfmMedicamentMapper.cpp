@@ -149,7 +149,7 @@ void SfmMedicamentMapper::Map(const LegemiddelVirkestoff &legemiddelVirkestoff) 
     {
         auto merkevareIds = legemiddelVirkestoff.GetRefLegemiddelMerkevare();
         for (const auto &merkevareId : merkevareIds) {
-            auto merkevare = festDb->GetLegemiddelMerkevare(merkevareId);
+            auto merkevare = festDb->GetLegemiddelMerkevare(FestUuid(merkevareId));
             {
                 auto preparatType = merkevare.GetPreparattype();
                 if (std::find_if(medicamentType.cbegin(), medicamentType.cend(), [&preparatType] (const MedicalCodedValue &mcv) { return mcv.GetCode() == preparatType.GetValue(); }) == medicamentType.cend()) {
