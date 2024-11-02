@@ -118,7 +118,6 @@ std::vector<LegemiddelVirkestoff> FestDb::FindLegemiddelVirkestoff(const std::ve
 }
 
 std::vector<LegemiddelVirkestoff> FestDb::FindLegemiddelVirkestoff(const std::string &term) const {
-    std::vector<LegemiddelVirkestoff> results{};
     FestDbContainer festDbContainer = GetActiveFestDb();
     if (!festDbContainer.festVectors) {
         return {};
@@ -127,15 +126,10 @@ std::vector<LegemiddelVirkestoff> FestDb::FindLegemiddelVirkestoff(const std::st
     return FindLegemiddelVirkestoff(oppfs, term);
 }
 
-std::vector<LegemiddelMerkevare> FestDb::FindLegemiddelMerkevare(const std::string &i_term) const {
+std::vector<LegemiddelMerkevare> FestDb::FindLegemiddelMerkevare(const std::vector<POppfLegemiddelMerkevare> &oppfs, const std::string &i_term) const {
     std::vector<LegemiddelMerkevare> results{};
     std::string term{i_term};
     std::transform(term.begin(), term.end(), term.begin(), [] (auto c) { return std::tolower(c); });
-    FestDbContainer festDbContainer = GetActiveFestDb();
-    if (!festDbContainer.festVectors) {
-        return {};
-    }
-    auto oppfs = festDbContainer.festVectors->GetLegemiddelMerkevare(*festDeserializer);
     for (const auto &poppf : oppfs) {
         PString pnavnFormStyrke = poppf.GetNavnFormStyrke();
         std::string navnFormStyrke = festDeserializer->Unpack(pnavnFormStyrke);
@@ -146,6 +140,15 @@ std::vector<LegemiddelMerkevare> FestDb::FindLegemiddelMerkevare(const std::stri
         }
     }
     return results;
+}
+
+std::vector<LegemiddelMerkevare> FestDb::FindLegemiddelMerkevare(const std::string &i_term) const {
+    FestDbContainer festDbContainer = GetActiveFestDb();
+    if (!festDbContainer.festVectors) {
+        return {};
+    }
+    auto oppfs = festDbContainer.festVectors->GetLegemiddelMerkevare(*festDeserializer);
+    return FindLegemiddelMerkevare(oppfs, i_term);
 }
 
 std::vector<LegemiddelMerkevare> FestDb::FindLegemiddelMerkevare(const std::vector<FestUuid> &uuids) const {
@@ -173,15 +176,10 @@ std::vector<LegemiddelMerkevare> FestDb::FindLegemiddelMerkevare(const std::vect
     return results;
 }
 
-std::vector<Legemiddelpakning> FestDb::FindLegemiddelpakning(const std::string &i_term) const {
+std::vector<Legemiddelpakning> FestDb::FindLegemiddelpakning(const std::vector<POppfLegemiddelpakning> &oppfs, const std::string &i_term) const {
     std::vector<Legemiddelpakning> results{};
     std::string term{i_term};
     std::transform(term.begin(), term.end(), term.begin(), [] (auto c) { return std::tolower(c); });
-    FestDbContainer festDbContainer = GetActiveFestDb();
-    if (!festDbContainer.festVectors) {
-        return {};
-    }
-    auto oppfs = festDbContainer.festVectors->GetLegemiddelPakning(*festDeserializer);
     for (const auto &poppf : oppfs) {
         PString pnavnFormStyrke = poppf.GetNavnFormStyrke();
         std::string navnFormStyrke = festDeserializer->Unpack(pnavnFormStyrke);
@@ -192,6 +190,15 @@ std::vector<Legemiddelpakning> FestDb::FindLegemiddelpakning(const std::string &
         }
     }
     return results;
+}
+
+std::vector<Legemiddelpakning> FestDb::FindLegemiddelpakning(const std::string &i_term) const {
+    FestDbContainer festDbContainer = GetActiveFestDb();
+    if (!festDbContainer.festVectors) {
+        return {};
+    }
+    auto oppfs = festDbContainer.festVectors->GetLegemiddelPakning(*festDeserializer);
+    return FindLegemiddelpakning(oppfs, i_term);
 }
 
 LegemiddelVirkestoff FestDb::GetLegemiddelVirkestoff(FestUuid id) const {
@@ -341,13 +348,28 @@ std::vector<FestUuid> FestDb::GetVirkestoffMedStyrkeForVirkestoffId(FestUuid vir
     return virkestoffMedStyrkeId;
 }
 
+std::vector<POppfLegemiddelMerkevare> FestDb::GetAllPLegemiddelMerkevare() const {
+    FestDbContainer festDbContainer = GetActiveFestDb();
+    if (!festDbContainer.festVectors) {
+        return {};
+    }
+    return festDbContainer.festVectors->GetLegemiddelMerkevare(*festDeserializer);
+}
+
 std::vector<POppfLegemiddelVirkestoff> FestDb::GetAllPLegemiddelVirkestoff() const {
-    std::vector<FestUuid> virkestoffMedStyrkeId{};
     FestDbContainer festDbContainer = GetActiveFestDb();
     if (!festDbContainer.festVectors) {
         return {};
     }
     return festDbContainer.festVectors->GetLegemiddelVirkestoff(*festDeserializer);
+}
+
+std::vector<POppfLegemiddelpakning> FestDb::GetAllPLegemiddelpakning() const {
+    FestDbContainer festDbContainer = GetActiveFestDb();
+    if (!festDbContainer.festVectors) {
+        return {};
+    }
+    return festDbContainer.festVectors->GetLegemiddelPakning(*festDeserializer);
 }
 
 bool FestDb::PLegemiddelVirkestoffHasOneOfMerkevare(const PLegemiddelVirkestoff &pLegemiddelVirkestoff,
@@ -383,8 +405,36 @@ bool FestDb::PLegemiddelVirkestoffHasOneOfPakning(const PLegemiddelVirkestoff &p
     return false;
 }
 
-FestUuid FestDb::GetLegemiddelVirkestoffId(const PLegemiddelVirkestoff &packed) {
+FestUuid FestDb::GetLegemiddelMerkevareId(const PLegemiddelMerkevare &packed) const {
     return festDeserializer->Unpack(packed.GetId());
+}
+
+std::vector<PReseptgyldighet> FestDb::GetPReseptgyldighet(const PLegemiddelMerkevare &pmerkevare) const {
+    return festDeserializer->GetReseptgyldighetList(pmerkevare);
+}
+
+FestUuid FestDb::GetLegemiddelVirkestoffId(const PLegemiddelVirkestoff &packed) const {
+    return festDeserializer->Unpack(packed.GetId());
+}
+
+std::vector<FestUuid> FestDb::GetRefMerkevare(const PLegemiddelVirkestoff &pvirkestoff) const {
+    return festDeserializer->GetRefMerkevare(pvirkestoff);
+}
+
+std::vector<FestUuid> FestDb::GetRefMerkevare(const PLegemiddelpakning &ppakning) const {
+    std::vector<FestUuid> ids{};
+    auto ppinfos = festDeserializer->GetPakningsinfoList(ppakning);
+    for (const auto &ppinfo : ppinfos) {
+        auto id = festDeserializer->Unpack(ppinfo.GetMerkevareId());
+        if (std::find(ids.cbegin(), ids.cend(), id) == ids.cend()) {
+            ids.emplace_back(id);
+        }
+    }
+    return ids;
+}
+
+FestUuid FestDb::GetLegemiddelpakningId(const PLegemiddelpakning &ppakning) const {
+    return festDeserializer->Unpack(ppakning.GetId());
 }
 
 std::vector<OppfRefusjon> FestDb::GetOppfRefusjon(const std::string &festVersion) const {

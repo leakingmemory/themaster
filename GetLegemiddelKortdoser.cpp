@@ -18,8 +18,9 @@ void GetLegemiddelKortdoser::Visit(const Legemiddelpakning &pakning) {
         merkevareId.reserve(pakningsinfo.size());
         for (const auto pakningsinfo: pakningsinfo) {
             bool found{false};
+            FestUuid piMerkevareId{pakningsinfo.GetMerkevareId()};
             for (const auto &mi : merkevareId) {
-                if (mi == pakningsinfo.GetMerkevareId()) {
+                if (mi == piMerkevareId) {
                     found = true;
                     break;
                 }

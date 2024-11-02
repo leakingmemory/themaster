@@ -27,6 +27,10 @@ public:
     static std::vector<MedicalCodedValue> GetVolvenMedicamentForm();
     static std::vector<MedicalCodedValue> GetVolvenRecallCode();
     static std::vector<MedicalCodedValue> GetVolvenCessationCode();
+
+    constexpr bool operator == (const MedicalCodedValue &other) const {
+        return system == other.system && code == other.code && display == other.display && shortDisplay == other.shortDisplay;
+    }
 };
 
 #endif //DRWHATSNOT_MEDICALCODEDVALUE_H
