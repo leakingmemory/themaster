@@ -71,7 +71,7 @@ static wxDateTime ToWxDateTime(DateOnly dateOnly) {
     return setTime;
 }
 
-PrescriptionDialog::PrescriptionDialog(TheMasterFrame *frame, const std::shared_ptr<FestDb> &festDb, const std::shared_ptr<FhirMedication> &medication, const std::vector<MedicalCodedValue> &amountUnit, const std::vector<MedicalCodedValue> &medicamentType, bool package, const std::vector<MedicamentPackage> &packages, const std::vector<MedicalCodedValue> &dosingUnit, const std::vector<MedicalCodedValue> &kortdoser) : wxDialog(frame, wxID_ANY, wxT("Prescription")), festDb(festDb), medication(medication), amountUnit(amountUnit), packages(packages), dosingUnit(dosingUnit), kortdoser(kortdoser) {
+PrescriptionDialog::PrescriptionDialog(TheMasterFrame *frame, const std::shared_ptr<FestDb> &festDb, const std::shared_ptr<FhirMedication> &medication, const std::vector<MedicalCodedValue> &amountUnit, const std::vector<MedicalCodedValue> &medicamentType, bool package, const std::vector<MedicamentPackage> &packages, const std::vector<MedicalCodedValue> &dosingUnit, const std::vector<MedicalCodedValue> &kortdoser, const std::vector<PrescriptionValidity> &prescriptionValidity) : wxDialog(frame, wxID_ANY, wxT("Prescription")), festDb(festDb), medication(medication), amountUnit(amountUnit), packages(packages), dosingUnit(dosingUnit), kortdoser(kortdoser), prescriptionValidity(prescriptionValidity) {
     DateOnly startDate = DateOnly::Today();
     DateOnly endDate = startDate;
     endDate.AddYears(1);
@@ -213,7 +213,7 @@ PrescriptionDialog::PrescriptionDialog(TheMasterFrame *frame, const std::shared_
                 auto display{unit.GetCode()};
                 display.append(" ");
                 display.append(unit.GetDisplay());
-                dosingPeriodsDosingUnitCtrl->Append(display);
+                dosingPeriodsDosingUnitCtrl->Append(wxString::FromUTF8(display));
             }
             if (dosingUnit.size() == 1) {
                 dosingPeriodsDosingUnitCtrl->SetSelection(0);
@@ -229,6 +229,28 @@ PrescriptionDialog::PrescriptionDialog(TheMasterFrame *frame, const std::shared_
         advancedDosingPage->SetSizerAndFit(advancedDosingSizer);
         dosingNotebook->AddPage(advancedDosingPage, wxT("Avansert"));
         sizer->Add(dosingNotebook, 0, wxEXPAND | wxALL, 5);
+        auto *prescriptionValiditySizer = new wxBoxSizer(wxHORIZONTAL);
+        prescriptionValiditySizer->Add(new wxStaticText(this, wxID_ANY, wxT("Validity: ")), 0, wxEXPAND | wxALL, 5);
+        prescriptionValidityCtrl = new wxComboBox(this, wxID_ANY);
+        prescriptionValidityCtrl->SetEditable(false);
+        prescriptionValidityCtrl->Append(wxT(""));
+        for (const auto &pv : prescriptionValidity) {
+            std::string str{pv.duration.ToString()};
+            if (!pv.gender.GetCode().empty() || !pv.gender.GetDisplay().empty()) {
+                str.append(" (");
+                str.append(pv.gender.GetCode());
+                str.append(" ");
+                str.append(pv.gender.GetDisplay());
+                str.append(")");
+            }
+            prescriptionValidityCtrl->Append(wxString::FromUTF8(str));
+        }
+        if (!prescriptionValidity.empty()) {
+            prescriptionValidityCtrl->SetSelection(1);
+            endDate = DateOnly::Today() + prescriptionValidity[0].duration;
+        }
+        prescriptionValiditySizer->Add(prescriptionValidityCtrl, 0, wxEXPAND | wxALL, 5);
+        sizer->Add(prescriptionValiditySizer, 0, wxEXPAND | wxALL, 5);
         auto *startSizer = new wxBoxSizer(wxHORIZONTAL);
         startSizer->Add(new wxStaticText(this, wxID_ANY, wxT("Start: ")), 0, wxEXPAND | wxALL, 5);
         this->startDate = new wxDatePickerCtrl(this, wxID_ANY, ToWxDateTime(startDate));
@@ -262,7 +284,7 @@ PrescriptionDialog::PrescriptionDialog(TheMasterFrame *frame, const std::shared_
     kortdoseDosingUnitCtrl->Bind(wxEVT_COMBOBOX, &PrescriptionDialog::OnModified, this);
     kortdoserCtrl->Bind(wxEVT_COMBOBOX, &PrescriptionDialog::OnModified, this);
     this->startDate->Bind(wxEVT_DATE_CHANGED, &PrescriptionDialog::OnModifiedDate, this);
-    expirationDate->Bind(wxEVT_DATE_CHANGED, &PrescriptionDialog::OnModifiedDate, this);
+    expirationDate->Bind(wxEVT_DATE_CHANGED, &PrescriptionDialog::OnModifiedExpiryDate, this);
     ceaseDateSet->Bind(wxEVT_CHECKBOX, &PrescriptionDialog::OnModifiedCeaseIsSet, this);
     ceaseDate->Bind(wxEVT_DATE_CHANGED, &PrescriptionDialog::OnModifiedDate, this);
     if (packageAmountNotebook != nullptr) {
@@ -282,6 +304,7 @@ PrescriptionDialog::PrescriptionDialog(TheMasterFrame *frame, const std::shared_
     applicationAreaCtrl->Bind(wxEVT_TEXT, &PrescriptionDialog::OnModified, this);
     cancelButton->Bind(wxEVT_BUTTON, &PrescriptionDialog::OnCancel, this);
     proceedButton->Bind(wxEVT_BUTTON, &PrescriptionDialog::OnProceed, this);
+    prescriptionValidityCtrl->Bind(wxEVT_COMBOBOX, &PrescriptionDialog::OnModifiedPrescriptionValidity, this);
     Bind(wxEVT_MENU, &PrescriptionDialog::OnAddDosingPeriod, this, TheMaster_PrescriptionDialog_AddDosingPeriod);
     Bind(wxEVT_MENU, &PrescriptionDialog::OnMoveUp, this, TheMaster_PrescriptionDialog_MoveDosingPeriodUp);
     Bind(wxEVT_MENU, &PrescriptionDialog::OnMoveDown, this, TheMaster_PrescriptionDialog_MoveDosingPeriodDown);
@@ -665,6 +688,19 @@ void PrescriptionDialog::OnModifiedCeaseIsSet(wxCommandEvent &e) {
 
 void PrescriptionDialog::OnModifiedDate(wxDateEvent &e) {
     OnModified();
+}
+
+void PrescriptionDialog::OnModifiedExpiryDate(wxDateEvent &e) {
+    prescriptionValidityCtrl->SetSelection(0);
+    OnModified();
+}
+
+void PrescriptionDialog::OnModifiedPrescriptionValidity(wxCommandEvent &e) {
+    auto selection = prescriptionValidityCtrl->GetSelection();
+    if (selection > 0) {
+        expirationDate->SetValue(ToWxDateTime(DateOnly::Today() + prescriptionValidity[selection - 1].duration));
+        OnModified();
+    }
 }
 
 static void SetPrescriptionData(PrescriptionData &prescriptionData, const PrescriptionDialogData &dialogData) {

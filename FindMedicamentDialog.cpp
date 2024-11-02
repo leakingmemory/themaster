@@ -38,6 +38,7 @@ FindMedicamentDialog::FindMedicamentDialog(wxWindow *parent) :
     selections->SetEditable(false);
     selections->Append(wxT("All"));
     selections->Append(wxT("Two or more pr.validity"));
+    selections->SetSelection(0);
     sizer->Add(selections, 0, wxEXPAND|wxALL, 5);
 
     // Add a text field for search input

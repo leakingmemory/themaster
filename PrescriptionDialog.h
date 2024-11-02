@@ -9,6 +9,7 @@
 #include "MedicalCodedValue.h"
 #include "PrescriptionData.h"
 #include "AdvancedDosingPeriod.h"
+#include "SfmMedicamentMapper.h"
 #include <memory>
 #include <functional>
 
@@ -58,6 +59,7 @@ private:
     wxComboBox *amountUnitCtrl{nullptr};
     wxSpinCtrl *reitCtrl{};
     wxTextCtrl *applicationAreaCtrl{};
+    wxComboBox *prescriptionValidityCtrl{};
     wxDatePickerCtrl *startDate{};
     wxDatePickerCtrl *expirationDate{};
     wxCheckBox *ceaseDateSet{};
@@ -68,6 +70,7 @@ private:
     std::vector<MedicalCodedValue> amountUnit;
     std::vector<MedicalCodedValue> dosingUnit;
     std::vector<MedicalCodedValue> kortdoser;
+    std::vector<PrescriptionValidity> prescriptionValidity;
     std::vector<std::shared_ptr<AdvancedDosingPeriod>> dosingPeriods{};
     std::function<void (std::shared_ptr<AdvancedDosingPeriod> &&)> addDosingPeriod{[] (std::shared_ptr<AdvancedDosingPeriod> &&) {}};
     std::function<void ()> moveUp{[] () {}};
@@ -77,7 +80,7 @@ private:
     NumPackagesSizers CreateNumPackages(wxWindow *parent);
     wxBoxSizer *CreateAmount(wxWindow *parent);
 public:
-    PrescriptionDialog(TheMasterFrame *, const std::shared_ptr<FestDb> &festDb, const std::shared_ptr<FhirMedication> &, const std::vector<MedicalCodedValue> &amountUnit, const std::vector<MedicalCodedValue> &medicamentType, bool package = false, const std::vector<MedicamentPackage> &packages = {}, const std::vector<MedicalCodedValue> &dosingUnit = {}, const std::vector<MedicalCodedValue> &kortdoser = {});
+    PrescriptionDialog(TheMasterFrame *, const std::shared_ptr<FestDb> &festDb, const std::shared_ptr<FhirMedication> &, const std::vector<MedicalCodedValue> &amountUnit, const std::vector<MedicalCodedValue> &medicamentType, bool package = false, const std::vector<MedicamentPackage> &packages = {}, const std::vector<MedicalCodedValue> &dosingUnit = {}, const std::vector<MedicalCodedValue> &kortdoser = {}, const std::vector<PrescriptionValidity> &prescriptionValidity = {});
     void OnCancel(wxCommandEvent &e);
 private:
     [[nodiscard]] PrescriptionDialogData GetDialogData() const;
@@ -90,6 +93,8 @@ public:
     void OnModifiedPC(wxBookCtrlEvent &e);
     void OnModifiedCeaseIsSet(wxCommandEvent &e);
     void OnModifiedDate(wxDateEvent &e);
+    void OnModifiedExpiryDate(wxDateEvent &e);
+    void OnModifiedPrescriptionValidity(wxCommandEvent &e);
     void OnProceed(wxCommandEvent &e);
     void OnDosingPeriodsContextMenu(wxContextMenuEvent &e);
     void OnAddDosingPeriod(wxCommandEvent &e);

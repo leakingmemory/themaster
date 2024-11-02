@@ -8,6 +8,7 @@
 #include <memory>
 #include <sfmbasisapi/fhir/medication.h>
 #include "MedicalCodedValue.h"
+#include "Duration.h"
 
 class FestDb;
 class LegemiddelCore;
@@ -15,12 +16,21 @@ class LegemiddelMerkevare;
 class LegemiddelVirkestoff;
 class Legemiddelpakning;
 
+struct PrescriptionValidity {
+    MedicalCodedValue gender;
+    Duration duration;
+    constexpr bool operator == (const PrescriptionValidity &other) const {
+        return gender == other.gender && duration == other.duration;
+    }
+};
+
 class SfmMedicamentMapper {
 private:
     FhirMedication medication{};
     std::vector<SfmMedicamentMapper> packages{};
     std::vector<MedicalCodedValue> prescriptionUnit{};
     std::vector<MedicalCodedValue> medicamentType{};
+    std::vector<PrescriptionValidity> prescriptionValidity{};
     std::string packageDescription{};
     std::shared_ptr<FestDb> festDb;
     bool isPackage{false};
@@ -39,6 +49,9 @@ public:
     }
     [[nodiscard]] std::vector<MedicalCodedValue> GetMedicamentType() const {
         return medicamentType;
+    }
+    [[nodiscard]] std::vector<PrescriptionValidity> GetPrescriptionValidity() const {
+        return prescriptionValidity;
     }
     [[nodiscard]] bool IsPackage() const {
         return isPackage;

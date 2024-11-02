@@ -10,6 +10,7 @@
 #include <medfest/Struct/Packed/FestUuid.h>
 #include <boost/uuid/uuid_generators.hpp> // for random_generator
 #include <boost/uuid/uuid_io.hpp> // for to_string
+#include "DateOnly.h"
 
 SfmMedicamentMapper::SfmMedicamentMapper(const std::shared_ptr<FestDb> &festDb, const std::shared_ptr<LegemiddelCore> &legemiddelCore) : festDb(festDb) {
     {
@@ -45,6 +46,10 @@ SfmMedicamentMapper::SfmMedicamentMapper(const std::shared_ptr<FestDb> &festDb, 
             Map(*pakning);
         }
     }
+    auto today = DateOnly::Today();
+    std::sort(prescriptionValidity.begin(), prescriptionValidity.end(), [today] (auto pv1, auto pv2) {
+        return (today + pv1.duration) < (today + pv2.duration);
+    });
     {
         auto atc = legemiddelCore->GetAtc();
         auto atcValue = atc.GetValue();
@@ -103,6 +108,11 @@ void SfmMedicamentMapper::Map(const LegemiddelMerkevare &legemiddelMerkevare) {
                 }
             }
         }
+        for (const auto reseptgyldighet : legemiddelMerkevare.GetReseptgyldighet()) {
+            auto kjonn = reseptgyldighet.GetKjonn();
+            PrescriptionValidity pv{.gender = {"", kjonn.GetValue(), kjonn.GetDistinguishedName(), kjonn.GetDistinguishedName()}, .duration = Duration::FromString(reseptgyldighet.GetVarighet())};
+            prescriptionValidity.emplace_back(std::move(pv));
+        }
     }
     {
         auto code = medication.GetCode();
@@ -157,6 +167,15 @@ void SfmMedicamentMapper::Map(const LegemiddelVirkestoff &legemiddelVirkestoff) 
                                                 preparatType.GetDistinguishedName(),
                                                 preparatType.GetDistinguishedName());
                 }
+                for (const auto reseptgyldighet : merkevare.GetReseptgyldighet()) {
+                    auto kjonn = reseptgyldighet.GetKjonn();
+                    PrescriptionValidity pv{.gender = {"", kjonn.GetValue(), kjonn.GetDistinguishedName(),
+                                                       kjonn.GetDistinguishedName()}, .duration = Duration::FromString(
+                            reseptgyldighet.GetVarighet())};
+                    if (std::find(prescriptionValidity.cbegin(), prescriptionValidity.cend(), pv) == prescriptionValidity.cend()) {
+                        prescriptionValidity.emplace_back(std::move(pv));
+                    }
+                }
             }
         }
     }
@@ -208,6 +227,15 @@ void SfmMedicamentMapper::Map(const Legemiddelpakning &legemiddelpakning) {
                     medicamentType.emplace_back("2.16.578.1.12.4.1.1.9101", preparatType.GetValue(),
                                                 preparatType.GetDistinguishedName(),
                                                 preparatType.GetDistinguishedName());
+                }
+            }
+            for (const auto reseptgyldighet : merkevare.GetReseptgyldighet()) {
+                auto kjonn = reseptgyldighet.GetKjonn();
+                PrescriptionValidity pv{.gender = {"", kjonn.GetValue(), kjonn.GetDistinguishedName(),
+                                                   kjonn.GetDistinguishedName()}, .duration = Duration::FromString(
+                        reseptgyldighet.GetVarighet())};
+                if (std::find(prescriptionValidity.cbegin(), prescriptionValidity.cend(), pv) == prescriptionValidity.cend()) {
+                    prescriptionValidity.emplace_back(std::move(pv));
                 }
             }
         }
