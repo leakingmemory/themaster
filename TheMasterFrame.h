@@ -100,6 +100,7 @@ public:
     void OnPrescriptionCease(wxCommandEvent &e);
     void OnPrescriptionRenew(wxCommandEvent &e);
     void OnPrescriptionRenewWithChanges(wxCommandEvent &e);
+    void OnTreatmentEdit(wxCommandEvent &e);
 };
 
 

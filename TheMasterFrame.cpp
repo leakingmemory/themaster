@@ -46,6 +46,7 @@
 #include "DateTime.h"
 #include "SignPllDialog.h"
 #include "PrescriptionChangesService.h"
+#include "EditTreatmentDialog.h"
 
 constexpr int PrescriptionNameColumnWidth = 250;
 constexpr int PllColumnWidth = 50;
@@ -142,6 +143,7 @@ TheMasterFrame::TheMasterFrame() : wxFrame(nullptr, wxID_ANY, "The Master"),
     Bind(wxEVT_MENU, &TheMasterFrame::OnPrescriptionCease, this, TheMaster_PrescriptionCease_Id);
     Bind(wxEVT_MENU, &TheMasterFrame::OnPrescriptionRenew, this, TheMaster_PrescriptionRenew_Id);
     Bind(wxEVT_MENU, &TheMasterFrame::OnPrescriptionRenewWithChanges, this, TheMaster_PrescriptionRenewWithChanges_Id);
+    Bind(wxEVT_MENU, &TheMasterFrame::OnTreatmentEdit, this, TheMaster_TreatmentEdit_Id);
 }
 
 void TheMasterFrame::UpdateHeader() {
@@ -2022,6 +2024,7 @@ void TheMasterFrame::OnPrescriptionContextMenu(wxContextMenuEvent &e) {
     menu.Append(TheMaster_PrescriptionCease_Id, wxT("Cease"));
     menu.Append(TheMaster_PrescriptionRenew_Id, wxT("Renew"));
     menu.Append(TheMaster_PrescriptionRenewWithChanges_Id, wxT("Renew with changes"));
+    menu.Append(TheMaster_TreatmentEdit_Id, wxT("Edit treatment"));
     PopupMenu(&menu);
 }
 
@@ -2468,4 +2471,20 @@ void TheMasterFrame::OnPrescriptionRenewWithChanges(wxCommandEvent &e) {
         return;
     }
     PrescribeMedicament(prescriptionDialog, reseptId);
+}
+
+void TheMasterFrame::OnTreatmentEdit(wxCommandEvent &e) {
+    if (prescriptions->GetSelectedItemCount() != 1) {
+        return;
+    }
+    auto selected = prescriptions->GetFirstSelected();
+    if (selected < 0 || selected >= displayedMedicationStatements.size()) {
+        return;
+    }
+    auto medicationStatement = displayedMedicationStatements[selected][0];
+    if (!medicationBundle || !medicationStatement) {
+        wxMessageBox(wxT("Run get medication"), wxT("No bundle"), wxICON_ERROR);
+    }
+    EditTreatmentDialog editTreatmentDialog{this, *medicationBundle, medicationStatement};
+    editTreatmentDialog.ShowModal();
 }

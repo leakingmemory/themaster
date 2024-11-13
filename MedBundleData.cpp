@@ -282,6 +282,10 @@ FhirReference MedBundleData::GetSubjectRef() const {
     return FhirReference(fullUrl, "http://ehelse.no/fhir/StructureDefinition/sfm-Patient", patient->GetDisplay());
 }
 
+std::vector<FhirBundleEntry> MedBundleData::GetPractitioners() const {
+    return medBundle ? GetPractitioners(medBundle) : std::vector<FhirBundleEntry>();
+}
+
 void MedBundleData::InsertNonexistingMedicationsFrom(const std::shared_ptr<FhirBundle> &otherBundle) {
     std::vector<std::string> urls{};
     {

@@ -39,6 +39,7 @@ public:
     [[nodiscard]] std::shared_ptr<Fhir> GetByUrl(const std::string &);
     [[nodiscard]] PrescriberRef GetPrescriber(const std::string &helseidIdToken) const;
     [[nodiscard]] FhirReference GetSubjectRef() const ;
+    [[nodiscard]] std::vector<FhirBundleEntry> GetPractitioners() const;
     void InsertNonexistingMedicationsFrom(const std::shared_ptr<FhirBundle> &otherBundle);
     void InsertNonexistingMedicationPrescriptionsFrom(const std::shared_ptr<FhirBundle> &otherBundle, const std::string &helseidIdToken);
     void ReplayRenewals(const std::shared_ptr<FhirBundle> &otherBundle);
