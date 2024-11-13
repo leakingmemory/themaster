@@ -46,6 +46,9 @@ void PrescriptionChangesService::Renew(FhirMedicationStatement &medicationStatem
             ++iterator;
         }
     }
+    if (reseptId.empty()) {
+        throw RenewalFailureException("The prescription is not valid (no prescription id)");
+    }
     medicationStatement.SetIdentifiers(identifiers);
     bool addCreate{true};
     bool addFestUpdate{true};
@@ -550,6 +553,9 @@ PrescriptionStatusInfo PrescriptionChangesService::GetPrescriptionStatusInfo(con
         if (recallCode == "1") {
             prescriptionStatusInfo.IsValidPrescription = true;
             prescriptionStatusInfo.IsRenewedWithoutChanges = true;
+        } else if (recallCode == "3") {
+            prescriptionStatusInfo.IsValidPrescription = true;
+            prescriptionStatusInfo.IsRenewedWithChanges = true;
         }
     }
     if (ceased) {
@@ -570,6 +576,8 @@ std::string PrescriptionChangesService::GetPrescriptionStatusString(const Prescr
             return "Ceased";
         } else {
             if (info.IsRenewedWithoutChanges) {
+                return "To be renewed";
+            } else if (info.IsRenewedWithChanges) {
                 return "To be renewed";
             } else {
                 return "Ambiguous";

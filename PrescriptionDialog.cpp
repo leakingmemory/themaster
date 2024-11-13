@@ -311,6 +311,75 @@ PrescriptionDialog::PrescriptionDialog(TheMasterFrame *frame, const std::shared_
     Bind(wxEVT_MENU, &PrescriptionDialog::OnDeleteDosingPeriod, this, TheMaster_PrescriptionDialog_DeleteDosingPeriod);
 }
 
+PrescriptionDialog &PrescriptionDialog::operator+=(const PrescriptionData &prescriptionData) {
+    {
+        auto useCode = prescriptionData.use.GetCode();
+        if (useCode == "1") {
+            useSelection->SetSelection(0);
+        } else if (useCode == "3") {
+            useSelection->SetSelection(1);
+        } else if (useCode == "2") {
+            useSelection->SetSelection(2);
+        } else if (useCode == "4") {
+            useSelection->SetSelection(3);
+        } else if (useCode == "5") {
+            useSelection->SetSelection(4);
+        }
+    }
+    if (!prescriptionData.applicationArea.empty()) {
+        applicationAreaCtrl->SetValue(wxString::FromUTF8(prescriptionData.applicationArea));
+    }
+    if (prescriptionData.numberOfPackagesSet && numberOfPackagesCtrl != nullptr) {
+        numberOfPackagesCtrl->SetValue(prescriptionData.numberOfPackages);
+    }
+    if (prescriptionData.amountIsSet && amountCtrl != nullptr) {
+        typeof(amountUnit.size()) byCode{amountUnit.size()};
+        typeof(amountUnit.size()) byDN{amountUnit.size()};
+        for (typeof(amountUnit.size()) i = 0; i < amountUnit.size(); i++) {
+            const auto &unit = amountUnit[i];
+            if (unit.GetCode() == prescriptionData.amountUnit.GetCode()) {
+                byCode = i;
+            } else if (unit.GetDisplay() == prescriptionData.amountUnit.GetCode()) {
+                byDN = i;
+            }
+        }
+        if (byCode < amountUnit.size() && byCode == static_cast<int>(byCode)) {
+            amountCtrl->SetValue(prescriptionData.amount);
+            amountUnitCtrl->SetSelection(static_cast<int>(byCode));
+        } else if (byDN < amountUnit.size() && byDN == static_cast<int>(byDN)) {
+            amountCtrl->SetValue(prescriptionData.amount);
+            amountUnitCtrl->SetSelection(static_cast<int>(byDN));
+        }
+    }
+    reitCtrl->SetValue(prescriptionData.reit);
+    if (prescriptionData.ceaseDate) {
+        ceaseDate->SetValue(ToWxDateTime(prescriptionData.ceaseDate));
+        ceaseDateSet->SetValue(true);
+    }
+    if (!prescriptionData.kortdose.GetCode().empty()) {
+        int i = 0;
+        for (const auto &kortdose : kortdoser) {
+            if (kortdose.GetCode() == prescriptionData.kortdose.GetCode()) {
+                kortdoserCtrl->SetSelection(i);
+                dosingNotebook->SetSelection(1);
+                break;
+            }
+            i++;
+        }
+    } else if (!prescriptionData.dosingPeriods.empty()) {
+        dosingPeriodsView->ClearAll();
+        dosingPeriodsView->AppendColumn(wxT("Dosing periods"));
+        dosingPeriods = prescriptionData.dosingPeriods;
+        int i = 0;
+        for (const auto &dp : dosingPeriods) {
+            dosingPeriodsView->InsertItem(i++, wxString::FromUTF8(dp->ToString()));
+        }
+        dosingNotebook->SetSelection(2);
+    }
+    OnModified();
+    return *this;
+}
+
 void PrescriptionDialog::OnCancel(wxCommandEvent &e) {
     EndDialog(wxID_CANCEL);
 }

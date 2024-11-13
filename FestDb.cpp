@@ -275,6 +275,22 @@ Legemiddelpakning FestDb::GetLegemiddelpakning(FestUuid id) const {
     return {};
 }
 
+Legemiddelpakning FestDb::GetLegemiddelpakningByVarenr(const std::string &varenr) const {
+    FestDbContainer festDbContainer = GetActiveFestDb();
+    if (!festDbContainer.festVectors) {
+        return {};
+    }
+    auto oppfs = festDbContainer.festVectors->GetLegemiddelPakning(*festDeserializer);
+    for (const auto &poppf : oppfs) {
+        std::string legemiddelpakningVarenr = festDeserializer->Unpack(poppf.GetVarenr());
+        if (legemiddelpakningVarenr == varenr) {
+            PLegemiddelpakning pLegemiddelpakning = poppf;
+            return festDeserializer->Unpack(pLegemiddelpakning);
+        }
+    }
+    return {};
+}
+
 OppfKodeverk FestDb::GetKodeverkById(const std::string &id) const {
     FestDbContainer festDbContainer = GetActiveFestDb();
     if (!festDbContainer.festVectors) {

@@ -14,82 +14,6 @@ const char *DateOnlyInvalidException::what() const noexcept {
     return "DateOnly was invalid";
 }
 
-static constexpr bool ParseStr(const std::string &str, uint32_t &year, uint8_t &month, uint8_t &day) {
-    auto iterator = str.begin();
-    year = 0;
-    month = 0;
-    day = 0;
-    if (iterator == str.end() || *iterator == '-') {
-        return false;
-    }
-    while (iterator != str.end() && *iterator != '-') {
-        auto ch = *iterator;
-        if (ch < '0' || ch > '9') {
-            return false;
-        }
-        if (year > (std::numeric_limits<typeof(year)>::max() / 10)) {
-            return false;
-        }
-        year *= 10;
-        auto d = ch - '0';
-        auto max = std::numeric_limits<typeof(year)>::max() - year;
-        if (d > max) {
-            return false;
-        }
-        year += d;
-        ++iterator;
-    }
-    if (iterator == str.end()) {
-        return false;
-    }
-    ++iterator;
-    if (iterator == str.end() || *iterator == '-') {
-        return false;
-    }
-    while (iterator != str.end() && *iterator != '-') {
-        auto ch = *iterator;
-        if (ch < '0' || ch > '9') {
-            return false;
-        }
-        if (month > 2) {
-            return false;
-        }
-        month *= 10;
-        month += ch - '0';
-        ++iterator;
-    }
-    if (iterator == str.end()) {
-        return false;
-    }
-    ++iterator;
-    if (iterator == str.end()) {
-        return false;
-    }
-    while (iterator != str.end() && *iterator != '-') {
-        auto ch = *iterator;
-        if (ch < '0' || ch > '9') {
-            return false;
-        }
-        if (day > 3) {
-            return false;
-        }
-        day *= 10;
-        day += ch - '0';
-        ++iterator;
-    }
-    return true;
-}
-
-static constexpr bool TestParsing(const std::string &str, int expectedYear, int expectedMonth, int expectedDay) {
-    uint32_t year;
-    uint8_t month;
-    uint8_t day;
-    ParseStr(str, year, month, day);
-    return (year == expectedYear && month == expectedMonth && day == expectedDay);
-}
-
-static_assert(TestParsing("2024-10-21", 2024, 10, 21));
-
 static constexpr std::string DateToString(int32_t year, uint8_t month, uint8_t day) {
     std::string str{};
     str.reserve(10);
@@ -287,10 +211,10 @@ static_assert(InlineStartOfDaySecondsFromEpoch<int32_t>(1970, 1, 2) == (24*60*60
 
 DateOnly::DateOnly(const std::string &str) {
     {
-        uint32_t y;
+        int32_t y;
         uint8_t m;
         uint8_t d;
-        if (!ParseStr(str, y, m, d)) {
+        if (!ParseDateStr(str, y, m, d)) {
             throw DateOnlyInvalidException();
         }
         if (m > 12 || m < 1 || d > 31 || d < 1) {
@@ -300,6 +224,21 @@ DateOnly::DateOnly(const std::string &str) {
         month = m;
         day = d;
     }
+}
+
+DateOnly DateOnly::FromDateTimeOffsetString(const std::string &str) {
+    int32_t y;
+    uint8_t m;
+    uint8_t d;
+    uint8_t h;
+    uint8_t i;
+    uint8_t s;
+    uint8_t hz;
+    uint8_t mz;
+    if (ParseDateTimeOffsetStr(str, y, m, d, h, i, s, hz, mz)) {
+        return {y, m, d};
+    }
+    throw DateOnlyInvalidException();;
 }
 
 std::string DateOnly::ToString() const {
@@ -560,3 +499,40 @@ static_assert(DateOnly(2024, 11, 30) != DateOnly(2024, 10, 30));
 static_assert(DateOnly(2024, 10, 30) != DateOnly(2024, 11, 30));
 static_assert(DateOnly(2025, 10, 30) != DateOnly(2024, 10, 30));
 static_assert(DateOnly(2024, 10, 30) != DateOnly(2025, 10, 30));
+
+template <typename T> static constexpr T InlineGetDays(DateOnly start, DateOnly end) {
+    if (start.GetYear() == end.GetYear()) {
+        return GetDayOfYear(end.GetYear(), end.GetMonth(), end.GetDayOfMonth()) -
+                GetDayOfYear(start.GetYear(), start.GetMonth(), start.GetDayOfMonth());
+    }
+    if (start.GetYear() > end.GetYear()) {
+        return 0 - InlineGetDays<T>(end, start);
+    }
+    T counter = GetDaysPerYear(start.GetYear()) - GetDayOfYear(start.GetYear(), start.GetMonth(), start.GetDayOfMonth());
+    typeof(end.GetYear()) year = start.GetYear() + 1;
+    typeof(end.GetYear()) remainingYears = end.GetYear() - year;
+    counter += (remainingYears / 400) * daysPer400Years;
+    remainingYears = remainingYears % 400;
+    while (remainingYears > 0) {
+        counter += GetDaysPerYear(year);
+        ++year;
+        --remainingYears;
+    }
+    return counter + GetDayOfYear(end.GetYear(), end.GetMonth(), end.GetDayOfMonth());
+}
+
+static_assert(InlineGetDays<int>(DateOnly(2424, 11, 9), DateOnly(2024, 11, 8)) == (0-(daysPer400Years + 1)));
+static_assert(InlineGetDays<int>(DateOnly(2026, 11, 8), DateOnly(2024, 11, 8)) == -730);
+static_assert(InlineGetDays<int>(DateOnly(2025, 11, 8), DateOnly(2024, 11, 8)) == -365);
+static_assert(InlineGetDays<int>(DateOnly(2025, 1, 1), DateOnly(2024, 12, 31)) == -1);
+static_assert(InlineGetDays<int>(DateOnly(2024, 11, 7), DateOnly(2024, 10, 31)) == -7);
+static_assert(InlineGetDays<int>(DateOnly(2024, 11, 7), DateOnly(2024, 11, 7)) == 0);
+static_assert(InlineGetDays<int>(DateOnly(2024, 10, 31), DateOnly(2024, 11, 7)) == 7);
+static_assert(InlineGetDays<int>(DateOnly(2024, 12, 31), DateOnly(2025, 1, 1)) == 1);
+static_assert(InlineGetDays<int>(DateOnly(2024, 11, 8), DateOnly(2025, 11, 8)) == 365);
+static_assert(InlineGetDays<int>(DateOnly(2024, 11, 8), DateOnly(2026, 11, 8)) == 730);
+static_assert(InlineGetDays<int>(DateOnly(2024, 11, 8), DateOnly(2424, 11, 9)) == (daysPer400Years + 1));
+
+int32_t DateOnlyDiff::GetDays() {
+    return InlineGetDays<int32_t>(start, end);
+}

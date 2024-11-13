@@ -133,7 +133,7 @@ void FixedTimeAdvancedDosingPeriod::Apply(FhirExtendable &extension) {
         AddFixedDosing(extension, ettermiddag, dosingUnit, 1, "Døgn", false, "4");
     }
     if (kveld > 0.01) {
-        AddFixedDosing(extension, kveld, dosingUnit, 1, "Kveld", false, "5");
+        AddFixedDosing(extension, kveld, dosingUnit, 1, "Døgn", false, "5");
     }
     if (natt > 0.01) {
         AddFixedDosing(extension, natt, dosingUnit, 1, "Døgn", false, "6");

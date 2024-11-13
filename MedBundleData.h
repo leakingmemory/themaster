@@ -12,6 +12,9 @@
 #include <tuple>
 #include "PatientStore.h"
 
+class FhirMedication;
+struct PrescriptionData;
+
 struct PrescriberRef {
     std::string uuid;
     std::string name;
@@ -29,14 +32,17 @@ public:
     bool kjHarLegemidler{false};
     bool kjHarLaste{false};
     bool rfHarLaste{false};
+    [[nodiscard]] static std::shared_ptr<Fhir> GetByUrl(const std::shared_ptr<FhirBundle> &, std::string);
     [[nodiscard]] static std::vector<FhirBundleEntry> GetPractitioners(const std::shared_ptr<FhirBundle> &);
     [[nodiscard]] static std::vector<std::string> GetRenewals(const std::shared_ptr<FhirBundle> &);
     [[nodiscard]] static PrescriberRef GetPrescriber(const std::shared_ptr<FhirBundle> &, const std::string &helseidIdToken);
+    [[nodiscard]] std::shared_ptr<Fhir> GetByUrl(const std::string &);
     [[nodiscard]] PrescriberRef GetPrescriber(const std::string &helseidIdToken) const;
     [[nodiscard]] FhirReference GetSubjectRef() const ;
     void InsertNonexistingMedicationsFrom(const std::shared_ptr<FhirBundle> &otherBundle);
     void InsertNonexistingMedicationPrescriptionsFrom(const std::shared_ptr<FhirBundle> &otherBundle, const std::string &helseidIdToken);
     void ReplayRenewals(const std::shared_ptr<FhirBundle> &otherBundle);
+    void Prescribe(const std::shared_ptr<FhirMedication> &, const PrescriptionData &, const std::string &renewPrescriptionId = "");
 };
 
 #endif //DRWHATSNOT_MEDBUNDLEDATA_H

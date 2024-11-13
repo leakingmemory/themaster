@@ -13,7 +13,31 @@
 #include <jjwtid/JwtPart.h>
 #include "MedBundleData.h"
 #include "PrescriptionChangesService.h"
+#include "PrescriptionData.h"
 
+class MedBundleDataException : public std::exception {
+private:
+    std::string error;
+public:
+    MedBundleDataException(const std::string &error) : error(error) {}
+    const char * what() const noexcept override;
+};
+
+const char *MedBundleDataException::what() const noexcept {
+    return error.c_str();
+}
+
+std::shared_ptr<Fhir> MedBundleData::GetByUrl(const std::shared_ptr<FhirBundle> &bundle, std::string url) {
+    std::transform(url.cbegin(), url.cend(), url.begin(), [] (char ch) -> char { return static_cast<char>(std::tolower(ch)); });
+    for (const auto &entry : bundle->GetEntries()) {
+        auto entryUrl = entry.GetFullUrl();
+        std::transform(entryUrl.cbegin(), entryUrl.cend(), entryUrl.begin(), [] (char ch) -> char { return static_cast<char>(std::tolower(ch)); });
+        if (entryUrl == url) {
+            return entry.GetResource();
+        }
+    }
+    return {};
+}
 std::vector<FhirBundleEntry> MedBundleData::GetPractitioners(const std::shared_ptr<FhirBundle> &bundle) {
     std::vector<FhirBundleEntry> practitioners{};
     for (const auto &entry : bundle->GetEntries()) {
@@ -188,6 +212,10 @@ PrescriberRef MedBundleData::GetPrescriber(const std::shared_ptr<FhirBundle> &bu
     FhirBundleEntry bundleEntry{fullUrl, practitioner};
     bundle->AddEntry(bundleEntry);
     return {.uuid = fullUrl, .name = practitioner->GetDisplay()};
+}
+
+std::shared_ptr<Fhir> MedBundleData::GetByUrl(const std::string &url) {
+    return GetByUrl(medBundle, url);
 }
 
 PrescriberRef MedBundleData::GetPrescriber(const std::string &helseidIdToken) const {
@@ -501,4 +529,227 @@ void MedBundleData::ReplayRenewals(const std::shared_ptr<FhirBundle> &otherBundl
             }
         }
     }
+}
+
+struct RenewStatement {
+    std::shared_ptr<FhirMedicationStatement> renewStatement{};
+    std::string renewUrl{};
+};
+
+class MedicationSectionInList {
+private:
+    std::vector<FhirCompositionSection> sections;
+    FhirCompositionSection *medicationSection{nullptr};
+public:
+    MedicationSectionInList() : sections(), medicationSection(nullptr) {}
+    MedicationSectionInList(const std::vector<FhirCompositionSection> &sections) : sections(sections) {
+        FindMedicationSection();
+    }
+    constexpr MedicationSectionInList(const MedicationSectionInList &cp) : sections(cp.sections) {
+        FindMedicationSection();
+    }
+    constexpr MedicationSectionInList(MedicationSectionInList &&mv) noexcept : sections(std::move(mv.sections)) {
+        ForceFindMedicationSection();
+    }
+    constexpr MedicationSectionInList &operator =(const MedicationSectionInList &cp) {
+        if (&cp == this) {
+            return *this;
+        }
+        sections = cp.sections;
+        FindMedicationSection();
+        return *this;
+    }
+    constexpr MedicationSectionInList &operator =(MedicationSectionInList &&mv) noexcept {
+        if (&mv == this) {
+            return *this;
+        }
+        sections = std::move(mv.sections);
+        ForceFindMedicationSection();
+        return *this;
+    }
+    constexpr void FindMedicationSection() {
+        medicationSection = nullptr;
+        for (auto &section : this->sections) {
+            auto coding = section.GetCode().GetCoding();
+            if (coding.size() == 1 && coding[0].GetCode() == "sectionMedication") {
+                if (medicationSection != nullptr) {
+                    throw MedBundleDataException("Duplicate medication section");
+                }
+                medicationSection = &section;
+            }
+        }
+    }
+    constexpr void ForceFindMedicationSection() noexcept {
+        medicationSection = nullptr;
+        for (auto &section : this->sections) {
+            auto coding = section.GetCode().GetCoding();
+            if (coding.size() == 1 && coding[0].GetCode() == "sectionMedication") {
+                medicationSection = &section;
+            }
+        }
+    }
+    constexpr operator bool () const {
+        return medicationSection != nullptr;
+    }
+    [[nodiscard]] std::vector<FhirReference> GetEntries() const {
+        if (medicationSection == nullptr) {
+            return {};
+        }
+        return medicationSection->GetEntries();
+    }
+    [[nodiscard]] constexpr std::vector<FhirCompositionSection> GetSections() const {
+        return sections;
+    }
+    void ClearEmptyReason() {
+        if (medicationSection == nullptr) {
+            return;
+        }
+        medicationSection->SetTextStatus("generated");
+        medicationSection->SetTextXhtml("<xhtml:div xmlns:xhtml=\"http://www.w3.org/1999/xhtml\">List of medications</xhtml:div>");
+        medicationSection->SetEmptyReason({});
+    }
+    void SetEntries(const std::vector<FhirReference> &entries) {
+        medicationSection->SetEntries(entries);
+    }
+};
+
+void MedBundleData::Prescribe(const std::shared_ptr<FhirMedication> &medicament, const PrescriptionData &prescriptionData, const std::string &renewPrescriptionId) {
+    std::shared_ptr<FhirComposition> composition{};
+    std::vector<RenewStatement> renewStatements{};
+    for (const auto &entry : medBundle->GetEntries()) {
+        if (!renewPrescriptionId.empty()) {
+            auto medicationStatement = std::dynamic_pointer_cast<FhirMedicationStatement>(entry.GetResource());
+            if (medicationStatement) {
+                auto identifiers = medicationStatement->GetIdentifiers();
+                if (std::find_if(identifiers.cbegin(), identifiers.cend(), [&renewPrescriptionId] (const FhirIdentifier &identifier) -> bool {
+                    auto type = identifier.GetType().GetText();
+                    std::transform(type.cbegin(), type.cend(), type.begin(), [] (char ch) -> char { return static_cast<char>(std::tolower(ch)); });
+                    return (type == "reseptid" && identifier.GetValue() == renewPrescriptionId);
+                }) != identifiers.cend()) {
+                    RenewStatement renewStatement{.renewStatement = medicationStatement, .renewUrl = entry.GetFullUrl()};
+                    renewStatements.emplace_back(renewStatement);
+                }
+            }
+        }
+        auto compositionObject = std::dynamic_pointer_cast<FhirComposition>(entry.GetResource());
+        if (compositionObject) {
+            if (composition) {
+                throw MedBundleDataException("Duplicate composition objects in bundle");
+            }
+            composition = compositionObject;
+        }
+    }
+    if (!composition) {
+        throw MedBundleDataException("Missing composition object in bundle");
+    }
+    {
+        auto profile = composition->GetProfile();
+        if (profile.size() != 1 ||
+            profile[0] != "http://ehelse.no/fhir/StructureDefinition/sfm-MedicationComposition") {
+            throw MedBundleDataException("Composition with wrong profile");
+        }
+    }
+    MedicationSectionInList medicationSectionInList{composition->GetSections()};
+    if (!medicationSectionInList) {
+        throw MedBundleDataException("No medication section");
+    }
+    auto entries = medicationSectionInList.GetEntries();
+    FhirReference *renewReference{nullptr};
+    std::shared_ptr<FhirMedicationStatement> renewMedicationStatement{};
+    std::string renewFullUrl{};
+    if (!renewPrescriptionId.empty()) {
+        for (auto &potRenewStatement: renewStatements) {
+            bool found{false};
+            for (auto &entry: entries) {
+                if (potRenewStatement.renewUrl == entry.GetReference()) {
+                    if (renewReference != nullptr) {
+                        throw MedBundleDataException("Multiple references found");
+                    }
+                    renewReference = &entry;
+                    renewFullUrl = potRenewStatement.renewUrl;
+                    renewMedicationStatement = potRenewStatement.renewStatement;
+                }
+            }
+        }
+        if (renewReference == nullptr) {
+            throw MedBundleDataException("Prescription to renew is not head of chain");
+        }
+    }
+    std::string medicamentFullUrl{"urn:uuid:"};
+    medicamentFullUrl.append(medicament->GetId());
+    FhirBundleEntry medicamentEntry{medicamentFullUrl, medicament};
+    std::shared_ptr<FhirMedicationStatement> medicationStatement = std::make_shared<FhirMedicationStatement>(prescriptionData.ToFhir());
+    {
+        auto medicationProfile = medicament->GetProfile();
+        FhirReference medicationReference{medicamentFullUrl, medicationProfile.size() == 1 ? medicationProfile[0] : "", medicament->GetDisplay()};
+        medicationStatement->SetMedicationReference(medicationReference);
+    }
+    std::string medicationStatementFullUrl{"urn:uuid:"};
+    medicationStatementFullUrl.append(medicationStatement->GetId());
+    FhirBundleEntry medicationStatementEntry{medicationStatementFullUrl, medicationStatement};
+    if (renewMedicationStatement) {
+        std::shared_ptr<FhirExtension> reseptAmendment{};
+        for (const auto &extension : medicationStatement->GetExtensions()) {
+            auto url = extension->GetUrl();
+            std::transform(url.cbegin(), url.cend(), url.begin(), [] (char ch) -> char { return std::tolower(ch); });
+            if (url == "http://ehelse.no/fhir/structuredefinition/sfm-reseptamendment") {
+                if (reseptAmendment) {
+                    throw MedBundleDataException("Multiple resept amendment");
+                }
+                reseptAmendment = extension;
+            }
+        }
+        if (!reseptAmendment) {
+            throw MedBundleDataException("No resept amendment for new prescription");
+        }
+        std::shared_ptr<FhirExtension> renewReseptAmendment{};
+        for (const auto &extension : renewMedicationStatement->GetExtensions()) {
+            auto url = extension->GetUrl();
+            std::transform(url.cbegin(), url.cend(), url.begin(), [] (char ch) -> char { return std::tolower(ch); });
+            if (url == "http://ehelse.no/fhir/structuredefinition/sfm-reseptamendment") {
+                if (renewReseptAmendment) {
+                    throw MedBundleDataException("Multiple resept amendment");
+                }
+                renewReseptAmendment = extension;
+            }
+        }
+        if (!renewReseptAmendment) {
+            throw MedBundleDataException("No resept amendment for prescription to renew");
+        }
+        for (const auto &extension : renewReseptAmendment->GetExtensions()) {
+            auto url = extension->GetUrl();
+            std::transform(url.cbegin(), url.cend(), url.begin(), [] (char ch) -> char { return std::tolower(ch); });
+            if (url == "recallinfo") {
+                throw MedBundleDataException("The prescription is already recalled");
+            }
+        }
+        FhirCodeableConcept recallCode{"urn:oid:2.16.578.1.12.4.1.1.7500", "3", "Fornying med endring"};
+        auto recallInfoExt = std::make_shared<FhirExtension>("recallinfo");
+        recallInfoExt->AddExtension(
+                std::make_shared<FhirValueExtension>("recallId", std::make_shared<FhirString>(renewPrescriptionId)));
+        recallInfoExt->AddExtension(std::make_shared<FhirValueExtension>("recallcode", std::make_shared<FhirCodeableConceptValue>(recallCode)));
+        recallInfoExt->AddExtension(std::make_shared<FhirValueExtension>("text", std::make_shared<FhirString>("Forny med endring")));
+        recallInfoExt->AddExtension(std::make_shared<FhirValueExtension>("notsent", std::make_shared<FhirBooleanValue>(true)));
+        reseptAmendment->AddExtension(recallInfoExt);
+    }
+    medBundle->AddEntry(medicamentEntry);
+    medBundle->AddEntry(medicationStatementEntry);
+    if (renewReference == nullptr) {
+        if (entries.empty()) {
+            medicationSectionInList.ClearEmptyReason();
+        }
+        entries.emplace_back(medicationStatementFullUrl,
+                             "http://ehelse.no/fhir/StructureDefinition/sfm-MedicationStatement",
+                             medicationStatement->GetDisplay());
+    } else {
+        *renewReference = {medicationStatementFullUrl,
+                           "http://ehelse.no/fhir/StructureDefinition/sfm-MedicationStatement",
+                           medicationStatement->GetDisplay()};
+        renewMedicationStatement->SetPartOf({*renewReference});
+        medicationStatement->SetBasedOn({{renewFullUrl,
+                                         "http://ehelse.no/fhir/StructureDefinition/sfm-MedicationStatement",
+                                         renewMedicationStatement->GetDisplay()}});
+    }
+    medicationSectionInList.SetEntries(entries);
+    composition->SetSections(medicationSectionInList.GetSections());
 }

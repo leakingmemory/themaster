@@ -85,7 +85,7 @@ public:
     [[nodiscard]] FhirReference GetSubjectRef() const ;
     void SetPatient(PrescriptionData &prescriptionData) const ;
     //pplx::task<PrescriptionData> SetPrescriber(const PrescriptionData &prescriptionData);
-    void PrescribeMedicament(const PrescriptionDialog &prescriptionDialog);
+    void PrescribeMedicament(const PrescriptionDialog &prescriptionDialog, const std::string &renewPrescriptionId = "");
     void OnPrescribeMagistral(wxCommandEvent &e);
     void OnPrescribeMedicament(wxCommandEvent &e);
     WeakRefUiDispatcherRef<TheMasterFrame> GetWeakRefDispatcher();
@@ -99,6 +99,7 @@ public:
     void OnPrescriptionRecall(wxCommandEvent &e);
     void OnPrescriptionCease(wxCommandEvent &e);
     void OnPrescriptionRenew(wxCommandEvent &e);
+    void OnPrescriptionRenewWithChanges(wxCommandEvent &e);
 };
 
 

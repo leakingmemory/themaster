@@ -39,12 +39,42 @@ public:
     virtual void Generator() = 0;
 };
 
+class SingleThreadedLazyLogic {
+private:
+    bool generatorStarted{false};
+public:
+    constexpr SingleThreadedLazyLogic() {}
+    void Generate();
+    virtual void Generator() = 0;
+};
+
 template <LazyGeneratorFunc T> class Lazy : private LazyLogic {
 private:
     LazyGeneratorContainer<T> generator;
 public:
     typedef LazyGeneratorContainer<T>::result_type result_type;
     constexpr Lazy(T func) : generator(func) {}
+private:
+    void Generator() override {
+        generator.Generate();
+    }
+public:
+    explicit operator result_type () {
+        Generate();
+        return generator.result;
+    }
+    template <typename V> operator V () {
+        Generate();
+        return generator.result;
+    }
+};
+
+template <LazyGeneratorFunc T> class SingleThreadedLazy : private SingleThreadedLazyLogic {
+private:
+    LazyGeneratorContainer<T> generator;
+public:
+    typedef LazyGeneratorContainer<T>::result_type result_type;
+    constexpr SingleThreadedLazy(T func) : generator(func) {}
 private:
     void Generator() override {
         generator.Generate();

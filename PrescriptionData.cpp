@@ -5,11 +5,284 @@
 #include "PrescriptionData.h"
 #include "AdvancedDosingPeriod.h"
 #include "DateTime.h"
+#include "Lazy.h"
 #include <sfmbasisapi/fhir/medstatement.h>
 #include <boost/uuid/uuid_generators.hpp> // for random_generator
 #include <boost/uuid/uuid_io.hpp> // for to_string
 
-FhirMedicationStatement PrescriptionData::ToFhir() {
+struct DosingPeriodData {
+    DateOnly startDate{};
+    DateOnly endDate{};
+    std::string amountUnit{};
+    float morgen{0}, formiddag{0}, middag{0}, ettermiddag{0}, kveld{0}, natt{0};
+};
+
+void PrescriptionData::FromFhir(const FhirMedicationStatement &medicationStatement) {
+    {
+        auto dosages = medicationStatement.GetDosage();
+        for (const auto &dosage : dosages) {
+            dosingText = dosage.GetText();
+            for (const auto &extension : dosage.GetExtensions()) {
+                auto url = extension->GetUrl();
+                std::transform(url.cbegin(), url.cend(), url.begin(), [] (char ch) -> char { return std::tolower(ch); });
+                if (url == "http://ehelse.no/fhir/structuredefinition/sfm-shortdosage") {
+                    auto valueExtension = std::dynamic_pointer_cast<FhirValueExtension>(extension);
+                    if (valueExtension) {
+                        auto value = std::dynamic_pointer_cast<FhirCodeableConceptValue>(valueExtension->GetValue());
+                        if (value) {
+                            auto codings = value->GetCoding();
+                            if (!codings.empty()) {
+                                kortdose = {codings[0].GetSystem(), codings[0].GetCode(), codings[0].GetDisplay(), codings[0].GetDisplay()};
+                            }
+                        }
+                    }
+                } else if (url == "http://ehelse.no/fhir/structuredefinition/sfm-use") {
+                    auto valueExtension = std::dynamic_pointer_cast<FhirValueExtension>(extension);
+                    if (valueExtension) {
+                        auto value = std::dynamic_pointer_cast<FhirCodeableConceptValue>(valueExtension->GetValue());
+                        if (value) {
+                            auto codings = value->GetCoding();
+                            if (!codings.empty()) {
+                                use = {codings[0].GetSystem(), codings[0].GetCode(), codings[0].GetDisplay(), codings[0].GetDisplay()};
+                            }
+                        }
+                    }
+                } else if (url == "http://ehelse.no/fhir/structuredefinition/sfm-application-area") {
+                    for (const auto &extension : extension->GetExtensions()) {
+                        auto url = extension->GetUrl();
+                        std::transform(url.cbegin(), url.cend(), url.begin(), [] (char ch) -> char { return static_cast<char>(std::tolower(ch)); });
+                        if (url == "text") {
+                            auto valueExtension = std::dynamic_pointer_cast<FhirValueExtension>(extension);
+                            if (valueExtension) {
+                                auto value = std::dynamic_pointer_cast<FhirString>(valueExtension->GetValue());
+                                if (value) {
+                                    applicationArea = value->GetValue();
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    for (const auto &extension : medicationStatement.GetExtensions()) {
+        auto url = extension->GetUrl();
+        std::transform(url.cbegin(), url.cend(), url.begin(), [] (char ch) -> char { return static_cast<char>(std::tolower(ch)); });
+        if (url == "http://ehelse.no/fhir/structuredefinition/sfm-reseptamendment") {
+            std::vector<DosingPeriodData> dosingPeriodDataList{};
+            bool invalidStructuredDosing{false};
+            for (const auto &extension : extension->GetExtensions()) {
+                auto url = extension->GetUrl();
+                std::transform(url.cbegin(), url.cend(), url.begin(), [] (char ch) -> char { return static_cast<char>(std::tolower(ch)); });
+                SingleThreadedLazy<std::function<std::shared_ptr<FhirValue> ()>> value{[&extension] () -> std::shared_ptr<FhirValue> {
+                    auto valueExtension = std::dynamic_pointer_cast<FhirValueExtension>(extension);
+                    if (valueExtension) {
+                        return valueExtension->GetValue();
+                    } else {
+                        return {};
+                    }
+                }};
+                SingleThreadedLazy<std::function<std::string ()>> stringValue{[&value] () -> std::string {
+                    auto val = std::dynamic_pointer_cast<FhirString>(value.operator std::shared_ptr<FhirValue> &());
+                    if (val) {
+                        return val->GetValue();
+                    } else {
+                        return {};
+                    }
+                }};
+                SingleThreadedLazy<std::function<double ()>> decimalValue([&value] () -> double {
+                    auto val = std::dynamic_pointer_cast<FhirDecimalValue>(value.operator std::shared_ptr<FhirValue> &());
+                    if (val) {
+                        return val->GetValue();
+                    } else {
+                        return static_cast<double>(0.0f);
+                    }
+                });
+                SingleThreadedLazy<std::function<int ()>> stringInterpretedAsInt([&stringValue] () -> int {
+                    std::string str = stringValue.operator std::string();
+                    if (str.empty()) {
+                        return 0;
+                    }
+                    std::size_t err{0};
+                    auto res = std::stoi(str, &err);
+                    if (err != str.size()) {
+                        return 0;
+                    }
+                    return res;
+                });
+                SingleThreadedLazy<std::function<FhirQuantity ()>> quantity([&value] () -> FhirQuantity {
+                    auto quantityValue = std::dynamic_pointer_cast<FhirQuantityValue>(value.operator std::shared_ptr<FhirValue> &());
+                    return *quantityValue;
+                });
+                if (url == "dssn") {
+                    dssn = stringValue.operator std::string();
+                } else if (url == "numberofpackages") {
+                    numberOfPackages = decimalValue.operator double();
+                    numberOfPackagesSet = (numberOfPackages > 0.001);
+                } else if (url == "amount") {
+                    amount = quantity.operator FhirQuantity &().GetValue();
+                    amountUnit = {"", quantity.operator FhirQuantity &().GetUnit(), "", ""};
+                    amountIsSet = (amount > 0.001);
+                } else if (url == "reit") {
+                    reit = stringInterpretedAsInt.operator int();
+                } else if (url == "ereseptdosing") {
+                    DosingPeriodData dosingPeriodData{};
+                    bool fixed{true};
+                    for (const auto &extension : extension->GetExtensions()) {
+                        auto url = extension->GetUrl();
+                        std::transform(url.cbegin(), url.cend(), url.begin(), [] (char ch) -> char { return static_cast<char>(std::tolower(ch)); });
+                        if (url == "starttime") {
+                            auto valueExtension = std::dynamic_pointer_cast<FhirValueExtension>(extension);
+                            if (valueExtension) {
+                                auto value = std::dynamic_pointer_cast<FhirDateValue>(valueExtension->GetValue());
+                                if (value) {
+                                    try {
+                                        dosingPeriodData.startDate = DateOnly(value->GetRawValue());
+                                    } catch (...) {
+                                        dosingPeriodData.startDate = {};
+                                    }
+                                }
+                            }
+                        } else if (url == "endtime") {
+                            auto valueExtension = std::dynamic_pointer_cast<FhirValueExtension>(extension);
+                            if (valueExtension) {
+                                auto value = std::dynamic_pointer_cast<FhirDateValue>(valueExtension->GetValue());
+                                if (value) {
+                                    try {
+                                        dosingPeriodData.endDate = DateOnly(value->GetRawValue());
+                                    } catch (...) {
+                                        dosingPeriodData.endDate = {};
+                                    }
+                                }
+                            }
+                        } else if (url == "repeatingdosage") {
+                            double amount{0};
+                            std::string timerangeCode{};
+                            for (const auto &extension : extension->GetExtensions()) {
+                                auto valueExtension = std::dynamic_pointer_cast<FhirValueExtension>(extension);
+                                if (valueExtension) {
+                                    auto url = valueExtension->GetUrl();
+                                    std::transform(url.cbegin(), url.cend(), url.begin(), [] (char ch) -> char { return static_cast<char>(std::tolower(ch)); });
+                                    if (url == "amount") {
+                                        auto quantity = std::dynamic_pointer_cast<FhirQuantityValue>(valueExtension->GetValue());
+                                        if (quantity) {
+                                           if (dosingPeriodData.amountUnit.empty() || dosingPeriodData.amountUnit == quantity->GetUnit()) {
+                                               dosingPeriodData.amountUnit = quantity->GetUnit();
+                                               amount = quantity->GetValue();
+                                           } else {
+                                               fixed = false;
+                                           }
+                                        }
+                                    } else if (url == "interval") {
+                                        auto quantity = std::dynamic_pointer_cast<FhirQuantityValue>(valueExtension->GetValue());
+                                        if (quantity) {
+                                            auto unit = quantity->GetUnit();
+                                            std::transform(unit.cbegin(), unit.cend(), unit.begin(), [] (char ch) -> char { return static_cast<char>(std::tolower(ch)); });
+                                            if (fabs(quantity->GetValue() - 1.0) > 0.01 || unit != "døgn") {
+                                                fixed = false;
+                                            }
+                                        }
+                                    } else if (url == "accurate") {
+                                        // TODO
+                                    } else if (url == "timerange") {
+                                        auto codeableValue = std::dynamic_pointer_cast<FhirCodeableConceptValue>(valueExtension->GetValue());
+                                        if (codeableValue) {
+                                            auto codings = codeableValue->GetCoding();
+                                            auto coding = std::find_if(codings.cbegin(), codings.cend(), [] (const FhirCoding &coding) {
+                                                return coding.GetSystem().ends_with(".8325");
+                                            });
+                                            if (coding != codings.cend()) {
+                                                timerangeCode = coding->GetCode();
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                            if (timerangeCode == "1") {
+                                dosingPeriodData.morgen = static_cast<float>(amount);
+                            } else if (timerangeCode == "2") {
+                                dosingPeriodData.formiddag = static_cast<float>(amount);
+                            } else if (timerangeCode == "3") {
+                                dosingPeriodData.middag = static_cast<float>(amount);
+                            } else if (timerangeCode == "4") {
+                                dosingPeriodData.ettermiddag = static_cast<float>(amount);
+                            } else if (timerangeCode == "5") {
+                                dosingPeriodData.kveld = static_cast<float>(amount);
+                            } else if (timerangeCode == "6") {
+                                dosingPeriodData.natt = static_cast<float>(amount);
+                            } else {
+                                fixed = false;
+                            }
+                        }
+                    }
+                    if (fixed && dosingPeriodData.startDate) {
+                        if (!dosingPeriodDataList.empty() && !((dosingPeriodDataList.end() - 1)->endDate)) {
+                            invalidStructuredDosing = true;
+                        }
+                        dosingPeriodDataList.emplace_back(dosingPeriodData);
+                    } else {
+                        invalidStructuredDosing = true;
+                    }
+                }
+            }
+            if (!invalidStructuredDosing && !dosingPeriodDataList.empty()) {
+                std::sort(dosingPeriodDataList.begin(), dosingPeriodDataList.end(), [] (const DosingPeriodData &p1, const DosingPeriodData &p2) -> bool {
+                    return p1.startDate < p2.startDate;
+                });
+                auto startDate = dosingPeriodDataList.begin()->startDate;
+                for (const auto &dosingPeriodData : dosingPeriodDataList) {
+                    if (!startDate || dosingPeriodData.startDate < startDate) {
+                        invalidStructuredDosing = true;
+                        break;
+                    }
+                    if (dosingPeriodData.startDate > startDate) {
+                        auto days = (dosingPeriodData.startDate - startDate).GetDays();
+                        dosingPeriods.emplace_back(std::make_shared<FixedTimeAdvancedDosingPeriod>(0,0,0,0,0,0,days));
+                    }
+                    auto days = dosingPeriodData.endDate ? (dosingPeriodData.endDate - dosingPeriodData.startDate).GetDays() : 0;
+                    dosingPeriods.emplace_back(std::make_shared<FixedTimeAdvancedDosingPeriod>(dosingPeriodData.morgen, dosingPeriodData.formiddag, dosingPeriodData.middag, dosingPeriodData.ettermiddag, dosingPeriodData.kveld, dosingPeriodData.natt, days));
+                    startDate = dosingPeriodData.endDate;
+                }
+                if (invalidStructuredDosing) {
+                    dosingPeriods.clear();
+                }
+            }
+        } else if (url == "http://ehelse.no/fhir/structuredefinition/sfm-generic-substitution") {
+            for (const auto &extension : extension->GetExtensions()) {
+                auto url = extension->GetUrl();
+                std::transform(url.cbegin(), url.cend(), url.begin(), [] (char ch) -> char { return static_cast<char>(std::tolower(ch)); });
+                if (url == "genericsubstitutionaccepted") {
+                    auto valueExtension = std::dynamic_pointer_cast<FhirValueExtension>(extension);
+                    if (valueExtension) {
+                        auto value = std::dynamic_pointer_cast<FhirBooleanValue>(valueExtension->GetValue());
+                        if (value) {
+                            genericSubstitutionAccepted = value->IsTrue();
+                        }
+                    }
+                }
+            }
+        } else if (url == "http://ehelse.no/fhir/structuredefinition/sfm-discontinuation") {
+            for (const auto &extension : extension->GetExtensions()) {
+                auto url = extension->GetUrl();
+                std::transform(url.cbegin(), url.cend(), url.begin(), [] (char ch) -> char { return static_cast<char>(std::tolower(ch)); });
+                if (url == "timedate") {
+                    auto valueExtension = std::dynamic_pointer_cast<FhirValueExtension>(extension);
+                    if (valueExtension) {
+                        auto value = std::dynamic_pointer_cast<FhirDateTimeValue>(valueExtension->GetValue());
+                        if (value) {
+                            try {
+                                ceaseDate = DateOnly::FromDateTimeOffsetString(value->GetDateTime());
+                            } catch (...) {
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+FhirMedicationStatement PrescriptionData::ToFhir() const {
     FhirMedicationStatement fhir{};
     fhir.SetStatus(FhirStatus::ACTIVE);
     fhir.SetProfile("http://ehelse.no/fhir/StructureDefinition/sfm-MedicationStatement");

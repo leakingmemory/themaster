@@ -20,3 +20,10 @@ void LazyLogic::Generate() {
     Generator();
     latch.count_down();
 }
+
+void SingleThreadedLazyLogic::Generate() {
+    if (!generatorStarted) {
+        generatorStarted = true;
+        Generator();
+    }
+}

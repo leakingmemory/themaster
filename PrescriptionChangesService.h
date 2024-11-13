@@ -25,6 +25,7 @@ struct PrescriptionStatusInfo {
     bool IsRecalled{false};
     bool IsCeased{false};
     bool IsRenewedWithoutChanges{false};
+    bool IsRenewedWithChanges{false};
     bool IsRecallNotSent{false};
     bool IsValidPrescription{false};
     bool HasBeenValidPrescription{false};

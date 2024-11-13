@@ -26,12 +26,13 @@ enum {
     TheMaster_PrescriptionCease_Id = 18,
     TheMaster_VersionDialog_Explore = 19,
     TheMaster_PrescriptionRenew_Id = 20,
-    TheMaster_SaveLastSendmedRequest_Id = 21,
-    TheMaster_SaveLastSendmed_Id = 22,
-    TheMaster_PrescriptionDialog_AddDosingPeriod = 23,
-    TheMaster_PrescriptionDialog_MoveDosingPeriodUp = 24,
-    TheMaster_PrescriptionDialog_MoveDosingPeriodDown = 25,
-    TheMaster_PrescriptionDialog_DeleteDosingPeriod = 26,
+    TheMaster_PrescriptionRenewWithChanges_Id = 21,
+    TheMaster_SaveLastSendmedRequest_Id = 22,
+    TheMaster_SaveLastSendmed_Id = 23,
+    TheMaster_PrescriptionDialog_AddDosingPeriod = 24,
+    TheMaster_PrescriptionDialog_MoveDosingPeriodUp = 25,
+    TheMaster_PrescriptionDialog_MoveDosingPeriodDown = 26,
+    TheMaster_PrescriptionDialog_DeleteDosingPeriod = 27,
 };
 
 #endif //DRWHATSNOT_THEMASTERIDS_H

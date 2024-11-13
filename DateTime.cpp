@@ -5,6 +5,7 @@
 #include <time.h>
 #include "DateTime.h"
 #include "DateOnly.h"
+#include "TimeConst.h"
 #include <sstream>
 #include <array>
 #include <cstdint>
@@ -236,6 +237,28 @@ DateTimeOffset DateTimeOffset::FromLocaltime(std::time_t timeInSecondsSinceEpoch
 
 DateTimeOffset DateTimeOffset::FromDate(DateOnly dateOnly) {
     return InlineFromLocaltime(dateOnly.GetStartOfDaySecondsFromEpoch(), OffsetForTime);
+}
+
+template <typename T, typename H, typename M> constexpr T GetTimeOffset(H h, M m) {
+    T off = h;
+    off *= 60;
+    off += m;
+    return off * 60;
+}
+
+static_assert(GetTimeOffset<int>(2, 1) == 7260);
+static_assert(GetTimeOffset<int>(-2, -1) == -7260);
+
+DateTimeOffset DateTimeOffset::FromString(const std::string &str) {
+    std::tm tm{};
+    int16_t offH, offM;
+    ParseDateTimeOffsetStr(str, tm.tm_year, tm.tm_mon, tm.tm_mday, tm.tm_hour, tm.tm_min, tm.tm_sec, offH, offM);
+    tm.tm_year -= 1900;
+    --tm.tm_mon;
+    tm.tm_zone = nullptr;
+    time_t t = timegm(&tm);
+    auto off = GetTimeOffset<int32_t>(offH, offM);
+    return {t + off, off};
 }
 
 std::string DateTimeOffset::to_iso8601() const {

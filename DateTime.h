@@ -37,6 +37,7 @@ public:
     static DateTimeOffset Now();
     static DateTimeOffset FromLocaltime(std::time_t timeInSecondsSinceEpoch);
     static DateTimeOffset FromDate(DateOnly dateOnly);
+    static DateTimeOffset FromString(const std::string &);
     [[nodiscard]] std::string to_iso8601() const;
 };
 

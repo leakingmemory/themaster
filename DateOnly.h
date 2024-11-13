@@ -25,6 +25,7 @@ public:
     constexpr DateOnly() : year(0), month(0), day(0) {}
     constexpr DateOnly(int32_t year, uint8_t month, uint8_t day) : year(year), month(month), day(day) {}
     DateOnly(const std::string &str);
+    static DateOnly FromDateTimeOffsetString(const std::string &str);
     std::string ToString() const;
     [[nodiscard]] constexpr typeof(year) GetYear() const {
         return year;
@@ -98,5 +99,18 @@ public:
 };
 
 DateOnly operator + (DateOnly, Duration);
+
+class DateOnlyDiff {
+private:
+    DateOnly start;
+    DateOnly end;
+public:
+    constexpr DateOnlyDiff(DateOnly start, DateOnly end) : start(start), end(end) {}
+    int32_t GetDays();
+};
+
+constexpr DateOnlyDiff operator - (DateOnly d1, DateOnly d2) {
+    return {d2, d1};
+}
 
 #endif //THEMASTER_DATEONLY_H

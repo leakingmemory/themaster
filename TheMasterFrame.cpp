@@ -141,6 +141,7 @@ TheMasterFrame::TheMasterFrame() : wxFrame(nullptr, wxID_ANY, "The Master"),
     Bind(wxEVT_MENU, &TheMasterFrame::OnPrescriptionRecall, this, TheMaster_PrescriptionRecall_Id);
     Bind(wxEVT_MENU, &TheMasterFrame::OnPrescriptionCease, this, TheMaster_PrescriptionCease_Id);
     Bind(wxEVT_MENU, &TheMasterFrame::OnPrescriptionRenew, this, TheMaster_PrescriptionRenew_Id);
+    Bind(wxEVT_MENU, &TheMasterFrame::OnPrescriptionRenewWithChanges, this, TheMaster_PrescriptionRenewWithChanges_Id);
 }
 
 void TheMasterFrame::UpdateHeader() {
@@ -1903,50 +1904,12 @@ void TheMasterFrame::SetPatient(PrescriptionData &prescriptionData) const {
     prescriptionData.subjectDisplay = ref.GetDisplay();
 }
 
-void TheMasterFrame::PrescribeMedicament(const PrescriptionDialog &prescriptionDialog) {
+void TheMasterFrame::PrescribeMedicament(const PrescriptionDialog &prescriptionDialog, const std::string &renewPrescriptionId) {
     PrescriptionData prescriptionData = prescriptionDialog.GetPrescriptionData();
     std::shared_ptr<FhirMedication> medicament = prescriptionDialog.GetMedication();
     SetPrescriber(prescriptionData);
     SetPatient(prescriptionData);
-    std::string medicamentFullUrl{"urn:uuid:"};
-    medicamentFullUrl.append(medicament->GetId());
-    FhirBundleEntry medicamentEntry{medicamentFullUrl, medicament};
-    std::shared_ptr<FhirMedicationStatement> medicationStatement = std::make_shared<FhirMedicationStatement>(prescriptionData.ToFhir());
-    {
-        auto medicationProfile = medicament->GetProfile();
-        FhirReference medicationReference{medicamentFullUrl, medicationProfile.size() == 1 ? medicationProfile[0] : "", medicament->GetDisplay()};
-        medicationStatement->SetMedicationReference(medicationReference);
-    }
-    std::string medicationStatementFullUrl{"urn:uuid:"};
-    medicationStatementFullUrl.append(medicationStatement->GetId());
-    FhirBundleEntry medicationStatementEntry{medicationStatementFullUrl, medicationStatement};
-    medicationBundle->medBundle->AddEntry(medicamentEntry);
-    medicationBundle->medBundle->AddEntry(medicationStatementEntry);
-    for (const auto &entry : medicationBundle->medBundle->GetEntries()) {
-        auto composition = std::dynamic_pointer_cast<FhirComposition>(entry.GetResource());
-        if (composition) {
-            auto profile = composition->GetProfile();
-            if (profile.size() == 1 && profile[0] == "http://ehelse.no/fhir/StructureDefinition/sfm-MedicationComposition") {
-                auto sections = composition->GetSections();
-                for (auto &section : sections) {
-                    auto coding = section.GetCode().GetCoding();
-                    if (coding.size() == 1 && coding[0].GetCode() == "sectionMedication") {
-                        auto entries = section.GetEntries();
-                        if (entries.empty()) {
-                            section.SetTextStatus("generated");
-                            section.SetTextXhtml("<xhtml:div xmlns:xhtml=\"http://www.w3.org/1999/xhtml\">List of medications</xhtml:div>");
-                            section.SetEmptyReason({});
-                        }
-                        entries.emplace_back(medicationStatementFullUrl,
-                                             "http://ehelse.no/fhir/StructureDefinition/sfm-MedicationStatement",
-                                             medicationStatement->GetDisplay());
-                        section.SetEntries(entries);
-                    }
-                }
-                composition->SetSections(sections);
-            }
-        }
-    }
+    medicationBundle->Prescribe(medicament, prescriptionData, renewPrescriptionId);
     UpdateMedications();
 }
 
@@ -2058,6 +2021,7 @@ void TheMasterFrame::OnPrescriptionContextMenu(wxContextMenuEvent &e) {
     menu.Append(TheMaster_PrescriptionRecall_Id, wxT("Recall"));
     menu.Append(TheMaster_PrescriptionCease_Id, wxT("Cease"));
     menu.Append(TheMaster_PrescriptionRenew_Id, wxT("Renew"));
+    menu.Append(TheMaster_PrescriptionRenewWithChanges_Id, wxT("Renew with changes"));
     PopupMenu(&menu);
 }
 
@@ -2396,6 +2360,112 @@ void TheMasterFrame::OnPrescriptionRenew(wxCommandEvent &e) {
         return;
     }
     auto medicationStatement = displayedMedicationStatements[selected][0];
-    PrescriptionChangesService::Renew(*medicationStatement);
+    try {
+        PrescriptionChangesService::Renew(*medicationStatement);
+    } catch (const std::exception &e) {
+        const char *wht = e.what();
+        wxMessageBox(wxString::FromUTF8(wht != nullptr ? wxString::FromUTF8(wht) : wxT("Renew failed")), wxT("Renew failed"), wxICON_ERROR);
+    }
     UpdateMedications();
+}
+
+void TheMasterFrame::OnPrescriptionRenewWithChanges(wxCommandEvent &e) {
+    if (prescriptions->GetSelectedItemCount() != 1) {
+        return;
+    }
+    auto selected = prescriptions->GetFirstSelected();
+    if (selected < 0 || selected >= displayedMedicationStatements.size()) {
+        return;
+    }
+    auto medicationStatement = displayedMedicationStatements[selected][0];
+    std::string reseptId{};
+    {
+        auto identifiers = medicationStatement->GetIdentifiers();
+        auto iterator = identifiers.begin();
+        while (iterator != identifiers.end()) {
+            auto identifier = *iterator;
+            auto key = identifier.GetType().GetText();
+            std::transform(key.cbegin(), key.cend(), key.begin(), [](char ch) -> char { return std::tolower(ch); });
+            if (key == "reseptid") {
+                reseptId = identifier.GetValue();
+                break;
+            }
+            ++iterator;
+        }
+    }
+    if (reseptId.empty()) {
+        wxMessageBox(wxT("The entry does not contain a prescription to renew"), wxT("Renew failed"), wxICON_ERROR);
+        return;
+    }
+    auto medication = std::dynamic_pointer_cast<FhirMedication>(medicationBundle->GetByUrl(medicationStatement->GetMedicationReference().GetReference()));
+    if (!medication) {
+        wxMessageBox(wxT("Could not find medication object for medication statement"), wxT("Medication object not found"), wxICON_ERROR);
+        return;
+    }
+    std::string festId{};
+    {
+        auto codes = medication->GetCode().GetCoding();
+        auto iterator = std::find_if(codes.cbegin(), codes.cend(), [] (const FhirCoding &coding) -> bool {
+            auto system = coding.GetSystem();
+            std::transform(system.cbegin(), system.cend(), system.begin(), [] (char ch) -> char { return static_cast<char>(std::tolower(ch)); });
+            return (system == "http://ehelse.no/fhir/codesystem/fest");
+        });
+        if (iterator == codes.cend()) {
+            wxMessageBox(wxT("Could not find FEST ID for medication object"), wxT("Medication not found"), wxICON_ERROR);
+            return;
+        }
+        festId = iterator->GetCode();
+    }
+    std::shared_ptr<FestDb> festDb = std::make_shared<FestDb>();
+
+    std::shared_ptr<LegemiddelCore> legemiddelCore{};
+    {
+        FestUuid festUuid{};
+        bool hasUuid{};
+        try {
+            festUuid = FestUuid(festId, false);
+            hasUuid = true;
+        } catch (...) {
+            auto pakning = festDb->GetLegemiddelpakningByVarenr(festId);
+            if (!pakning.GetId().empty()) {
+                legemiddelCore = std::make_shared<Legemiddelpakning>(std::move(pakning));
+            }
+        }
+        if (hasUuid) {
+            auto merkevare = festDb->GetLegemiddelMerkevare(festUuid);
+            if (!merkevare.GetId().empty()) {
+                legemiddelCore = std::make_shared<LegemiddelMerkevare>(std::move(merkevare));
+            } else {
+                auto virkestoff = festDb->GetLegemiddelVirkestoff(festUuid);
+                if (!virkestoff.GetId().empty()) {
+                    legemiddelCore = std::make_shared<LegemiddelVirkestoff>(std::move(virkestoff));
+                }
+            }
+        }
+        if (!legemiddelCore) {
+            wxMessageBox(wxT("Could not find medicament in FEST"), wxT("Medicament not found"), wxICON_ERROR);
+            return;
+        }
+    }
+    PrescriptionData prescriptionData{};
+    prescriptionData.FromFhir(*medicationStatement);
+    SfmMedicamentMapper medicamentMapper{festDb, legemiddelCore};
+    std::vector<MedicamentPackage> packages{};
+    {
+        auto packageMappers = medicamentMapper.GetPackages();
+        packages.reserve(packageMappers.size());
+        for (const auto &packageMapper : packageMappers) {
+            auto description = packageMapper.GetPackageDescription();
+            packages.emplace_back(std::make_shared<FhirMedication>(packageMapper.GetMedication()), description);
+        }
+    }
+    std::vector<MedicalCodedValue> dosingUnits = GetMedicamentDosingUnit(festDb, *legemiddelCore).operator std::vector<MedicalCodedValue>();
+    std::vector<MedicalCodedValue> kortdoser = GetLegemiddelKortdoser(festDb, *legemiddelCore).operator std::vector<MedicalCodedValue>();
+    PrescriptionDialog prescriptionDialog{this, festDb, std::make_shared<FhirMedication>(medicamentMapper.GetMedication()), medicamentMapper.GetPrescriptionUnit(), medicamentMapper.GetMedicamentType(), medicamentMapper.IsPackage(), packages, dosingUnits, kortdoser, medicamentMapper.GetPrescriptionValidity()};
+    prescriptionDialog += prescriptionData;
+    auto res = prescriptionDialog.ShowModal();
+    if (res != wxID_OK) {
+        return;
+    }
+    PrescribeMedicament(prescriptionDialog, reseptId);
 }

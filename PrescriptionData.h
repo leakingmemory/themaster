@@ -46,7 +46,8 @@ struct PrescriptionData {
     std::string prescribedByReference{};
     std::string subjectDisplay{};
     std::string subjectReference{};
-    FhirMedicationStatement ToFhir();
+    void FromFhir(const FhirMedicationStatement &medicationStatement);
+    FhirMedicationStatement ToFhir() const;
 };
 
 #endif //DRWHATSNOT_PRESCRIPTIONDATA_H
