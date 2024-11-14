@@ -26,10 +26,12 @@
 #include <sfmbasisapi/fhir/fhirbasic.h>
 #include <sfmbasisapi/fhir/operationoutcome.h>
 #include <sfmbasisapi/fhir/fhir.h>
+#include <sfmbasisapi/fhir/allergy.h>
 #include <jjwtid/Jwt.h>
 #include <jjwtid/OidcTokenRequest.h>
 #include <cpprest/http_client.h>
 #include <wx/listctrl.h>
+#include <wx/notebook.h>
 #include "MedBundleData.h"
 #include <InstallPrefix.h>
 #include <sfmbasisapi/fhir/medication.h>
@@ -110,13 +112,28 @@ TheMasterFrame::TheMasterFrame() : wxFrame(nullptr, wxID_ANY, "The Master"),
     header->SetItem(2, 2, wxT("RF Locked:"));
     sizer->Add(header, 0, wxEXPAND | wxALL, 5);
 
-    prescriptions = new wxListView(this, wxID_ANY);
+    mainCategories = new wxNotebook(this, wxID_ANY);
+
+    auto *medicationPage = new wxPanel(mainCategories, wxID_ANY);
+    auto *medicationPageSizer = new wxBoxSizer(wxVERTICAL);
+    prescriptions = new wxListView(medicationPage, wxID_ANY);
     prescriptions->AppendColumn(wxT("Name"));
     prescriptions->AppendColumn(wxT("Published"));
     prescriptions->SetColumnWidth(0, PrescriptionNameColumnWidth);
     prescriptions->SetColumnWidth(1, PrescriptionRemoteColumnWidth);
     prescriptions->Bind(wxEVT_CONTEXT_MENU, &TheMasterFrame::OnPrescriptionContextMenu, this, wxID_ANY);
-    sizer->Add(prescriptions, 1, wxEXPAND | wxALL, 5);
+    medicationPageSizer->Add(prescriptions, 1, wxEXPAND | wxALL, 5);
+    medicationPage->SetSizerAndFit(medicationPageSizer);
+    mainCategories->AddPage(medicationPage, wxT("Medication"));
+
+    auto *cavePage = new wxPanel(mainCategories, wxID_ANY);
+    auto *cavePageSizer = new wxBoxSizer(wxVERTICAL);
+    caveListView = new wxListView(cavePage, wxID_ANY);
+    cavePageSizer->Add(caveListView, 1, wxEXPAND | wxALL, 5);
+    cavePage->SetSizerAndFit(cavePageSizer);
+    mainCategories->AddPage(cavePage, wxT("CAVE"));
+
+    sizer->Add(mainCategories, 1, wxEXPAND | wxALL, 5);
 
     SetSizerAndFit(sizer);
 
@@ -260,6 +277,74 @@ void TheMasterFrame::UpdateMedications() {
     this->displayedMedicationStatements = displayedMedicationStatements;
 }
 
+void TheMasterFrame::UpdateCave() {
+    caveListView->ClearAll();
+    if (!medicationBundle || !medicationBundle->medBundle) {
+        return;
+    }
+    std::map<std::string,std::shared_ptr<FhirAllergyIntolerance>> allergies{};
+    FhirCompositionSection allergySection{};
+    {
+        std::shared_ptr<FhirComposition> composition{};
+        for (const auto &bundleEntry: medicationBundle->medBundle->GetEntries()) {
+            auto resource = bundleEntry.GetResource();
+            auto allergyObj = std::dynamic_pointer_cast<FhirAllergyIntolerance>(resource);
+            if (allergyObj) {
+                allergies.insert_or_assign(bundleEntry.GetFullUrl(), allergyObj);
+                continue;
+            }
+            auto compositionObj = std::dynamic_pointer_cast<FhirComposition>(resource);
+            if (compositionObj) {
+                if (composition) {
+                    return;
+                }
+                composition = compositionObj;
+            }
+        }
+        if (!composition) {
+            return;
+        }
+        for (const auto &section : composition->GetSections()) {
+            auto codings = section.GetCode().GetCoding();
+            if (codings.size() == 1 && codings[0].GetCode() == "sectionAllergies") {
+                if (allergySection.GetCode().IsSet()) {
+                    return;
+                }
+                allergySection = section;
+            }
+        }
+        if (!allergySection.GetCode().IsSet()) {
+            return;
+        }
+    }
+    caveListView->AppendColumn(wxT("Display"));
+    int row = 0;
+    for (const auto &reference : allergySection.GetEntries()) {
+        std::shared_ptr<FhirAllergyIntolerance> allergy{};
+        {
+            auto iterator = allergies.find(reference.GetReference());
+            if (iterator != allergies.end()) {
+                allergy = iterator->second;
+            }
+        }
+        if (!allergy) {
+            continue;
+        }
+        FhirCoding coding{};
+        {
+            auto codings = allergy->GetCode().GetCoding();
+            if (codings.size() == 1) {
+                coding = codings[0];
+            }
+        }
+        std::string display{coding.GetDisplay()};
+        if (display.empty()) {
+            display = allergy->GetCode().GetText();
+        }
+        caveListView->InsertItem(row++, wxString::FromUTF8(display));
+    }
+}
+
 void TheMasterFrame::OnConnect(wxCommandEvent( &e)) {
     ConnectDialog dialog{this};
     dialog.ShowModal();
@@ -273,6 +358,7 @@ void TheMasterFrame::OnFindPatient(wxCommandEvent &e) {
         medicationBundle = {};
         UpdateHeader();
         UpdateMedications();
+        UpdateCave();
     }
 }
 
@@ -286,6 +372,7 @@ void TheMasterFrame::OnCreatePatient(wxCommandEvent &e) {
         medicationBundle = {};
         UpdateHeader();
         UpdateMedications();
+        UpdateCave();
     }
 }
 
@@ -675,6 +762,7 @@ void TheMasterFrame::GetMedication(CallContext &ctx, const std::function<void(co
                 }
                 UpdateHeader();
                 UpdateMedications();
+                UpdateCave();
             }
         }
     });
@@ -743,6 +831,7 @@ void TheMasterFrame::OnResetMedication(wxCommandEvent &e) {
     *(medicationBundle->medBundle) = FhirBundle::Parse(web::json::value::parse(medicationBundleResetData));
     UpdateHeader();
     UpdateMedications();
+    UpdateCave();
 }
 
 void TheMasterFrame::OnGetMedication(wxCommandEvent &e) {
@@ -1126,6 +1215,7 @@ void TheMasterFrame::SendMedication(CallContext &ctx,
         }
         pllResultsFunc(pllResults);
         UpdateMedications();
+        UpdateCave();
         std::stringstream str{};
         str << "Recalled " << recallCount << (recallCount == 1 ? " prescription and prescribed " : " prescriptions and prescribed ")
             << prescriptionCount << (prescriptionCount == 1 ? " prescription." : " prescriptions.");

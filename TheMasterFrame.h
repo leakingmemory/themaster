@@ -22,6 +22,7 @@ class FhirExtension;
 class FhirReference;
 class FhirCoding;
 class wxListView;
+class wxNotebook;
 namespace pplx {
     template<class ReturnType> class task;
 }
@@ -53,11 +54,14 @@ private:
     std::string childOrgNo{};
     std::shared_ptr<std::string> accessToken{};
     wxListView *header;
+    wxNotebook *mainCategories;
     wxListView *prescriptions;
+    wxListView *caveListView;
 public:
     TheMasterFrame();
     void UpdateHeader();
     void UpdateMedications();
+    void UpdateCave();
     void OnConnect(wxCommandEvent &e);
     void OnFindPatient(wxCommandEvent &e);
     void OnCreatePatient(wxCommandEvent &e);
