@@ -7,6 +7,10 @@
 #include "DateTime.h"
 #include <sfmbasisapi/fhir/person.h>
 #include <sfmbasisapi/fhir/medstatement.h>
+#include <wx/datectrl.h>
+#include "WxDateConversions.h"
+#include "DateOnly.h"
+#include "DateTime.h"
 
 EditTreatmentDialog::EditTreatmentDialog(wxWindow *parent, const MedBundleData &medBundleData, const std::shared_ptr<FhirMedicationStatement> &medicationStatement) : wxDialog(parent, wxID_ANY, wxT("Edit treatment")), medicationStatement(medicationStatement) {
     {
@@ -53,6 +57,11 @@ EditTreatmentDialog::EditTreatmentDialog(wxWindow *parent, const MedBundleData &
     }
     institutedSelectSizer->Add(institutedSelect, 0, wxALL | wxEXPAND, 5);
     sizer->Add(institutedSelectSizer, 0, wxALL | wxEXPAND, 5);
+    auto *treatmentStartDateSizer = new wxBoxSizer(wxHORIZONTAL);
+    treatmentStartDateSizer->Add(new wxStaticText(this, wxID_ANY, wxT("Treatment start: ")));
+    treatmentStartDate = new wxDatePickerCtrl(this, wxID_ANY);
+    treatmentStartDateSizer->Add(treatmentStartDate, 0, wxALL | wxEXPAND, 5);
+    sizer->Add(treatmentStartDateSizer, 0, wxALL | wxEXPAND, 5);
     auto *buttonsSizer = new wxBoxSizer(wxHORIZONTAL);
     auto *cancelButton = new wxButton(this, wxID_ANY, wxT("Cancel"));
     auto *okButton = new wxButton(this, wxID_ANY, wxT("Ok"));
@@ -95,6 +104,8 @@ void EditTreatmentDialog::OnOk(wxCommandEvent &e) {
         }
     }
     RegInfo institutedByExtension{};
+    std::shared_ptr<FhirExtension> reseptAmendment{};
+    std::shared_ptr<FhirDateValue> extEffectiveStartDate{};
     for (const auto &extension : medicationStatement->GetExtensions()) {
         auto url = extension->GetUrl();
         std::transform(url.cbegin(), url.cend(), url.begin(), [] (char ch) -> char { return static_cast<char>(std::tolower(ch)); });
@@ -146,10 +157,56 @@ void EditTreatmentDialog::OnOk(wxCommandEvent &e) {
             }
             institutedByExtension = std::move(regInfo);
             institutedByExtension.regInfo = extension;
+        } else if (url == "http://ehelse.no/fhir/structuredefinition/sfm-reseptamendment") {
+            if (reseptAmendment) {
+                wxMessageBox(wxT("Duplicate resept amendment on statement"), wxT("Invalid FHIR data"), wxICON_ERROR);
+                return;
+            }
+            reseptAmendment = extension;
+        } else if (url == "effectivedatetime") {
+            auto valueExtension = std::dynamic_pointer_cast<FhirValueExtension>(extension);
+            if (!valueExtension) {
+                wxMessageBox(wxT("Effective date time extension is not a value"), wxT("Invalid FHIR data"), wxICON_ERROR);
+                return;
+            }
+            auto value = std::dynamic_pointer_cast<FhirDateValue>(valueExtension->GetValue());
+            if (!value) {
+                wxMessageBox(wxT("Effective date time is not a date value"), wxT("Invalid FHIR data"), wxICON_ERROR);
+                return;
+            }
+            extEffectiveStartDate = value;
         }
     }
+    if (!reseptAmendment) {
+        wxMessageBox(wxT("No resept amendment on statement"), wxT("Invalid FHIR data"), wxICON_ERROR);
+        return;
+    }
+    std::shared_ptr<FhirDateTimeValue> lastChanged{};
+    for (const auto &extension : reseptAmendment->GetExtensions()) {
+        auto url = extension->GetUrl();
+        std::transform(url.cbegin(), url.cend(), url.begin(), [] (char ch) -> char { return static_cast<char>(std::tolower(ch)); });
+        if (url == "lastchanged") {
+            auto valueExtension = std::dynamic_pointer_cast<FhirValueExtension>(extension);
+            if (!valueExtension) {
+                wxMessageBox(wxT("Last changed on resept amendment is not a value"), wxT("Invalid FHIR data"), wxICON_ERROR);
+                return;
+            }
+            auto value = std::dynamic_pointer_cast<FhirDateTimeValue>(valueExtension->GetValue());
+            if (!value) {
+                wxMessageBox(wxT("Last changed on resept amendment is not a datetime value"), wxT("Invalid FHIR data"), wxICON_ERROR);
+                return;
+            }
+            if (lastChanged) {
+                wxMessageBox(wxT("Duplicate last changed on resept amendment"), wxT("Invalid FHIR data"), wxICON_ERROR);
+                return;
+            }
+            lastChanged = value;
+        }
+    }
+    bool changed{false};
     if (!fullUrl.empty()) {
         if (!institutedByExtension) {
+            changed = true;
             institutedByExtension.regInfo = std::make_shared<FhirExtension>(
                     "http://ehelse.no/fhir/StructureDefinition/sfm-regInfo");
             medicationStatement->AddExtension(institutedByExtension.regInfo);
@@ -168,8 +225,12 @@ void EditTreatmentDialog::OnOk(wxCommandEvent &e) {
         }
         FhirReference reference{fullUrl, "http://ehelse.no/fhir/StructureDefinition/sfm-Practitioner", display};
         if (institutedByExtension.provider) {
-            *(institutedByExtension.provider) = std::move(reference);
+            if (institutedByExtension.provider->GetReference() != reference.GetReference()) {
+                changed = true;
+                *(institutedByExtension.provider) = std::move(reference);
+            }
         } else {
+            changed = true;
             institutedByExtension.provider = std::make_shared<FhirReference>(std::move(reference));
             institutedByExtension.regInfo->AddExtension(std::make_shared<FhirValueExtension>("provider", institutedByExtension.provider));
         }
@@ -179,6 +240,36 @@ void EditTreatmentDialog::OnOk(wxCommandEvent &e) {
         } else {
             institutedByExtension.timestamp = std::make_shared<FhirDateTimeValue>(now.to_iso8601());
             institutedByExtension.regInfo->AddExtension(std::make_shared<FhirValueExtension>("timestamp", institutedByExtension.timestamp));
+        }
+    }
+    auto treatmentStart = treatmentStartDate->GetValue();
+    if (IsValidDate(treatmentStart)) {
+        auto startDate = ToDateOnly(treatmentStart);
+        {
+            auto iso = startDate.ToString();
+            if (extEffectiveStartDate) {
+                if (extEffectiveStartDate->GetRawValue() != iso) {
+                    changed = true;
+                    extEffectiveStartDate->SetValue(iso);
+                }
+            } else {
+                changed = true;
+                medicationStatement->AddExtension(std::make_shared<FhirValueExtension>("effectiveDateTime", std::make_shared<FhirDateValue>(iso)));
+            }
+        }
+        auto startDateTime = DateTimeOffset::FromDate(startDate);
+        auto iso = startDateTime.to_iso8601();
+        if (medicationStatement->GetEffectiveDateTime() != iso) {
+            changed = true;
+            medicationStatement->SetEffectiveDateTime(iso);
+        }
+    }
+    if (changed) {
+        auto iso = DateTimeOffset::Now().to_iso8601();
+        if (lastChanged) {
+            lastChanged->SetDateTime(iso);
+        } else {
+            reseptAmendment->AddExtension(std::make_shared<FhirValueExtension>("lastchanged", std::make_shared<FhirDateTimeValue>(iso)));
         }
     }
     EndDialog(wxID_OK);

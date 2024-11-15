@@ -44,6 +44,7 @@ void PrescriptionDetailsDialog::AddVersion(int row, const std::shared_ptr<FhirMe
 }
 
 void PrescriptionDetailsDialog::DisplayStatement(const std::shared_ptr<FhirMedicationStatement> &statement) {
+    listView->ClearAll();
     listView->AppendColumn(wxT(""));
     listView->AppendColumn(wxT(""));
     int rowNum = 0;
@@ -64,6 +65,8 @@ void PrescriptionDetailsDialog::DisplayStatement(const std::shared_ptr<FhirMedic
     wxString festUpdate{};
     wxString reit{};
     wxString ceaseTime{};
+    wxString treatmentStartDate{};
+    wxString treatmentStartDateExt{};
     std::string amountUnit{};
     FhirCodeableConcept rfstatus{};
     FhirCodeableConcept itemGroup{};
@@ -127,7 +130,8 @@ void PrescriptionDetailsDialog::DisplayStatement(const std::shared_ptr<FhirMedic
         auto extensions = statement->GetExtensions();
         for (const auto &extension : extensions) {
             auto url = extension->GetUrl();
-            if (url == "http://ehelse.no/fhir/StructureDefinition/sfm-reseptamendment") {
+            std::transform(url.cbegin(), url.cend(), url.begin(), [] (char ch) -> char { return static_cast<char>(std::tolower(ch)); });
+            if (url == "http://ehelse.no/fhir/structuredefinition/sfm-reseptamendment") {
                 auto extensions = extension->GetExtensions();
                 for (const auto &extension : extensions) {
                     auto url = extension->GetUrl();
@@ -220,9 +224,9 @@ void PrescriptionDetailsDialog::DisplayStatement(const std::shared_ptr<FhirMedic
                         ereseptdosing.emplace_back(extension);
                     }
                 }
-            } else if (url == "http://ehelse.no/fhir/StructureDefinition/sfm-regInfo") {
+            } else if (url == "http://ehelse.no/fhir/structuredefinition/sfm-reginfo") {
                 regInfos.emplace_back(extension);
-            } else if (url == "http://ehelse.no/fhir/StructureDefinition/sfm-discontinuation") {
+            } else if (url == "http://ehelse.no/fhir/structuredefinition/sfm-discontinuation") {
                 auto extensions = extension->GetExtensions();
                 for (const auto &extension : extensions) {
                     auto url = extension->GetUrl();
@@ -242,10 +246,16 @@ void PrescriptionDetailsDialog::DisplayStatement(const std::shared_ptr<FhirMedic
                         }
                     }
                 }
+            } else if (url == "effectivedatetime") {
+                auto valueExtension = std::dynamic_pointer_cast<FhirValueExtension>(extension);
+                if (valueExtension) {
+                    auto value = std::dynamic_pointer_cast<FhirDateValue>(valueExtension->GetValue());
+                    if (value) {
+                        treatmentStartDateExt = wxString::FromUTF8(value->GetRawValue());
+                    }
+                }
             }
         }
-    }
-    if (statement) {
         auto identifiers = statement->GetIdentifiers();
         for (const auto &identifier : identifiers) {
             auto typeText = identifier.GetType().GetText();
@@ -256,6 +266,7 @@ void PrescriptionDetailsDialog::DisplayStatement(const std::shared_ptr<FhirMedic
                 pllId = wxString::FromUTF8(identifier.GetValue());
             }
         }
+        treatmentStartDate = wxString::FromUTF8(statement->GetEffectiveDateTime());
     }
     this->ereseptdosing = ereseptdosing;
     structuredDosing->Enable(!ereseptdosing.empty());
@@ -426,6 +437,16 @@ void PrescriptionDetailsDialog::DisplayStatement(const std::shared_ptr<FhirMedic
             listView->InsertItem(row, wxT("Type of prescription: "));
             listView->SetItem(row, 1, wxString::FromUTF8(coding[0].GetDisplay()));
         }
+    }
+    if (!treatmentStartDate.empty()) {
+        auto row = rowNum++;
+        listView->InsertItem(row, wxT("Treatment start: "));
+        listView->SetItem(row, 1, treatmentStartDate);
+    }
+    if (!treatmentStartDateExt.empty()) {
+        auto row = rowNum++;
+        listView->InsertItem(row, wxT("Treatment start (extension): "));
+        listView->SetItem(row, 1, treatmentStartDateExt);
     }
     for (const auto &regInfo : regInfos) {
         FhirCodeableConcept status{};

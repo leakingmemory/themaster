@@ -10,6 +10,7 @@
 
 class MedBundleData;
 class FhirMedicationStatement;
+class wxDatePickerCtrl;
 
 class EditTreatmentDialog : public wxDialog {
 private:
@@ -17,6 +18,7 @@ private:
     std::vector<std::string> practitionerDisplays{};
     std::shared_ptr<FhirMedicationStatement> medicationStatement;
     wxComboBox *institutedSelect;
+    wxDatePickerCtrl *treatmentStartDate;
 public:
     EditTreatmentDialog(wxWindow *parent, const MedBundleData &medBundleData, const std::shared_ptr<FhirMedicationStatement> &);
     void OnCancel(wxCommandEvent &e);

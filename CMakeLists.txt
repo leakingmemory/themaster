@@ -36,7 +36,9 @@ add_executable(themaster TheMasterApp.cpp TheMasterApp.h TheMasterFrame.cpp TheM
     AdvancedDosingPeriodDialog.cpp AdvancedDosingPeriodDialog.h EreseptdosingDialog.cpp EreseptdosingDialog.h
     DateOnly.cpp DateOnly.h TimeConst.cpp TimeConst.h Duration.cpp Duration.h Lazy.cpp Lazy.h
         EditTreatmentDialog.cpp
-        EditTreatmentDialog.h)
+        EditTreatmentDialog.h
+        WxDateConversions.h
+        WxDateConversions.cpp)
 target_link_libraries(themaster PRIVATE -lsfmbasisapi -ljjwtid -lmedfest)
 target_link_libraries(themaster PRIVATE cpprestsdk::cpprest -lcrypto)
 target_link_libraries(themaster PRIVATE ${wxWidgets_LIBRARIES})
