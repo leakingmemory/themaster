@@ -49,6 +49,7 @@
 #include "SignPllDialog.h"
 #include "PrescriptionChangesService.h"
 #include "EditTreatmentDialog.h"
+#include "CaveDetailsDialog.h"
 
 constexpr int PrescriptionNameColumnWidth = 250;
 constexpr int PllColumnWidth = 50;
@@ -129,6 +130,7 @@ TheMasterFrame::TheMasterFrame() : wxFrame(nullptr, wxID_ANY, "The Master"),
     auto *cavePage = new wxPanel(mainCategories, wxID_ANY);
     auto *cavePageSizer = new wxBoxSizer(wxVERTICAL);
     caveListView = new wxListView(cavePage, wxID_ANY);
+    caveListView->Bind(wxEVT_CONTEXT_MENU, &TheMasterFrame::OnCaveContextMenu, this, wxID_ANY);
     cavePageSizer->Add(caveListView, 1, wxEXPAND | wxALL, 5);
     cavePage->SetSizerAndFit(cavePageSizer);
     mainCategories->AddPage(cavePage, wxT("CAVE"));
@@ -161,6 +163,8 @@ TheMasterFrame::TheMasterFrame() : wxFrame(nullptr, wxID_ANY, "The Master"),
     Bind(wxEVT_MENU, &TheMasterFrame::OnPrescriptionRenew, this, TheMaster_PrescriptionRenew_Id);
     Bind(wxEVT_MENU, &TheMasterFrame::OnPrescriptionRenewWithChanges, this, TheMaster_PrescriptionRenewWithChanges_Id);
     Bind(wxEVT_MENU, &TheMasterFrame::OnTreatmentEdit, this, TheMaster_TreatmentEdit_Id);
+
+    Bind(wxEVT_MENU, &TheMasterFrame::OnCaveDetails, this, TheMaster_CaveDetails_Id);
 }
 
 void TheMasterFrame::UpdateHeader() {
@@ -279,6 +283,7 @@ void TheMasterFrame::UpdateMedications() {
 
 void TheMasterFrame::UpdateCave() {
     caveListView->ClearAll();
+    displayedAllergies.clear();
     if (!medicationBundle || !medicationBundle->medBundle) {
         return;
     }
@@ -341,6 +346,7 @@ void TheMasterFrame::UpdateCave() {
         if (display.empty()) {
             display = allergy->GetCode().GetText();
         }
+        displayedAllergies.emplace_back(allergy);
         caveListView->InsertItem(row++, wxString::FromUTF8(display));
     }
 }
@@ -2098,7 +2104,7 @@ void TheMasterFrame::OnShowFestDbQuotas(wxCommandEvent &e) {
     dialog.ShowModal();
 }
 
-void TheMasterFrame::OnPrescriptionContextMenu(wxContextMenuEvent &e) {
+void TheMasterFrame::OnPrescriptionContextMenu(const wxContextMenuEvent &e) {
     if (prescriptions->GetSelectedItemCount() != 1) {
         return;
     }
@@ -2118,7 +2124,7 @@ void TheMasterFrame::OnPrescriptionContextMenu(wxContextMenuEvent &e) {
     PopupMenu(&menu);
 }
 
-void TheMasterFrame::OnPrescriptionDetails(wxCommandEvent &e) {
+void TheMasterFrame::OnPrescriptionDetails(const wxCommandEvent &e) {
     if (prescriptions->GetSelectedItemCount() != 1) {
         return;
     }
@@ -2131,7 +2137,7 @@ void TheMasterFrame::OnPrescriptionDetails(wxCommandEvent &e) {
     dialog.ShowModal();
 }
 
-void TheMasterFrame::OnPrescriptionRecall(wxCommandEvent &e) {
+void TheMasterFrame::OnPrescriptionRecall(const wxCommandEvent &e) {
     if (prescriptions->GetSelectedItemCount() != 1) {
         return;
     }
@@ -2267,7 +2273,7 @@ void TheMasterFrame::OnPrescriptionRecall(wxCommandEvent &e) {
     UpdateMedications();
 }
 
-void TheMasterFrame::OnPrescriptionCease(wxCommandEvent &e) {
+void TheMasterFrame::OnPrescriptionCease(const wxCommandEvent &e) {
     if (prescriptions->GetSelectedItemCount() != 1) {
         return;
     }
@@ -2444,7 +2450,7 @@ void TheMasterFrame::OnPrescriptionCease(wxCommandEvent &e) {
     UpdateMedications();
 }
 
-void TheMasterFrame::OnPrescriptionRenew(wxCommandEvent &e) {
+void TheMasterFrame::OnPrescriptionRenew(const wxCommandEvent &e) {
     if (prescriptions->GetSelectedItemCount() != 1) {
         return;
     }
@@ -2462,7 +2468,7 @@ void TheMasterFrame::OnPrescriptionRenew(wxCommandEvent &e) {
     UpdateMedications();
 }
 
-void TheMasterFrame::OnPrescriptionRenewWithChanges(wxCommandEvent &e) {
+void TheMasterFrame::OnPrescriptionRenewWithChanges(const wxCommandEvent &e) {
     if (prescriptions->GetSelectedItemCount() != 1) {
         return;
     }
@@ -2563,7 +2569,7 @@ void TheMasterFrame::OnPrescriptionRenewWithChanges(wxCommandEvent &e) {
     PrescribeMedicament(prescriptionDialog, reseptId);
 }
 
-void TheMasterFrame::OnTreatmentEdit(wxCommandEvent &e) {
+void TheMasterFrame::OnTreatmentEdit(const wxCommandEvent &e) {
     if (prescriptions->GetSelectedItemCount() != 1) {
         return;
     }
@@ -2577,4 +2583,42 @@ void TheMasterFrame::OnTreatmentEdit(wxCommandEvent &e) {
     }
     EditTreatmentDialog editTreatmentDialog{this, *medicationBundle, medicationStatement};
     editTreatmentDialog.ShowModal();
+}
+
+void TheMasterFrame::OnCaveContextMenu(const wxContextMenuEvent &e) {
+    if (caveListView->GetSelectedItemCount() != 1) {
+        return;
+    }
+    auto selected = caveListView->GetFirstSelected();
+    if (selected < 0 || selected >= displayedAllergies.size()) {
+        return;
+    }
+    auto allergy = displayedAllergies[selected];
+    FhirCoding coding{};
+    {
+        auto codings = allergy->GetCode().GetCoding();
+        if (codings.size() == 1) {
+            coding = codings[0];
+        }
+    }
+    std::string display{coding.GetDisplay()};
+    if (display.empty()) {
+        display = allergy->GetCode().GetText();
+    }
+    wxMenu menu(wxString::FromUTF8(display));
+    menu.Append(TheMaster_CaveDetails_Id, wxT("Details"));
+    PopupMenu(&menu);
+}
+
+void TheMasterFrame::OnCaveDetails(const wxCommandEvent &e) {
+    if (caveListView->GetSelectedItemCount() != 1) {
+        return;
+    }
+    auto selected = caveListView->GetFirstSelected();
+    if (selected < 0 || selected >= displayedAllergies.size()) {
+        return;
+    }
+    auto allergy = displayedAllergies[selected];
+    CaveDetailsDialog caveDetailsDialog{this, allergy};
+    caveDetailsDialog.ShowModal();
 }

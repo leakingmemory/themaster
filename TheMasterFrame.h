@@ -14,6 +14,7 @@
 #include "MedBundleData.h"
 #include "TheMasterIds.h"
 
+class FhirAllergyIntolerance;
 class PatientStore;
 class PatientInformation;
 class PrescriberRef;
@@ -37,6 +38,7 @@ private:
     std::string medicationBundleResetData{};
     std::unique_ptr<MedBundleData> medicationBundle{};
     std::vector<std::vector<std::shared_ptr<FhirMedicationStatement>>> displayedMedicationStatements{};
+    std::vector<std::shared_ptr<FhirAllergyIntolerance>> displayedAllergies{};
     std::string lastGetmedRequest{};
     std::string lastGetmedResponse{};
     std::string lastSendmedRequest{};
@@ -98,13 +100,15 @@ public:
     void OnUpdateFest(wxCommandEvent &e);
     void OnShowFestVersions(wxCommandEvent &e);
     void OnShowFestDbQuotas(wxCommandEvent &e);
-    void OnPrescriptionContextMenu(wxContextMenuEvent &e);
-    void OnPrescriptionDetails(wxCommandEvent &e);
-    void OnPrescriptionRecall(wxCommandEvent &e);
-    void OnPrescriptionCease(wxCommandEvent &e);
-    void OnPrescriptionRenew(wxCommandEvent &e);
-    void OnPrescriptionRenewWithChanges(wxCommandEvent &e);
-    void OnTreatmentEdit(wxCommandEvent &e);
+    void OnPrescriptionContextMenu(const wxContextMenuEvent &e);
+    void OnPrescriptionDetails(const wxCommandEvent &e);
+    void OnPrescriptionRecall(const wxCommandEvent &e);
+    void OnPrescriptionCease(const wxCommandEvent &e);
+    void OnPrescriptionRenew(const wxCommandEvent &e);
+    void OnPrescriptionRenewWithChanges(const wxCommandEvent &e);
+    void OnTreatmentEdit(const wxCommandEvent &e);
+    void OnCaveContextMenu(const wxContextMenuEvent &e);
+    void OnCaveDetails(const wxCommandEvent &e);
 };
 
 
