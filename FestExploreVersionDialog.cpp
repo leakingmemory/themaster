@@ -1156,7 +1156,15 @@ void FestExploreOppfKodeverkItem::Show(wxPanel &panel, wxPanel &topRight) {
         auto row = rowNum++;
         kodeverkList->InsertItem(row, wxString::FromUTF8(element.GetKode()));
         kodeverkList->SetItem(row, 1, wxString::FromUTF8(element.GetId()));
-        auto term = element.GetTerm();
+        Term term{};
+        for (const auto mt : element.GetTermList()) {
+            term = mt;
+            auto lang = term.GetSprak().GetValue();
+            std::transform(lang.cbegin(), lang.cend(), lang.begin(), [] (char ch) -> char { return static_cast<char>(std::tolower(ch)); });
+            if (lang == "no" || lang == "nb" || lang == "nn") {
+                break;
+            }
+        }
         kodeverkList->SetItem(row, 2, wxString::FromUTF8(term.GetTerm()));
         kodeverkList->SetItem(row, 3, wxString::FromUTF8(term.GetBeskrivelseTerm()));
         kodeverkList->SetItem(row, 4, wxString::FromUTF8(term.GetSprak().GetDistinguishedName()));
@@ -1184,7 +1192,15 @@ std::string FestExploreElementItem::GetName() const {
 }
 
 std::vector<std::tuple<std::string, std::string>> FestExploreElementItem::GetDetails() {
-    auto term = Element::GetTerm();
+    Term term{};
+    for (const auto mt : Element::GetTermList()) {
+        term = mt;
+        auto lang = term.GetSprak().GetValue();
+        std::transform(lang.cbegin(), lang.cend(), lang.begin(), [] (char ch) -> char { return static_cast<char>(std::tolower(ch)); });
+        if (lang == "no" || lang == "nb" || lang == "nn") {
+            break;
+        }
+    }
     auto sprak = term.GetSprak();
     return {
             {"Id", Element::GetId()},
