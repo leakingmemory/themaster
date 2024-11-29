@@ -22,8 +22,9 @@ enum class FindMedicamentSelections {
     TWO_OR_MORE_PRESCRIPTION_VALIDITY = 1
 };
 
-FindMedicamentDialog::FindMedicamentDialog(wxWindow *parent) :
+FindMedicamentDialog::FindMedicamentDialog(wxWindow *parent, const std::shared_ptr<FestDb> &festDb) :
     wxDialog(parent, wxID_ANY, wxT("Find medicament")),
+    festDb(festDb),
     searchDebouncer(),
     merkevareToPrescriptionValidity([this] () { return CreateMerkevareToPrescriptionValidity(); }),
     merkevareWithTwoOrMoreReseptgyldighet([this] () { return FindMerkevareWithTwoOrMoreReseptgyldighet(); }),
@@ -75,7 +76,7 @@ FindMedicamentDialog::FindMedicamentDialog(wxWindow *parent) :
 }
 
 bool FindMedicamentDialog::CanOpen() const {
-    return festDb.IsOpen();
+    return festDb->IsOpen();
 }
 
 std::shared_ptr<FindMedicamentDialogSearchResult> FindMedicamentDialog::PerformSearch() {
@@ -83,7 +84,7 @@ std::shared_ptr<FindMedicamentDialogSearchResult> FindMedicamentDialog::PerformS
     auto selection = static_cast<FindMedicamentSelections>(selections->GetSelection());
     auto term = searchInput->GetValue().ToStdString();
     if (term.size() > 2 || selection == FindMedicamentSelections::TWO_OR_MORE_PRESCRIPTION_VALIDITY) {
-        auto legemiddelVirkestoffOppfs = festDb.GetAllPLegemiddelVirkestoff();
+        auto legemiddelVirkestoffOppfs = festDb->GetAllPLegemiddelVirkestoff();
         if (selection == FindMedicamentSelections::TWO_OR_MORE_PRESCRIPTION_VALIDITY) {
             std::vector<FestUuid> ids{};
             {
@@ -95,7 +96,7 @@ std::shared_ptr<FindMedicamentDialogSearchResult> FindMedicamentDialog::PerformS
             }
             auto iterator = legemiddelVirkestoffOppfs.begin();
             while (iterator != legemiddelVirkestoffOppfs.end()) {
-                auto id = festDb.GetLegemiddelVirkestoffId(*iterator);
+                auto id = festDb->GetLegemiddelVirkestoffId(*iterator);
                 auto found = std::find(ids.begin(), ids.end(), id);
                 if (found != ids.end()) {
                     ids.erase(found);
@@ -109,25 +110,25 @@ std::shared_ptr<FindMedicamentDialogSearchResult> FindMedicamentDialog::PerformS
             std::vector<FestUuid> legemiddelVirkestoffIds{};
             std::vector<FestUuid> legemiddelMerkevareIds{};
             std::vector<FestUuid> legemiddelpakningIds{};
-            result->legemiddelVirkestoffList = festDb.FindLegemiddelVirkestoff(legemiddelVirkestoffOppfs, term);
+            result->legemiddelVirkestoffList = festDb->FindLegemiddelVirkestoff(legemiddelVirkestoffOppfs, term);
             for (const auto &legemiddelVirkestoff: result->legemiddelVirkestoffList) {
                 legemiddelVirkestoffIds.emplace_back(legemiddelVirkestoff.GetId());
                 auto refMerkevare = legemiddelVirkestoff.GetRefLegemiddelMerkevare();
                 for (const auto &merkevareId: refMerkevare) {
                     FestUuid festId{merkevareId};
-                    auto merkevare = festDb.GetLegemiddelMerkevare(festId);
+                    auto merkevare = festDb->GetLegemiddelMerkevare(festId);
                     legemiddelMerkevareIds.emplace_back(festId);
                     result->legemiddelMerkevareList.emplace_back(merkevare);
                 }
                 auto refPakning = legemiddelVirkestoff.GetRefPakning();
                 for (const auto &pakningId: refPakning) {
                     FestUuid festId{pakningId};
-                    auto pakning = festDb.GetLegemiddelpakning(festId);
+                    auto pakning = festDb->GetLegemiddelpakning(festId);
                     legemiddelpakningIds.emplace_back(festId);
                     result->legemiddelpakningList.emplace_back(pakning);
                 }
             }
-            auto legemiddelMerkevareOppfs = festDb.GetAllPLegemiddelMerkevare();
+            auto legemiddelMerkevareOppfs = festDb->GetAllPLegemiddelMerkevare();
             if (selection == FindMedicamentSelections::TWO_OR_MORE_PRESCRIPTION_VALIDITY) {
                 std::vector<FestUuid> ids{};
                 {
@@ -139,7 +140,7 @@ std::shared_ptr<FindMedicamentDialogSearchResult> FindMedicamentDialog::PerformS
                 }
                 auto iterator = legemiddelMerkevareOppfs.begin();
                 while (iterator != legemiddelMerkevareOppfs.end()) {
-                    auto id = festDb.GetLegemiddelMerkevareId(*iterator);
+                    auto id = festDb->GetLegemiddelMerkevareId(*iterator);
                     auto found = std::find(ids.begin(), ids.end(), id);
                     if (found != ids.end()) {
                         ids.erase(found);
@@ -149,7 +150,7 @@ std::shared_ptr<FindMedicamentDialogSearchResult> FindMedicamentDialog::PerformS
                     }
                 }
             }
-            auto legemiddelMerkevareSearchList = festDb.FindLegemiddelMerkevare(legemiddelMerkevareOppfs, term);
+            auto legemiddelMerkevareSearchList = festDb->FindLegemiddelMerkevare(legemiddelMerkevareOppfs, term);
             for (const auto &legemiddelMerkevare: legemiddelMerkevareSearchList) {
                 FestUuid festId{legemiddelMerkevare.GetId()};
                 bool found{false};
@@ -164,7 +165,7 @@ std::shared_ptr<FindMedicamentDialogSearchResult> FindMedicamentDialog::PerformS
                     result->legemiddelMerkevareList.emplace_back(legemiddelMerkevare);
                 }
             }
-            auto legemiddelpakningOppfs = festDb.GetAllPLegemiddelpakning();
+            auto legemiddelpakningOppfs = festDb->GetAllPLegemiddelpakning();
             if (selection == FindMedicamentSelections::TWO_OR_MORE_PRESCRIPTION_VALIDITY) {
                 std::vector<FestUuid> ids{};
                 {
@@ -176,7 +177,7 @@ std::shared_ptr<FindMedicamentDialogSearchResult> FindMedicamentDialog::PerformS
                 }
                 auto iterator = legemiddelpakningOppfs.begin();
                 while (iterator != legemiddelpakningOppfs.end()) {
-                    auto id = festDb.GetLegemiddelpakningId(*iterator);
+                    auto id = festDb->GetLegemiddelpakningId(*iterator);
                     auto found = std::find(ids.begin(), ids.end(), id);
                     if (found != ids.end()) {
                         ids.erase(found);
@@ -186,7 +187,7 @@ std::shared_ptr<FindMedicamentDialogSearchResult> FindMedicamentDialog::PerformS
                     }
                 }
             }
-            auto legemiddelpakningSearchList = festDb.FindLegemiddelpakning(legemiddelpakningOppfs, term);
+            auto legemiddelpakningSearchList = festDb->FindLegemiddelpakning(legemiddelpakningOppfs, term);
             for (const auto &legemiddelpakning: legemiddelpakningSearchList) {
                 FestUuid festId{legemiddelpakning.GetId()};
                 bool found{false};
@@ -202,10 +203,10 @@ std::shared_ptr<FindMedicamentDialogSearchResult> FindMedicamentDialog::PerformS
                 }
             }
             for (const auto &plv: legemiddelVirkestoffOppfs) {
-                auto unpacked = festDb.GetLegemiddelVirkestoff(plv);
-                if (festDb.PLegemiddelVirkestoffHasOneOfMerkevare(plv, legemiddelMerkevareIds) ||
-                    festDb.PLegemiddelVirkestoffHasOneOfPakning(plv, legemiddelpakningIds)) {
-                    auto id = festDb.GetLegemiddelVirkestoffId(plv);
+                auto unpacked = festDb->GetLegemiddelVirkestoff(plv);
+                if (festDb->PLegemiddelVirkestoffHasOneOfMerkevare(plv, legemiddelMerkevareIds) ||
+                    festDb->PLegemiddelVirkestoffHasOneOfPakning(plv, legemiddelpakningIds)) {
+                    auto id = festDb->GetLegemiddelVirkestoffId(plv);
                     bool found{false};
                     for (const auto &eid: legemiddelVirkestoffIds) {
                         if (id == eid) {
@@ -215,7 +216,7 @@ std::shared_ptr<FindMedicamentDialogSearchResult> FindMedicamentDialog::PerformS
                     }
                     if (!found) {
                         legemiddelVirkestoffIds.emplace_back(id);
-                        auto legemiddelVirkestoff = festDb.GetLegemiddelVirkestoff(id);
+                        auto legemiddelVirkestoff = festDb->GetLegemiddelVirkestoff(id);
                         result->legemiddelVirkestoffList.emplace_back(legemiddelVirkestoff);
                         auto refMerkevare = legemiddelVirkestoff.GetRefLegemiddelMerkevare();
                         for (auto merkevareId: refMerkevare) {
@@ -229,7 +230,7 @@ std::shared_ptr<FindMedicamentDialogSearchResult> FindMedicamentDialog::PerformS
                             }
                             if (!found) {
                                 legemiddelMerkevareIds.emplace_back(festId);
-                                result->legemiddelMerkevareList.emplace_back(festDb.GetLegemiddelMerkevare(festId));
+                                result->legemiddelMerkevareList.emplace_back(festDb->GetLegemiddelMerkevare(festId));
                             }
                         }
                         auto refPakning = legemiddelVirkestoff.GetRefPakning();
@@ -244,7 +245,7 @@ std::shared_ptr<FindMedicamentDialogSearchResult> FindMedicamentDialog::PerformS
                             }
                             if (!found) {
                                 legemiddelpakningIds.emplace_back(festId);
-                                result->legemiddelpakningList.emplace_back(festDb.GetLegemiddelpakning(festId));
+                                result->legemiddelpakningList.emplace_back(festDb->GetLegemiddelpakning(festId));
                             }
                         }
                     }
@@ -258,10 +259,10 @@ std::shared_ptr<FindMedicamentDialogSearchResult> FindMedicamentDialog::PerformS
 std::map<FestUuid, std::vector<PReseptgyldighet>>
 FindMedicamentDialog::CreateMerkevareToPrescriptionValidity() const {
     std::map<FestUuid, std::vector<PReseptgyldighet>> map{};
-    auto allPMerkevare = festDb.GetAllPLegemiddelMerkevare();
+    auto allPMerkevare = festDb->GetAllPLegemiddelMerkevare();
     for (const auto &pmerkevare : allPMerkevare) {
-        auto id = festDb.GetLegemiddelMerkevareId(pmerkevare);
-        auto prep = festDb.GetPReseptgyldighet(pmerkevare);
+        auto id = festDb->GetLegemiddelMerkevareId(pmerkevare);
+        auto prep = festDb->GetPReseptgyldighet(pmerkevare);
         map.insert_or_assign(id, prep);
     }
     return map;
@@ -281,9 +282,9 @@ std::vector<FestUuid> FindMedicamentDialog::FindMerkevareWithTwoOrMoreReseptgyld
 std::vector<FestUuid> FindMedicamentDialog::FindLegemiddelVirkestoffWithTwoOrMoreReseptgyldighet() {
     std::vector<FestUuid> ids{};
     auto &map = merkevareToPrescriptionValidity.operator std::map<FestUuid, std::vector<PReseptgyldighet>> &();
-    auto allPVirkestoff = festDb.GetAllPLegemiddelVirkestoff();
+    auto allPVirkestoff = festDb->GetAllPLegemiddelVirkestoff();
     for (const auto &pvirkestoff : allPVirkestoff) {
-        auto merkevareIds = festDb.GetRefMerkevare(pvirkestoff);
+        auto merkevareIds = festDb->GetRefMerkevare(pvirkestoff);
         bool matching{false};
         for (auto &mId : merkevareIds) {
             auto iterator = map.find(mId);
@@ -295,7 +296,7 @@ std::vector<FestUuid> FindMedicamentDialog::FindLegemiddelVirkestoffWithTwoOrMor
             }
         }
         if (matching) {
-            ids.emplace_back(festDb.GetLegemiddelVirkestoffId(pvirkestoff));
+            ids.emplace_back(festDb->GetLegemiddelVirkestoffId(pvirkestoff));
         }
     }
     return ids;
@@ -304,9 +305,9 @@ std::vector<FestUuid> FindMedicamentDialog::FindLegemiddelVirkestoffWithTwoOrMor
 std::vector<FestUuid> FindMedicamentDialog::FindLegemiddelpakningWithTwoOrMoreReseptgyldighet() {
     std::vector<FestUuid> ids{};
     auto &map = merkevareToPrescriptionValidity.operator std::map<FestUuid, std::vector<PReseptgyldighet>> &();
-    auto allPPakning = festDb.GetAllPLegemiddelpakning();
+    auto allPPakning = festDb->GetAllPLegemiddelpakning();
     for (const auto &ppakning : allPPakning) {
-        auto merkevareIds = festDb.GetRefMerkevare(ppakning);
+        auto merkevareIds = festDb->GetRefMerkevare(ppakning);
         bool matching{false};
         for (auto &mId : merkevareIds) {
             auto iterator = map.find(mId);
@@ -318,7 +319,7 @@ std::vector<FestUuid> FindMedicamentDialog::FindLegemiddelpakningWithTwoOrMoreRe
             }
         }
         if (matching) {
-            ids.emplace_back(festDb.GetLegemiddelpakningId(ppakning));
+            ids.emplace_back(festDb->GetLegemiddelpakningId(ppakning));
         }
     }
     return ids;

@@ -8,6 +8,7 @@
 #include <string>
 #include <vector>
 
+class FhirCoding;
 class FhirCodeableConcept;
 
 class MedicalCodedValue {
@@ -23,10 +24,14 @@ public:
     [[nodiscard]] std::string GetCode() const { return code; }
     [[nodiscard]] std::string GetDisplay() const { return display; }
     [[nodiscard]] std::string GetShortDisplay() const { return shortDisplay; }
+    [[nodiscard]] FhirCoding ToCoding() const;
     [[nodiscard]] FhirCodeableConcept ToCodeableConcept() const;
     static std::vector<MedicalCodedValue> GetVolvenMedicamentForm();
     static std::vector<MedicalCodedValue> GetVolvenRecallCode();
     static std::vector<MedicalCodedValue> GetVolvenCessationCode();
+    static std::vector<MedicalCodedValue> GetCaveSourceOfInformation();
+    static std::vector<MedicalCodedValue> GetCaveTypeOfReaction();
+    static std::vector<MedicalCodedValue> GetCaveVerificationStatus();
 
     constexpr bool operator == (const MedicalCodedValue &other) const {
         return system == other.system && code == other.code && display == other.display && shortDisplay == other.shortDisplay;

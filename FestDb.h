@@ -18,6 +18,8 @@ class FestVectors;
 class LegemiddelVirkestoff;
 class LegemiddelMerkevare;
 class Legemiddelpakning;
+class VirkestoffMedStyrke;
+class Virkestoff;
 class FestUuid;
 class POppfLegemiddelMerkevare;
 class POppfLegemiddelVirkestoff;
@@ -72,6 +74,8 @@ public:
     [[nodiscard]] Legemiddelpakning GetLegemiddelpakningByVarenr(const std::string &) const;
     [[nodiscard]] OppfKodeverk GetKodeverkById(const std::string &) const;
     [[nodiscard]] std::vector<Legemiddelpakning> GetLegemiddelpakningForMerkevare(FestUuid uuid) const;
+    [[nodiscard]] VirkestoffMedStyrke GetVirkestoffMedStyrke(FestUuid uuid) const;
+    [[nodiscard]] Virkestoff GetVirkestoff(FestUuid uuid) const;
     [[nodiscard]] FestUuid GetVirkestoffForVirkestoffMedStyrkeId(FestUuid virkestoffMedStyrkeId) const;
     [[nodiscard]] std::vector<FestUuid> GetVirkestoffMedStyrkeForVirkestoffId(FestUuid virkestoffId);
     [[nodiscard]] std::vector<POppfLegemiddelMerkevare> GetAllPLegemiddelMerkevare() const;

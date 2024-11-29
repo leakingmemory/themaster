@@ -6,6 +6,7 @@
 #include <sfmbasisapi/fhir/medstatement.h>
 #include <sfmbasisapi/fhir/composition.h>
 #include <sfmbasisapi/fhir/person.h>
+#include <sfmbasisapi/fhir/allergy.h>
 #include <boost/uuid/uuid.hpp>
 #include <boost/uuid/uuid_generators.hpp>
 #include <boost/uuid/uuid_io.hpp>
@@ -617,6 +618,83 @@ public:
     }
 };
 
+class AllergySectionInList {
+private:
+    std::vector<FhirCompositionSection> sections;
+    FhirCompositionSection *allergySection{nullptr};
+public:
+    AllergySectionInList() : sections(), allergySection(nullptr) {}
+    AllergySectionInList(const std::vector<FhirCompositionSection> &sections) : sections(sections) {
+        FindAllergySection();
+    }
+    constexpr AllergySectionInList(const AllergySectionInList &cp) : sections(cp.sections) {
+        FindAllergySection();
+    }
+    constexpr AllergySectionInList(AllergySectionInList &&mv) noexcept : sections(std::move(mv.sections)) {
+        ForceFindAllergySection();
+    }
+    constexpr AllergySectionInList &operator =(const AllergySectionInList &cp) {
+        if (&cp == this) {
+            return *this;
+        }
+        sections = cp.sections;
+        FindAllergySection();
+        return *this;
+    }
+    constexpr AllergySectionInList &operator =(AllergySectionInList &&mv) noexcept {
+        if (&mv == this) {
+            return *this;
+        }
+        sections = std::move(mv.sections);
+        ForceFindAllergySection();
+        return *this;
+    }
+    constexpr void FindAllergySection() {
+        allergySection = nullptr;
+        for (auto &section : this->sections) {
+            auto coding = section.GetCode().GetCoding();
+            if (coding.size() == 1 && coding[0].GetCode() == "sectionAllergies") {
+                if (allergySection != nullptr) {
+                    throw MedBundleDataException("Duplicate allergy section");
+                }
+                allergySection = &section;
+            }
+        }
+    }
+    constexpr void ForceFindAllergySection() noexcept {
+        allergySection = nullptr;
+        for (auto &section : this->sections) {
+            auto coding = section.GetCode().GetCoding();
+            if (coding.size() == 1 && coding[0].GetCode() == "sectionAllergies") {
+                allergySection = &section;
+            }
+        }
+    }
+    constexpr operator bool () const {
+        return allergySection != nullptr;
+    }
+    [[nodiscard]] std::vector<FhirReference> GetEntries() const {
+        if (allergySection == nullptr) {
+            return {};
+        }
+        return allergySection->GetEntries();
+    }
+    [[nodiscard]] constexpr std::vector<FhirCompositionSection> GetSections() const {
+        return sections;
+    }
+    void ClearEmptyReason() {
+        if (allergySection == nullptr) {
+            return;
+        }
+        allergySection->SetTextStatus("generated");
+        allergySection->SetTextXhtml("<xhtml:div xmlns:xhtml=\"http://www.w3.org/1999/xhtml\">List of medications</xhtml:div>");
+        allergySection->SetEmptyReason({});
+    }
+    void SetEntries(const std::vector<FhirReference> &entries) {
+        allergySection->SetEntries(entries);
+    }
+};
+
 void MedBundleData::Prescribe(const std::shared_ptr<FhirMedication> &medicament, const PrescriptionData &prescriptionData, const std::string &renewPrescriptionId) {
     std::shared_ptr<FhirComposition> composition{};
     std::vector<RenewStatement> renewStatements{};
@@ -756,4 +834,34 @@ void MedBundleData::Prescribe(const std::shared_ptr<FhirMedication> &medicament,
     }
     medicationSectionInList.SetEntries(entries);
     composition->SetSections(medicationSectionInList.GetSections());
+}
+
+void MedBundleData::AddCave(const std::shared_ptr<FhirAllergyIntolerance> &allergy) {
+    std::shared_ptr<FhirComposition> composition{};
+    for (const auto &entry : medBundle->GetEntries()) {
+        auto compositionObject = std::dynamic_pointer_cast<FhirComposition>(entry.GetResource());
+        if (compositionObject) {
+            if (composition) {
+                throw MedBundleDataException("Duplicate composition objects in bundle");
+            }
+            composition = compositionObject;
+        }
+    }
+    if (!composition) {
+        throw MedBundleDataException("Missing composition object in bundle");
+    }
+    AllergySectionInList allergySectionInList{composition->GetSections()};
+    if (!allergySectionInList) {
+        throw MedBundleDataException("No allergy section");
+    }
+    auto entries = allergySectionInList.GetEntries();
+    std::string fullUrl{"urn:uuid:"};
+    {
+        fullUrl.append(allergy->GetId());
+        FhirBundleEntry bundleEntry{fullUrl, allergy};
+        medBundle->AddEntry(bundleEntry);
+    }
+    entries.emplace_back(fullUrl, "http://nhn.no/kj/fhir/StructureDefinition/KjAllergyIntolerance", "KjAllergyIntolerance");
+    allergySectionInList.SetEntries(entries);
+    composition->SetSections(allergySectionInList.GetSections());
 }

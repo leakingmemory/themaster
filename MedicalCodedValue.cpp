@@ -5,6 +5,20 @@
 #include "MedicalCodedValue.h"
 #include <sfmbasisapi/fhir/value.h>
 
+FhirCoding MedicalCodedValue::ToCoding() const {
+    auto system = this->system;
+    if (!system.empty() && !system.starts_with("urn:oid:") && !system.starts_with("http:")) {
+        system.insert(0, "urn:oid:");
+    }
+    if (!shortDisplay.empty()) {
+        FhirCoding coding{system, code, shortDisplay};
+        return coding;
+    } else {
+        FhirCoding coding{system, code, display};
+        return coding;
+    }
+}
+
 FhirCodeableConcept MedicalCodedValue::ToCodeableConcept() const {
     if (code.empty()) {
         if (!display.empty()) {
@@ -18,7 +32,7 @@ FhirCodeableConcept MedicalCodedValue::ToCodeableConcept() const {
         }
     }
     auto system = this->system;
-    if (!system.empty() && !system.starts_with("urn:oid:")) {
+    if (!system.empty() && !system.starts_with("urn:oid:") && !system.starts_with("http:")) {
         system.insert(0, "urn:oid:");
     }
     if (!shortDisplay.empty()) {
@@ -48,6 +62,9 @@ public:
 constexpr const char medicamentForm[] = "urn:oid:2.16.578.1.12.4.1.1.7448";
 constexpr const char recallCode[] = "urn:oid:2.16.578.1.12.4.1.1.7500";
 constexpr const char cessationCode[] = "urn:oid:2.16.578.1.12.4.1.1.7494";
+constexpr const char caveSourceOfInformation[] = "http://nhn.no/kj/fhir/CodeSystem/SourceOfInformation";
+constexpr const char caveTypeOfReaction[] = "http://nhn.no/kj/fhir/CodeSystem/TypeOfReaction";
+constexpr const char caveVerificationStatus[] = "http://terminology.hl7.org/CodeSystem/allergyintolerance-verification";
 
 class VolvenMedicamentForm : public MedicalCodingSystem<medicamentForm> {
 public:
@@ -62,6 +79,21 @@ public:
 class VolvenCessationCode : public MedicalCodingSystem<cessationCode> {
 public:
     constexpr VolvenCessationCode();
+};
+
+class CaveSourceOfInformation : public MedicalCodingSystem<caveSourceOfInformation> {
+public:
+    constexpr CaveSourceOfInformation();
+};
+
+class CaveTypeOfReaction : public MedicalCodingSystem<caveTypeOfReaction> {
+public:
+    constexpr CaveTypeOfReaction();
+};
+
+class CaveVerificationStatus : public MedicalCodingSystem<caveVerificationStatus> {
+public:
+    constexpr CaveVerificationStatus();
 };
 
 constexpr VolvenMedicamentForm::VolvenMedicamentForm() {
@@ -725,6 +757,46 @@ constexpr VolvenCessationCode::VolvenCessationCode() {
     Add("X", "Annen årsak");
 }
 
+constexpr CaveSourceOfInformation::CaveSourceOfInformation() {
+    Add("1", "Resultat av tester/analyser");
+    Add("2", "Observert av behandlende lege");
+    Add("3", "Pasientens egne opplysninger");
+    Add("4", "Pårørendes opplysninger");
+    Add("5", "Hentet fra tidligere journal");
+    Add("6", "Annet");
+    Add("7", "Opplyst av ansvarlig behandler");
+}
+
+constexpr CaveTypeOfReaction::CaveTypeOfReaction() {
+    Add("1", "Anafylaktisk reaksjon");
+    Add("2", "Blodtrykksfall");
+    Add("3", "Alvorlig arytmi");
+    Add("4", "Larynxødem");
+    Add("5", "Astma");
+    Add("6", "Uspesifisert tung pust");
+    Add("7", "Redusert bevissthet/forvirring");
+    Add("8", "Generaliserte kramper");
+    Add("9", "Angioødem/alvorlig generalisert urticaria");
+    Add("10", "Hudreaksjon INA");
+    Add("11", "Mindre alvorlig hudreaksjon");
+    Add("12", "Irritasjon i slimhinner");
+    Add("13", "Oppkast, diaré, magesmerter");
+    Add("14", "Nyresvikt/redusert nyrefunksjon");
+    Add("15", "Blodaplasier/bloddysplasier");
+    Add("16", "Leversvikt/redusert leverfunksjon");
+    Add("17", "Rhabdomyolyse");
+    Add("18", "Annen alvorlig reaksjon");
+    Add("19", "Annen mindre alvorlig reaksjon");
+    Add("20", "Ukjent reaksjon");
+}
+
+constexpr CaveVerificationStatus::CaveVerificationStatus() {
+    Add("unconfirmed", 	"Unconfirmed");
+    Add("confirmed", 	"Confirmed");
+    Add("refuted", 	"Refuted");
+    Add("entered-in-error", 	"Entered in Error");
+}
+
 static VolvenMedicamentForm GetVolvenMedicamentFormV() {
     return {};
 }
@@ -732,6 +804,15 @@ static VolvenRecallCode GetVolvenRecallCodeV() {
     return {};
 }
 static VolvenCessationCode GetVolvenCessationCodeV() {
+    return {};
+}
+static CaveSourceOfInformation GetCaveSourceOfInformationV() {
+    return {};
+}
+static CaveTypeOfReaction GetCaveTypeOfReactionV() {
+    return {};
+}
+static CaveVerificationStatus GetCaveVerificationStatusV() {
     return {};
 }
 
@@ -745,4 +826,16 @@ std::vector<MedicalCodedValue> MedicalCodedValue::GetVolvenRecallCode() {
 
 std::vector<MedicalCodedValue> MedicalCodedValue::GetVolvenCessationCode() {
     return GetVolvenCessationCodeV().values;
+}
+
+std::vector<MedicalCodedValue> MedicalCodedValue::GetCaveSourceOfInformation() {
+    return GetCaveSourceOfInformationV().values;
+}
+
+std::vector<MedicalCodedValue> MedicalCodedValue::GetCaveTypeOfReaction() {
+    return GetCaveTypeOfReactionV().values;
+}
+
+std::vector<MedicalCodedValue> MedicalCodedValue::GetCaveVerificationStatus() {
+    return GetCaveVerificationStatusV().values;
 }

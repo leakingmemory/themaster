@@ -10,6 +10,8 @@
 #include <medfest/Struct/Decoded/OppfLegemiddelpakning.h>
 #include <medfest/Struct/Decoded/OppfLegemiddeldose.h>
 #include <medfest/Struct/Decoded/OppfRefusjon.h>
+#include <medfest/Struct/Decoded/OppfVirkestoffMedStyrke.h>
+#include <medfest/Struct/Decoded/OppfVirkestoff.h>
 #include <medfest/Struct/Decoded/OppfKodeverk.h>
 #include <medfest/Struct/Packed/PPakningsinfo.h>
 #include "DataDirectory.h"
@@ -326,6 +328,36 @@ std::vector<Legemiddelpakning> FestDb::GetLegemiddelpakningForMerkevare(FestUuid
         }
     }
     return list;
+}
+
+VirkestoffMedStyrke FestDb::GetVirkestoffMedStyrke(FestUuid uuid) const {
+    FestDbContainer festDbContainer = GetActiveFestDb();
+    if (!festDbContainer.festVectors) {
+        return {};
+    }
+    auto poppfs = festDbContainer.festVectors->GetVirkestoffMedStyrke(*festDeserializer);
+    for (const auto poppf : poppfs) {
+        auto id = festDeserializer->Unpack(poppf.GetId());
+        if (uuid == id) {
+            return festDeserializer->Unpack(static_cast<const PVirkestoffMedStyrke &>(poppf));
+        }
+    }
+    return {};
+}
+
+Virkestoff FestDb::GetVirkestoff(FestUuid uuid) const {
+    FestDbContainer festDbContainer = GetActiveFestDb();
+    if (!festDbContainer.festVectors) {
+        return {};
+    }
+    auto poppfs = festDbContainer.festVectors->GetVirkestoff(*festDeserializer);
+    for (const auto poppf : poppfs) {
+        auto id = festDeserializer->Unpack(poppf.GetId());
+        if (uuid == id) {
+            return festDeserializer->Unpack(static_cast<const PVirkestoff &>(poppf));
+        }
+    }
+    return {};
 }
 
 FestUuid FestDb::GetVirkestoffForVirkestoffMedStyrkeId(FestUuid virkestoffMedStyrkeId) const {

@@ -35,6 +35,7 @@ enum {
     TheMaster_PrescriptionDialog_MoveDosingPeriodDown = 27,
     TheMaster_PrescriptionDialog_DeleteDosingPeriod = 28,
     TheMaster_CaveDetails_Id = 29,
+    TheMaster_AddCaveMedicament_Id = 30
 };
 
 #endif //DRWHATSNOT_THEMASTERIDS_H

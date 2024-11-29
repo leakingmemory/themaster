@@ -50,6 +50,7 @@
 #include "PrescriptionChangesService.h"
 #include "EditTreatmentDialog.h"
 #include "CaveDetailsDialog.h"
+#include "RegisterCaveDialog.h"
 
 constexpr int PrescriptionNameColumnWidth = 250;
 constexpr int PllColumnWidth = 50;
@@ -70,6 +71,8 @@ TheMasterFrame::TheMasterFrame() : wxFrame(nullptr, wxID_ANY, "The Master"),
     festMenu->Append(TheMaster_UpdateFest_Id, "Update FEST");
     festMenu->Append(TheMaster_ShowFestVersions_Id, "FEST versions");
     festMenu->Append(TheMaster_ShowFestDbQuotas_Id, "FEST DB quotas");
+    auto *caveMenu = new wxMenu();
+    caveMenu->Append(TheMaster_AddCaveMedicament_Id, "Add medicament");
     auto *medicationMenu = new wxMenu();
     medicationMenu->Append(TheMaster_PrescribeMagistral_Id, "Prescribe magistral");
     medicationMenu->Append(TheMaster_PrescribeMedicament_Id, "Prescribe medicament");
@@ -91,6 +94,7 @@ TheMasterFrame::TheMasterFrame() : wxFrame(nullptr, wxID_ANY, "The Master"),
     menuBar->Append(serverMenu, "Server");
     menuBar->Append(patientMenu, "Patient");
     menuBar->Append(medicationMenu, "Medication");
+    menuBar->Append(caveMenu, "CAVE");
     menuBar->Append(festMenu, "FEST");
     SetMenuBar(menuBar);
 
@@ -165,6 +169,7 @@ TheMasterFrame::TheMasterFrame() : wxFrame(nullptr, wxID_ANY, "The Master"),
     Bind(wxEVT_MENU, &TheMasterFrame::OnTreatmentEdit, this, TheMaster_TreatmentEdit_Id);
 
     Bind(wxEVT_MENU, &TheMasterFrame::OnCaveDetails, this, TheMaster_CaveDetails_Id);
+    Bind(wxEVT_MENU, &TheMasterFrame::OnAddCaveMedicament, this, TheMaster_AddCaveMedicament_Id);
 }
 
 void TheMasterFrame::UpdateHeader() {
@@ -323,6 +328,7 @@ void TheMasterFrame::UpdateCave() {
         }
     }
     caveListView->AppendColumn(wxT("Display"));
+    caveListView->SetColumnWidth(0, 300);
     int row = 0;
     for (const auto &reference : allergySection.GetEntries()) {
         std::shared_ptr<FhirAllergyIntolerance> allergy{};
@@ -2028,7 +2034,11 @@ void TheMasterFrame::OnPrescribeMagistral(wxCommandEvent &e) {
 }
 
 void TheMasterFrame::OnPrescribeMedicament(wxCommandEvent &e) {
-    FindMedicamentDialog findMedicamentDialog{this};
+    std::shared_ptr<FestDb> festDb = std::make_shared<FestDb>();
+    if (!festDb->IsOpen()) {
+        return;
+    }
+    FindMedicamentDialog findMedicamentDialog{this, festDb};
     if (!findMedicamentDialog.CanOpen()) {
         wxMessageBox(wxT("Prescribe medicament requires a FEST DB. Please update FEST and try again."), wxT("No FEST DB"), wxICON_ERROR);
         return;
@@ -2040,10 +2050,6 @@ void TheMasterFrame::OnPrescribeMedicament(wxCommandEvent &e) {
     findMedicamentDialog.ShowModal();
     auto medicament = findMedicamentDialog.GetSelected();
     if (medicament) {
-        std::shared_ptr<FestDb> festDb = std::make_shared<FestDb>();
-        if (!festDb->IsOpen()) {
-            return;
-        }
         SfmMedicamentMapper medicamentMapper{festDb, medicament};
         std::vector<MedicamentPackage> packages{};
         {
@@ -2621,4 +2627,41 @@ void TheMasterFrame::OnCaveDetails(const wxCommandEvent &e) {
     auto allergy = displayedAllergies[selected];
     CaveDetailsDialog caveDetailsDialog{this, allergy};
     caveDetailsDialog.ShowModal();
+}
+
+void TheMasterFrame::OnAddCaveMedicament(const wxCommandEvent &e) {
+    std::shared_ptr<LegemiddelCore> legemiddelCore{};
+    auto festDb = std::make_shared<FestDb>();
+    if (!festDb->IsOpen()) {
+        return;
+    }
+    {
+        FindMedicamentDialog findMedicamentDialog{this, festDb};
+        if (!findMedicamentDialog.CanOpen()) {
+            wxMessageBox(wxT("Add CAVE medicament requires a FEST DB. Please update FEST and try again."),
+                         wxT("No FEST DB"), wxICON_ERROR);
+            return;
+        }
+        if (!medicationBundle || !medicationBundle->medBundle || helseidIdToken.empty()) {
+            wxMessageBox(wxT("Select patient and run 'get medication' to add medicament to CAVE"),
+                         wxT("No open patient"), wxICON_ERROR);
+            return;
+        }
+        if (findMedicamentDialog.ShowModal() != wxID_OK) {
+            return;
+        }
+        legemiddelCore = findMedicamentDialog.GetSelected();
+        if (!legemiddelCore) {
+            return;
+        }
+    }
+    auto prescriberRef = medicationBundle->GetPrescriber(helseidIdToken);
+    FhirReference fhirPractitioner{prescriberRef.uuid, "http://nhn.no/kj/fhir/StructureDefinition/KjPractitionerRole", prescriberRef.name};
+    auto patientRef = medicationBundle->GetSubjectRef();
+    RegisterCaveDialog registerCave{this, festDb, *legemiddelCore, fhirPractitioner, patientRef};
+    if (registerCave.ShowModal() != wxID_OK) {
+        return;
+    }
+    medicationBundle->AddCave(registerCave.ToFhir());
+    UpdateCave();
 }

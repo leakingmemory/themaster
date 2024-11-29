@@ -19,7 +19,7 @@ class LegemiddelCore;
 
 class FindMedicamentDialog : public wxDialog {
 private:
-    FestDb festDb{};
+    std::shared_ptr<FestDb> festDb{};
     WxDebouncer searchDebouncer;
     Lazy<std::function<std::map<FestUuid,std::vector<PReseptgyldighet>> ()>> merkevareToPrescriptionValidity;
     Lazy<std::function<std::vector<FestUuid> ()>> merkevareWithTwoOrMoreReseptgyldighet;
@@ -32,7 +32,7 @@ private:
     wxListView *listView;
     wxButton *okButton;
 public:
-    FindMedicamentDialog(wxWindow *frame);
+    FindMedicamentDialog(wxWindow *frame, const std::shared_ptr<FestDb> &);
     bool CanOpen() const;
     std::shared_ptr<FindMedicamentDialogSearchResult> PerformSearch();
     std::map<FestUuid,std::vector<PReseptgyldighet>> CreateMerkevareToPrescriptionValidity() const;
