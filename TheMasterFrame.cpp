@@ -171,6 +171,7 @@ TheMasterFrame::TheMasterFrame() : wxFrame(nullptr, wxID_ANY, "The Master"),
     Bind(wxEVT_MENU, &TheMasterFrame::OnCaveDetails, this, TheMaster_CaveDetails_Id);
     Bind(wxEVT_MENU, &TheMasterFrame::OnAddCaveMedicament, this, TheMaster_AddCaveMedicament_Id);
     Bind(wxEVT_MENU, &TheMasterFrame::OnEditCaveMedicament, this, TheMaster_EditCaveMedicament_Id);
+    Bind(wxEVT_MENU, &TheMasterFrame::OnDeleteCaveMedicament, this, TheMaster_DeleteCaveMedicament_Id);
 }
 
 void TheMasterFrame::UpdateHeader() {
@@ -2615,6 +2616,7 @@ void TheMasterFrame::OnCaveContextMenu(const wxContextMenuEvent &e) {
     wxMenu menu(wxString::FromUTF8(display));
     menu.Append(TheMaster_CaveDetails_Id, wxT("Details"));
     menu.Append(TheMaster_EditCaveMedicament_Id, wxT("Edit"));
+    menu.Append(TheMaster_DeleteCaveMedicament_Id, wxT("Delete"));
     PopupMenu(&menu);
 }
 
@@ -2685,4 +2687,20 @@ void TheMasterFrame::OnEditCaveMedicament(const wxCommandEvent &e) {
         *allergy = *(registerCaveDialog.ToFhir());
         UpdateCave();
     }
+}
+
+void TheMasterFrame::OnDeleteCaveMedicament(const wxCommandEvent &e) {
+    std::shared_ptr<FhirAllergyIntolerance> allergy;
+    {
+        if (caveListView->GetSelectedItemCount() != 1) {
+            return;
+        }
+        auto selection = caveListView->GetFirstSelected();
+        if (selection < 0 || displayedAllergies.size() <= selection) {
+            return;
+        }
+        allergy = displayedAllergies[selection];
+    }
+    medicationBundle->DeleteCave(allergy);
+    UpdateCave();
 }

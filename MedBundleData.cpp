@@ -865,3 +865,51 @@ void MedBundleData::AddCave(const std::shared_ptr<FhirAllergyIntolerance> &aller
     allergySectionInList.SetEntries(entries);
     composition->SetSections(allergySectionInList.GetSections());
 }
+
+void MedBundleData::DeleteCave(const std::shared_ptr<FhirAllergyIntolerance> &allergy) {
+    std::shared_ptr<FhirComposition> composition{};
+    std::string entryId{};
+    {
+        auto entries = medBundle->GetEntries();
+        auto iterator = entries.begin();
+        while (iterator != entries.end()) {
+            const auto &entry = *iterator;
+            auto resource = entry.GetResource();
+            if (resource == allergy) {
+                entryId = entry.GetFullUrl();
+                iterator = entries.erase(iterator);
+                continue;
+            }
+            auto compositionObject = std::dynamic_pointer_cast<FhirComposition>(resource);
+            if (compositionObject) {
+                if (composition) {
+                    throw MedBundleDataException("Duplicate composition objects in bundle");
+                }
+                composition = compositionObject;
+            }
+            ++iterator;
+        }
+        if (entryId.empty()) {
+            return;
+        }
+        medBundle->SetEntries(entries);
+    }
+    if (!composition) {
+        throw MedBundleDataException("Missing composition object in bundle");
+    }
+    AllergySectionInList allergySectionInList{composition->GetSections()};
+    if (!allergySectionInList) {
+        throw MedBundleDataException("No allergy section");
+    }
+    auto entries = allergySectionInList.GetEntries();
+    auto iterator = entries.begin();
+    while (iterator != entries.end()) {
+        if (iterator->GetReference() == entryId) {
+            iterator = entries.erase(iterator);
+            break;
+        }
+        ++iterator;
+    }
+    allergySectionInList.SetEntries(entries);
+    composition->SetSections(allergySectionInList.GetSections());
+}

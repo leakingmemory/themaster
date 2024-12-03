@@ -46,6 +46,7 @@ public:
     void ReplayRenewals(const std::shared_ptr<FhirBundle> &otherBundle);
     void Prescribe(const std::shared_ptr<FhirMedication> &, const PrescriptionData &, const std::string &renewPrescriptionId = "");
     void AddCave(const std::shared_ptr<FhirAllergyIntolerance> &allergy);
+    void DeleteCave(const std::shared_ptr<FhirAllergyIntolerance> &allergy);
 };
 
 #endif //DRWHATSNOT_MEDBUNDLEDATA_H

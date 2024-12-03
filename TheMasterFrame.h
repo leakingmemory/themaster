@@ -111,6 +111,7 @@ public:
     void OnCaveDetails(const wxCommandEvent &e);
     void OnAddCaveMedicament(const wxCommandEvent &e);
     void OnEditCaveMedicament(const wxCommandEvent &e);
+    void OnDeleteCaveMedicament(const wxCommandEvent &e);
 };
 
 
