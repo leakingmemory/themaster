@@ -47,7 +47,9 @@ private:
     wxComboBox *verificationStatus;
     wxButton *addButton;
 public:
+    RegisterCaveDialog(wxWindow *parent, const std::vector<CaveCoding> &availableCodings, const FhirReference &recorder, const FhirReference &patient);
     RegisterCaveDialog(wxWindow *parent, const std::shared_ptr<FestDb> &festDb, const LegemiddelCore &, const FhirReference &recorder, const FhirReference &patient);
+    RegisterCaveDialog(wxWindow *parent, const FhirAllergyIntolerance &);
     bool IsValid() const;
     void Revalidate();
     void RevalidateCommand(const wxCommandEvent &e);

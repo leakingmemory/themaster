@@ -110,6 +110,7 @@ public:
     void OnCaveContextMenu(const wxContextMenuEvent &e);
     void OnCaveDetails(const wxCommandEvent &e);
     void OnAddCaveMedicament(const wxCommandEvent &e);
+    void OnEditCaveMedicament(const wxCommandEvent &e);
 };
 
 

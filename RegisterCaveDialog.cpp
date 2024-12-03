@@ -154,8 +154,10 @@ void GetCaveCodings::Visit(const Legemiddelpakning &pakning) {
     Substances(substIds);
 }
 
-RegisterCaveDialog::RegisterCaveDialog(wxWindow *parent, const std::shared_ptr<FestDb> &festDb, const LegemiddelCore &legemiddelCore, const FhirReference &recorder, const FhirReference &patient) : wxDialog(parent, wxID_ANY, wxT("Register CAVE")) {
-    availableCodings = GetCaveCodings(festDb, legemiddelCore).operator const std::vector<CaveCoding> &();
+RegisterCaveDialog::RegisterCaveDialog(wxWindow *parent, const std::vector<CaveCoding> &availableCodings,
+                                       const FhirReference &recorder, const FhirReference &patient)
+                                       : wxDialog(parent, wxID_ANY, wxT("Register CAVE")) {
+    this->availableCodings = availableCodings;
     {
         boost::uuids::random_generator generator;
         boost::uuids::uuid randomUUID = generator();
@@ -229,6 +231,110 @@ RegisterCaveDialog::RegisterCaveDialog(wxWindow *parent, const std::shared_ptr<F
     sizer->Add(buttonsSizer, 0, wxEXPAND | wxALL, 5);
 
     SetSizerAndFit(sizer);
+}
+
+RegisterCaveDialog::RegisterCaveDialog(wxWindow *parent, const std::shared_ptr<FestDb> &festDb, const LegemiddelCore &legemiddelCore, const FhirReference &recorder, const FhirReference &patient) : RegisterCaveDialog(parent, GetCaveCodings(festDb, legemiddelCore).operator const std::vector<CaveCoding> &(), recorder, patient) {}
+
+static std::vector<CaveCoding> GetCaveCodingsFromExisting(const FhirAllergyIntolerance &allergy) {
+    std::vector<CaveCoding> codings{};
+    std::string type{};
+    auto code = allergy.GetCode();
+    auto coding = code.GetCoding();
+    if (coding.empty()) {
+        return codings;
+    }
+    std::string url = coding[0].GetSystem();
+    std::transform(url.cbegin(), url.cend(), url.begin(), [] (char ch) -> char { return static_cast<char>(std::tolower(ch)); });
+    if (url == "http://nhn.no/kj/fhir/codesystem/atc") {
+        type = "ATC";
+    } else if (url == "http://nhn.no/kj/fhir/codesystem/drugtradename") {
+        type = "Drug trade name";
+    } else if (url == "http://nhn.no/kj/fhir/CodeSystem/activesubstance") {
+        type = "Substance";
+    }
+    codings.emplace_back(coding[0], coding[0].GetDisplay(), type);
+    return codings;
+}
+
+RegisterCaveDialog::RegisterCaveDialog(wxWindow *parent, const FhirAllergyIntolerance &allergy) : RegisterCaveDialog(parent, GetCaveCodingsFromExisting(allergy), allergy.GetRecorder(), allergy.GetPatient()) {
+    codingsListView->Select(0);
+    id = allergy.GetId();
+    recordedDate = allergy.GetRecordedDate();
+    recorder = allergy.GetRecorder();
+    patient = allergy.GetPatient();
+    for (const auto &extension : allergy.GetCode().GetExtensions()) {
+        auto url = extension->GetUrl();
+        std::transform(url.cbegin(), url.cend(), url.begin(), [] (char ch) -> char { return static_cast<char>(std::tolower(ch)); });
+        if (url == "http://nhn.no/kj/fhir/structuredefinition/kjinactiveingredient") {
+            auto valueExtension = std::dynamic_pointer_cast<FhirValueExtension>(extension);
+            if (valueExtension) {
+                auto value = std::dynamic_pointer_cast<FhirBooleanValue>(valueExtension->GetValue());
+                if (value) {
+                    inactiveIngredient->SetValue(value->IsTrue());
+                }
+            }
+        }
+    }
+    {
+        auto reactions = allergy.GetReactions();
+        if (!reactions.empty()) {
+            auto manifestations = reactions[0].GetManifestations();
+            if (!manifestations.empty()) {
+                auto codings = manifestations[0].GetCoding();
+                if (!codings.empty()) {
+                    auto code = codings[0].GetCode();
+                    int index = 0;
+                    for (auto reactionCode : MedicalCodedValue::GetCaveTypeOfReaction()) {
+                        if (code == reactionCode.GetCode()) {
+                            typeOfReaction->SetSelection(index);
+                            break;
+                        }
+                        ++index;
+                    }
+                }
+            }
+        }
+    }
+    {
+        auto codeableConcept = allergy.GetVerificationStatus();
+        auto codings = codeableConcept.GetCoding();
+        if (!codings.empty()) {
+            auto code = codings[0].GetCode();
+            int index = 0;
+            for (auto codesetCode : MedicalCodedValue::GetCaveVerificationStatus()) {
+                if (codesetCode.GetCode() == code) {
+                    verificationStatus->SetSelection(index);
+                    break;
+                }
+                index++;
+            }
+        }
+    }
+    {
+        std::string sourceOfInfoCoding{};
+        for (const auto &extension: allergy.GetExtensions()) {
+            auto url = extension->GetUrl();
+            std::transform(url.cbegin(), url.cend(), url.begin(),
+                           [](char ch) -> char { return static_cast<char>(std::tolower(ch)); });
+            if (url == "http://nhn.no/kj/fhir/structuredefinition/kjsourceofinformation") {
+                auto valueExtension = std::dynamic_pointer_cast<FhirValueExtension>(extension);
+                if (valueExtension) {
+                    auto value = std::dynamic_pointer_cast<FhirCodingValue>(valueExtension->GetValue());
+                    if (value) {
+                        sourceOfInfoCoding = value->GetCode();
+                    }
+                }
+            }
+        }
+        int index = 0;
+        for (const auto &coding : MedicalCodedValue::GetCaveSourceOfInformation()) {
+            if (sourceOfInfoCoding == coding.GetCode()) {
+                sourceOfInformation->SetSelection(index);
+                break;
+            }
+            ++index;
+        }
+    }
 }
 
 bool RegisterCaveDialog::IsValid() const {
