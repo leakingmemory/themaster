@@ -58,7 +58,7 @@ private:
     wxSpinCtrlDouble *amountCtrl{nullptr};
     wxComboBox *amountUnitCtrl{nullptr};
     wxSpinCtrl *reitCtrl{};
-    wxTextCtrl *applicationAreaCtrl{};
+    wxComboBox *applicationAreaCtrl{};
     wxComboBox *prescriptionValidityCtrl{};
     wxDatePickerCtrl *startDate{};
     wxDatePickerCtrl *expirationDate{};
@@ -70,6 +70,7 @@ private:
     std::vector<MedicalCodedValue> amountUnit;
     std::vector<MedicalCodedValue> dosingUnit;
     std::vector<MedicalCodedValue> kortdoser;
+    std::vector<MedicalCodedValue> medicamentUses;
     std::vector<PrescriptionValidity> prescriptionValidity;
     std::vector<std::shared_ptr<AdvancedDosingPeriod>> dosingPeriods{};
     std::function<void (std::shared_ptr<AdvancedDosingPeriod> &&)> addDosingPeriod{[] (std::shared_ptr<AdvancedDosingPeriod> &&) {}};
@@ -80,7 +81,7 @@ private:
     NumPackagesSizers CreateNumPackages(wxWindow *parent);
     wxBoxSizer *CreateAmount(wxWindow *parent);
 public:
-    PrescriptionDialog(TheMasterFrame *, const std::shared_ptr<FestDb> &festDb, const std::shared_ptr<FhirMedication> &, const std::vector<MedicalCodedValue> &amountUnit, const std::vector<MedicalCodedValue> &medicamentType, bool package = false, const std::vector<MedicamentPackage> &packages = {}, const std::vector<MedicalCodedValue> &dosingUnit = {}, const std::vector<MedicalCodedValue> &kortdoser = {}, const std::vector<PrescriptionValidity> &prescriptionValidity = {});
+    PrescriptionDialog(TheMasterFrame *, const std::shared_ptr<FestDb> &festDb, const std::shared_ptr<FhirMedication> &, const std::vector<MedicalCodedValue> &amountUnit, const std::vector<MedicalCodedValue> &medicamentType, const std::vector<MedicalCodedValue> &listOfMedicamentUses, bool package = false, const std::vector<MedicamentPackage> &packages = {}, const std::vector<MedicalCodedValue> &dosingUnit = {}, const std::vector<MedicalCodedValue> &kortdoser = {}, const std::vector<PrescriptionValidity> &prescriptionValidity = {});
     PrescriptionDialog & operator += (const PrescriptionData &);
     void OnCancel(wxCommandEvent &e);
 private:

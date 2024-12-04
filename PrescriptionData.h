@@ -40,6 +40,7 @@ struct PrescriptionData {
     std::string lastChanged{};
     MedicalCodedValue typeresept{};
     MedicalCodedValue use{};
+    MedicalCodedValue applicationAreaCoded{};
     std::string applicationArea{};
     bool genericSubstitutionAccepted{true};
     std::string prescribedByDisplay{};

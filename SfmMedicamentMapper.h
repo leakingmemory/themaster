@@ -30,6 +30,7 @@ private:
     std::vector<SfmMedicamentMapper> packages{};
     std::vector<MedicalCodedValue> prescriptionUnit{};
     std::vector<MedicalCodedValue> medicamentType{};
+    std::vector<MedicalCodedValue> medicamentUses{};
     std::vector<PrescriptionValidity> prescriptionValidity{};
     std::string packageDescription{};
     std::shared_ptr<FestDb> festDb;
@@ -49,6 +50,9 @@ public:
     }
     [[nodiscard]] std::vector<MedicalCodedValue> GetMedicamentType() const {
         return medicamentType;
+    }
+    [[nodiscard]] std::vector<MedicalCodedValue> GetMedicamentUses() const {
+        return medicamentUses;
     }
     [[nodiscard]] std::vector<PrescriptionValidity> GetPrescriptionValidity() const {
         return prescriptionValidity;

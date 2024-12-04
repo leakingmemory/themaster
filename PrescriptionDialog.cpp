@@ -61,7 +61,7 @@ wxBoxSizer *PrescriptionDialog::CreateAmount(wxWindow *parent) {
     return amountSizer;
 }
 
-PrescriptionDialog::PrescriptionDialog(TheMasterFrame *frame, const std::shared_ptr<FestDb> &festDb, const std::shared_ptr<FhirMedication> &medication, const std::vector<MedicalCodedValue> &amountUnit, const std::vector<MedicalCodedValue> &medicamentType, bool package, const std::vector<MedicamentPackage> &packages, const std::vector<MedicalCodedValue> &dosingUnit, const std::vector<MedicalCodedValue> &kortdoser, const std::vector<PrescriptionValidity> &prescriptionValidity) : wxDialog(frame, wxID_ANY, wxT("Prescription")), festDb(festDb), medication(medication), amountUnit(amountUnit), packages(packages), dosingUnit(dosingUnit), kortdoser(kortdoser), prescriptionValidity(prescriptionValidity) {
+PrescriptionDialog::PrescriptionDialog(TheMasterFrame *frame, const std::shared_ptr<FestDb> &festDb, const std::shared_ptr<FhirMedication> &medication, const std::vector<MedicalCodedValue> &amountUnit, const std::vector<MedicalCodedValue> &medicamentType, const std::vector<MedicalCodedValue> &listOfMedicamentUses, bool package, const std::vector<MedicamentPackage> &packages, const std::vector<MedicalCodedValue> &dosingUnit, const std::vector<MedicalCodedValue> &kortdoser, const std::vector<PrescriptionValidity> &prescriptionValidity) : wxDialog(frame, wxID_ANY, wxT("Prescription")), festDb(festDb), medication(medication), amountUnit(amountUnit), packages(packages), dosingUnit(dosingUnit), kortdoser(kortdoser), medicamentUses(listOfMedicamentUses), prescriptionValidity(prescriptionValidity) {
     DateOnly startDate = DateOnly::Today();
     DateOnly endDate = startDate;
     endDate.AddYears(1);
@@ -125,7 +125,11 @@ PrescriptionDialog::PrescriptionDialog(TheMasterFrame *frame, const std::shared_
         reitSizer->Add(reitCtrl, 1, wxEXPAND | wxALL, 5);
         auto *applicationAreaSizer = new wxBoxSizer(wxHORIZONTAL);
         auto *applicationAreaLabel = new wxStaticText(this, wxID_ANY, wxT("Application:"));
-        applicationAreaCtrl = new wxTextCtrl(this, wxID_ANY);
+        applicationAreaCtrl = new wxComboBox(this, wxID_ANY);
+        applicationAreaCtrl->SetEditable(true);
+        for (const auto &use : medicamentUses) {
+            applicationAreaCtrl->Append(wxString::FromUTF8(use.GetDisplay()));
+        }
         applicationAreaSizer->Add(applicationAreaLabel, 0, wxEXPAND | wxALL, 5);
         applicationAreaSizer->Add(applicationAreaCtrl, 1, wxEXPAND | wxALL, 5);
         sizer->Add(typeSelection, 0, wxEXPAND | wxALL, 5);
@@ -406,6 +410,7 @@ struct PrescriptionDialogData {
     std::string dosingUnitPlural{};
     std::string dosingText{};
     std::string dssn{};
+    MedicalCodedValue applicationAreaCoded{};
     std::string applicationArea{};
     double numberOfPackages{0};
     double amount{0};
@@ -537,6 +542,12 @@ PrescriptionDialogData PrescriptionDialog::GetDialogData() const {
     }
     dialogData.reit = reitCtrl->GetValue();
     dialogData.applicationArea = applicationAreaCtrl->GetValue();
+    for (const auto &cv : medicamentUses) {
+        if (cv.GetDisplay() == dialogData.applicationArea) {
+            dialogData.applicationAreaCoded = cv;
+            break;
+        }
+    }
     return dialogData;
 }
 
@@ -722,6 +733,7 @@ static void SetPrescriptionData(PrescriptionData &prescriptionData, const Prescr
     prescriptionData.amountUnit = dialogData.amountUnit;
     prescriptionData.amountIsSet = dialogData.amountIsSet;
     prescriptionData.reit = dialogData.reit;
+    prescriptionData.applicationAreaCoded = dialogData.applicationAreaCoded;
     prescriptionData.applicationArea = dialogData.applicationArea;
     prescriptionData.itemGroup = {"urn:oid:2.16.578.1.12.4.1.1.7402", "L", "Legemiddel", "Legemiddel"};
     prescriptionData.rfstatus = {"urn:oid:2.16.578.1.12.4.1.1.7408", "E", "Ekspederbar", "Ekspederbar"};

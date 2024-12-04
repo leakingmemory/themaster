@@ -2026,7 +2026,7 @@ void TheMasterFrame::OnPrescribeMagistral(wxCommandEvent &e) {
         return;
     }
     if (magistralBuilderDialog.ShowModal() == wxID_OK) {
-        PrescriptionDialog prescriptionDialog{this, std::make_shared<FestDb>(), std::make_shared<FhirMedication>(magistralBuilderDialog.GetMagistralMedicament().ToFhir()), {}, {}, true};
+        PrescriptionDialog prescriptionDialog{this, std::make_shared<FestDb>(), std::make_shared<FhirMedication>(magistralBuilderDialog.GetMagistralMedicament().ToFhir()), {}, {}, {}, true};
         auto res = prescriptionDialog.ShowModal();
         if (res != wxID_OK) {
             return;
@@ -2064,7 +2064,7 @@ void TheMasterFrame::OnPrescribeMedicament(wxCommandEvent &e) {
         }
         std::vector<MedicalCodedValue> dosingUnits = GetMedicamentDosingUnit(festDb, *medicament).operator std::vector<MedicalCodedValue>();
         std::vector<MedicalCodedValue> kortdoser = GetLegemiddelKortdoser(festDb, *medicament).operator std::vector<MedicalCodedValue>();
-        PrescriptionDialog prescriptionDialog{this, festDb, std::make_shared<FhirMedication>(medicamentMapper.GetMedication()), medicamentMapper.GetPrescriptionUnit(), medicamentMapper.GetMedicamentType(), medicamentMapper.IsPackage(), packages, dosingUnits, kortdoser, medicamentMapper.GetPrescriptionValidity()};
+        PrescriptionDialog prescriptionDialog{this, festDb, std::make_shared<FhirMedication>(medicamentMapper.GetMedication()), medicamentMapper.GetPrescriptionUnit(), medicamentMapper.GetMedicamentType(), medicamentMapper.GetMedicamentUses(), medicamentMapper.IsPackage(), packages, dosingUnits, kortdoser, medicamentMapper.GetPrescriptionValidity()};
         auto res = prescriptionDialog.ShowModal();
         if (res != wxID_OK) {
             return;
@@ -2568,7 +2568,7 @@ void TheMasterFrame::OnPrescriptionRenewWithChanges(const wxCommandEvent &e) {
     }
     std::vector<MedicalCodedValue> dosingUnits = GetMedicamentDosingUnit(festDb, *legemiddelCore).operator std::vector<MedicalCodedValue>();
     std::vector<MedicalCodedValue> kortdoser = GetLegemiddelKortdoser(festDb, *legemiddelCore).operator std::vector<MedicalCodedValue>();
-    PrescriptionDialog prescriptionDialog{this, festDb, std::make_shared<FhirMedication>(medicamentMapper.GetMedication()), medicamentMapper.GetPrescriptionUnit(), medicamentMapper.GetMedicamentType(), medicamentMapper.IsPackage(), packages, dosingUnits, kortdoser, medicamentMapper.GetPrescriptionValidity()};
+    PrescriptionDialog prescriptionDialog{this, festDb, std::make_shared<FhirMedication>(medicamentMapper.GetMedication()), medicamentMapper.GetPrescriptionUnit(), medicamentMapper.GetMedicamentType(), medicamentMapper.GetMedicamentUses(), medicamentMapper.IsPackage(), packages, dosingUnits, kortdoser, medicamentMapper.GetPrescriptionValidity()};
     prescriptionDialog += prescriptionData;
     auto res = prescriptionDialog.ShowModal();
     if (res != wxID_OK) {

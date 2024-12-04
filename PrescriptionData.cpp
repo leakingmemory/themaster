@@ -60,6 +60,18 @@ void PrescriptionData::FromFhir(const FhirMedicationStatement &medicationStateme
                                 }
                             }
                         }
+                        if (url == "coded") {
+                            auto valueExtension = std::dynamic_pointer_cast<FhirValueExtension>(extension);
+                            if (valueExtension) {
+                                auto value = std::dynamic_pointer_cast<FhirCodeableConceptValue>(valueExtension->GetValue());
+                                if (value) {
+                                    auto codings = value->GetCoding();
+                                    if (!codings.empty()) {
+                                        applicationArea = codings[0].GetDisplay();
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -309,15 +321,23 @@ FhirMedicationStatement PrescriptionData::ToFhir() const {
             dosage.AddExtension(useExt);
         }
         {
-            std::shared_ptr<FhirValueExtension> applicationAreaTextExt = std::make_shared<FhirValueExtension>(
-                    "text",
-                    std::make_shared<FhirString>(applicationArea)
-            );
-            std::shared_ptr<FhirExtension> applicationAreaExt = std::make_shared<FhirExtension>(
+            std::shared_ptr<FhirValueExtension> applicationAreaExt;
+            if (applicationAreaCoded.GetCode().empty()) {
+                applicationAreaExt = std::make_shared<FhirValueExtension>(
+                        "text",
+                        std::make_shared<FhirString>(applicationArea)
+                );
+            } else {
+                applicationAreaExt = std::make_shared<FhirValueExtension>(
+                        "coded",
+                        std::make_shared<FhirCodeableConceptValue>(applicationAreaCoded.ToCodeableConcept())
+                );
+            }
+            std::shared_ptr<FhirExtension> applicationAreaOuterExt = std::make_shared<FhirExtension>(
                     "http://ehelse.no/fhir/StructureDefinition/sfm-application-area"
             );
-            applicationAreaExt->AddExtension(applicationAreaTextExt);
-            dosage.AddExtension(applicationAreaExt);
+            applicationAreaOuterExt->AddExtension(applicationAreaExt);
+            dosage.AddExtension(applicationAreaOuterExt);
         }
         fhir.AddDosage(dosage);
     }

@@ -115,6 +115,12 @@ void SfmMedicamentMapper::Map(const LegemiddelMerkevare &legemiddelMerkevare) {
         }
     }
     {
+        auto administreringLegemiddel = legemiddelMerkevare.GetAdministreringLegemiddel();
+        for (const auto &use : administreringLegemiddel.GetBruksomradeEtikett()) {
+            medicamentUses.emplace_back(use.GetCodeSet(), use.GetValue(), use.GetDistinguishedName(), use.GetDistinguishedName());
+        }
+    }
+    {
         auto code = medication.GetCode();
         auto coding = code.GetCoding();
         coding.emplace_back("http://ehelse.no/fhir/CodeSystem/FEST", legemiddelMerkevare.GetId(),
@@ -142,6 +148,12 @@ void SfmMedicamentMapper::Map(const LegemiddelVirkestoff &legemiddelVirkestoff) 
             dosingUnitSystem = "urn:oid:2.16.578.1.12.4.1.1.7448";
         }
         this->prescriptionUnit.emplace_back(dosingUnitSystem, dosingUnit.GetValue(), dosingUnit.GetDistinguishedName(), "");
+    }
+    {
+        auto administreringLegemiddel = legemiddelVirkestoff.GetAdministreringLegemiddel();
+        for (const auto &use : administreringLegemiddel.GetBruksomradeEtikett()) {
+            medicamentUses.emplace_back(use.GetCodeSet(), use.GetValue(), use.GetDistinguishedName(), use.GetDistinguishedName());
+        }
     }
     {
         auto code = medication.GetCode();
@@ -236,6 +248,15 @@ void SfmMedicamentMapper::Map(const Legemiddelpakning &legemiddelpakning) {
                         reseptgyldighet.GetVarighet())};
                 if (std::find(prescriptionValidity.cbegin(), prescriptionValidity.cend(), pv) == prescriptionValidity.cend()) {
                     prescriptionValidity.emplace_back(std::move(pv));
+                }
+            }
+            {
+                auto administreringLegemiddel = merkevare.GetAdministreringLegemiddel();
+                for (const auto &use : administreringLegemiddel.GetBruksomradeEtikett()) {
+                    auto code = use.GetValue();
+                    if (std::find_if(medicamentUses.cbegin(), medicamentUses.cend(), [code] (const MedicalCodedValue &cv) { return cv.GetCode() == code; }) == medicamentUses.cend()) {
+                        medicamentUses.emplace_back(use.GetCodeSet(), code, use.GetDistinguishedName(), use.GetDistinguishedName());
+                    }
                 }
             }
         }
