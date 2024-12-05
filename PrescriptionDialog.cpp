@@ -296,6 +296,7 @@ PrescriptionDialog::PrescriptionDialog(TheMasterFrame *frame, const std::shared_
     }
     reitCtrl->Bind(wxEVT_SPINCTRL, &PrescriptionDialog::OnModified, this);
     applicationAreaCtrl->Bind(wxEVT_TEXT, &PrescriptionDialog::OnModified, this);
+    applicationAreaCtrl->Bind(wxEVT_COMBOBOX, &PrescriptionDialog::OnModified, this);
     cancelButton->Bind(wxEVT_BUTTON, &PrescriptionDialog::OnCancel, this);
     proceedButton->Bind(wxEVT_BUTTON, &PrescriptionDialog::OnProceed, this);
     prescriptionValidityCtrl->Bind(wxEVT_COMBOBOX, &PrescriptionDialog::OnModifiedPrescriptionValidity, this);
@@ -541,11 +542,17 @@ PrescriptionDialogData PrescriptionDialog::GetDialogData() const {
         }
     }
     dialogData.reit = reitCtrl->GetValue();
-    dialogData.applicationArea = applicationAreaCtrl->GetValue();
-    for (const auto &cv : medicamentUses) {
-        if (cv.GetDisplay() == dialogData.applicationArea) {
-            dialogData.applicationAreaCoded = cv;
-            break;
+    typeof(applicationAreaCtrl->GetSelection()) selection = applicationAreaCtrl->GetSelection();
+    if (selection >= 0 && selection < medicamentUses.size()) {
+        dialogData.applicationAreaCoded = medicamentUses[selection];
+        dialogData.applicationArea = dialogData.applicationAreaCoded.GetDisplay();
+    } else {
+        dialogData.applicationArea = applicationAreaCtrl->GetValue();
+        for (const auto &cv: medicamentUses) {
+            if (cv.GetDisplay() == dialogData.applicationArea) {
+                dialogData.applicationAreaCoded = cv;
+                break;
+            }
         }
     }
     return dialogData;
