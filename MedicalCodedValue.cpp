@@ -771,14 +771,13 @@ constexpr CaveTypeOfReaction::CaveTypeOfReaction() {
     Add("1", "Anafylaktisk reaksjon");
     Add("2", "Blodtrykksfall");
     Add("3", "Alvorlig arytmi");
-    Add("4", "Larynxødem");
-    Add("5", "Astma");
+    Add("4", "Obstruksjon i øvre luftveier (inkl larynxødem)");
+    Add("5", "Obstruksjon i nedre luftveier (inkl astma)");
     Add("6", "Uspesifisert tung pust");
     Add("7", "Redusert bevissthet/forvirring");
     Add("8", "Generaliserte kramper");
-    Add("9", "Angioødem/alvorlig generalisert urticaria");
+    Add("9", "Angioødem/generalisert urticaria");
     Add("10", "Hudreaksjon INA");
-    Add("11", "Mindre alvorlig hudreaksjon");
     Add("12", "Irritasjon i slimhinner");
     Add("13", "Oppkast, diaré, magesmerter");
     Add("14", "Nyresvikt/redusert nyrefunksjon");
@@ -786,7 +785,6 @@ constexpr CaveTypeOfReaction::CaveTypeOfReaction() {
     Add("16", "Leversvikt/redusert leverfunksjon");
     Add("17", "Rhabdomyolyse");
     Add("18", "Annen alvorlig reaksjon");
-    Add("19", "Annen mindre alvorlig reaksjon");
     Add("20", "Ukjent reaksjon");
 }
 
