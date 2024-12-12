@@ -1327,6 +1327,9 @@ void TheMasterFrame::OnSendPll(wxCommandEvent &e) {
     std::map<std::string,std::shared_ptr<FhirMedicationStatement>> pllMedicationStatements{};
     std::vector<std::string> newPllIds{};
     {
+        if (!medicationBundle) {
+            return;
+        }
         auto bundle = medicationBundle->medBundle;
         if (!bundle) {
             return;
