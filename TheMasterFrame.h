@@ -107,6 +107,7 @@ public:
     void OnPrescriptionRenew(const wxCommandEvent &e);
     void OnPrescriptionRenewWithChanges(const wxCommandEvent &e);
     void OnTreatmentEdit(const wxCommandEvent &e);
+    void OnConnectToPll(const wxCommandEvent &e);
     void OnCaveContextMenu(const wxContextMenuEvent &e);
     void OnCaveDetails(const wxCommandEvent &e);
     void OnAddCaveMedicament(const wxCommandEvent &e);

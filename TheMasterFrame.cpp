@@ -51,6 +51,7 @@
 #include "EditTreatmentDialog.h"
 #include "CaveDetailsDialog.h"
 #include "RegisterCaveDialog.h"
+#include "ConnectToPllDialog.h"
 
 constexpr int PrescriptionNameColumnWidth = 250;
 constexpr int PllColumnWidth = 50;
@@ -167,6 +168,7 @@ TheMasterFrame::TheMasterFrame() : wxFrame(nullptr, wxID_ANY, "The Master"),
     Bind(wxEVT_MENU, &TheMasterFrame::OnPrescriptionRenew, this, TheMaster_PrescriptionRenew_Id);
     Bind(wxEVT_MENU, &TheMasterFrame::OnPrescriptionRenewWithChanges, this, TheMaster_PrescriptionRenewWithChanges_Id);
     Bind(wxEVT_MENU, &TheMasterFrame::OnTreatmentEdit, this, TheMaster_TreatmentEdit_Id);
+    Bind(wxEVT_MENU, &TheMasterFrame::OnConnectToPll, this, TheMaster_ConnectToPll_Id);
 
     Bind(wxEVT_MENU, &TheMasterFrame::OnCaveDetails, this, TheMaster_CaveDetails_Id);
     Bind(wxEVT_MENU, &TheMasterFrame::OnAddCaveMedicament, this, TheMaster_AddCaveMedicament_Id);
@@ -2132,6 +2134,7 @@ void TheMasterFrame::OnPrescriptionContextMenu(const wxContextMenuEvent &e) {
     menu.Append(TheMaster_PrescriptionRenew_Id, wxT("Renew"));
     menu.Append(TheMaster_PrescriptionRenewWithChanges_Id, wxT("Renew with changes"));
     menu.Append(TheMaster_TreatmentEdit_Id, wxT("Edit treatment"));
+    menu.Append(TheMaster_ConnectToPll_Id, wxT("Connect to PLL"));
     PopupMenu(&menu);
 }
 
@@ -2594,6 +2597,60 @@ void TheMasterFrame::OnTreatmentEdit(const wxCommandEvent &e) {
     }
     EditTreatmentDialog editTreatmentDialog{this, *medicationBundle, medicationStatement};
     editTreatmentDialog.ShowModal();
+}
+
+void TheMasterFrame::OnConnectToPll(const wxCommandEvent &e) {
+    std::shared_ptr<FhirMedicationStatement> medicationStatement{};
+    {
+        if (prescriptions->GetSelectedItemCount() != 1) {
+            return;
+        }
+        auto selected = prescriptions->GetFirstSelected();
+        if (selected < 0 || selected >= displayedMedicationStatements.size()) {
+            return;
+        }
+        medicationStatement = displayedMedicationStatements[selected][0];
+    }
+    if (!medicationBundle || !medicationStatement) {
+        wxMessageBox(wxT("Run get medication"), wxT("No bundle"), wxICON_ERROR);
+        return;
+    }
+    std::shared_ptr<FhirMedicationStatement> connectToMedicationStatement{};
+    {
+        ConnectToPllDialog dialog{this, *medicationBundle};
+        if (dialog.ShowModal() != wxID_OK) {
+            return;
+        }
+        connectToMedicationStatement = dialog.GetSelectedMedicationStatement();
+    }
+    if (!connectToMedicationStatement) {
+        return;
+    }
+    auto connectToIdentifiers = connectToMedicationStatement->GetIdentifiers();
+    auto identifiers = medicationStatement->GetIdentifiers();
+    FhirIdentifier pllId{};
+    {
+        auto iterator = connectToIdentifiers.begin();
+        bool found{false};
+        while (iterator != connectToIdentifiers.end()) {
+            auto type = iterator->GetType().GetText();
+            std::transform(type.cbegin(), type.cend(), type.begin(), [] (char ch) -> char { return std::tolower(ch); });
+            if (type == "pll") {
+                pllId = *iterator;
+                iterator = connectToIdentifiers.erase(iterator);
+                found = true;
+                break;
+            }
+            ++iterator;
+        }
+        if (!found) {
+            return;
+        }
+    }
+    identifiers.insert(identifiers.begin(), std::move(pllId));
+    connectToMedicationStatement->SetIdentifiers(connectToIdentifiers);
+    medicationStatement->SetIdentifiers(identifiers);
+    UpdateMedications();
 }
 
 void TheMasterFrame::OnCaveContextMenu(const wxContextMenuEvent &e) {
