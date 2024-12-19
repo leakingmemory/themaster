@@ -2134,7 +2134,14 @@ void TheMasterFrame::OnPrescriptionContextMenu(const wxContextMenuEvent &e) {
     menu.Append(TheMaster_PrescriptionRenew_Id, wxT("Renew"));
     menu.Append(TheMaster_PrescriptionRenewWithChanges_Id, wxT("Renew with changes"));
     menu.Append(TheMaster_TreatmentEdit_Id, wxT("Edit treatment"));
-    menu.Append(TheMaster_ConnectToPll_Id, wxT("Connect to PLL"));
+    auto identifiers = medicationStatement->GetIdentifiers();
+    if (std::find_if(identifiers.cbegin(), identifiers.cend(), [] (const auto &identifier) {
+        auto type = identifier.GetType().GetText();
+        std::transform(type.cbegin(), type.cend(), type.begin(), [] (char ch) -> char { return static_cast<char>(std::tolower(ch)); });
+        return type == "pll";
+    }) == identifiers.cend()) {
+        menu.Append(TheMaster_ConnectToPll_Id, wxT("Connect to PLL"));
+    }
     PopupMenu(&menu);
 }
 
