@@ -17,11 +17,15 @@ FestVersionsDialog::FestVersionsDialog(wxWindow *parent) : wxDialog(parent, wxID
     listView->SetColumnWidth(0, 200);
     db = std::make_shared<FestDb>();
     if (db->IsOpen()) {
-        versions = db->GetFestVersions();
-        int i = 0;
-        for (const auto &version : versions) {
-            wxString v = wxString::FromUTF8(version);
-            listView->InsertItem(i++, v);
+        try {
+            versions = db->GetFestVersions();
+            int i = 0;
+            for (const auto &version: versions) {
+                wxString v = wxString::FromUTF8(version);
+                listView->InsertItem(i++, v);
+            }
+        } catch (const std::exception &e) {
+            wxMessageBox(wxString::FromUTF8(e.what()), wxT("Error"), wxOK | wxICON_ERROR);
         }
     }
     sizer->Add(listView, 0, wxEXPAND | wxALL, 5);
