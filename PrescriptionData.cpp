@@ -412,7 +412,7 @@ FhirMedicationStatement PrescriptionData::ToFhir() const {
                 reseptAmendment->AddExtension(ereseptdosing);
             }
         }
-        {
+        if (!rfstatus.GetCode().empty()) {
             std::shared_ptr<FhirExtension> rfstatusExt = std::make_shared<FhirExtension>("rfstatus");
             rfstatusExt->AddExtension(std::make_shared<FhirValueExtension>(
                     "status",
@@ -431,10 +431,12 @@ FhirMedicationStatement PrescriptionData::ToFhir() const {
                 typeresept
             ));
         }
-        reseptAmendment->AddExtension(std::make_shared<FhirValueExtension>(
-            "createeresept",
-            std::make_shared<FhirBooleanValue>(true)
-        ));
+        if (this->typeresept.GetCode() != "U") {
+            reseptAmendment->AddExtension(std::make_shared<FhirValueExtension>(
+                    "createeresept",
+                    std::make_shared<FhirBooleanValue>(true)
+            ));
+        }
         fhir.AddExtension(reseptAmendment);
     }
     if (ceaseDate) {
@@ -520,7 +522,7 @@ FhirMedicationStatement PrescriptionData::ToFhir() const {
         FhirReference ref{subjectReference, "http://ehelse.no/fhir/StructureDefinition/sfm-Patient", subjectDisplay};
         fhir.SetSubject(ref);
     }
-    {
+    if (this->typeresept.GetCode() != "U") {
         FhirCodeableConcept identifierType{"ReseptId"};
         boost::uuids::random_generator generator;
         boost::uuids::uuid randomUUID = generator();
