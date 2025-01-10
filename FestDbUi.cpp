@@ -133,21 +133,27 @@ void FestDbUi::Update() {
                     DataDirectory::Data("themaster").Sub("FEST").WriteFile("lastmod", lastModified);
                 }
             } else {
-                wxTheApp->GetTopWindow()->GetEventHandler()->CallAfter([]() {
+                wxTheApp->GetTopWindow()->GetEventHandler()->CallAfter([&downloadFestDialog]() {
+                    downloadFestDialog->EndModal(0);
                     wxMessageBox(wxT("FEST is up to date, and no need to download"), wxT("FEST is up to date"),
                                  wxICON_INFORMATION);
                 });
+                return;
             }
         } catch (const std::exception &e) {
             std::string msg{e.what()};
-            wxTheApp->GetTopWindow()->GetEventHandler()->CallAfter([msg]() {
+            wxTheApp->GetTopWindow()->GetEventHandler()->CallAfter([&downloadFestDialog, msg]() {
                 wxString err{msg};
+                downloadFestDialog->EndModal(0);
                 wxMessageBox(err, wxT("Download failed"), wxICON_ERROR);
             });
+            return;
         } catch (...) {
-            wxTheApp->GetTopWindow()->GetEventHandler()->CallAfter([]() {
+            wxTheApp->GetTopWindow()->GetEventHandler()->CallAfter([&downloadFestDialog]() {
+                downloadFestDialog->EndModal(0);
                 wxMessageBox(wxT("Downloading fest failed"), wxT("Download failed"), wxICON_ERROR);
             });
+            return;
         }
         wxTheApp->GetTopWindow()->GetEventHandler()->CallAfter([&downloadFestDialog]() {
             downloadFestDialog->EndModal(0);
