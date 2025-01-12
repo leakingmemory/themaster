@@ -11,6 +11,8 @@
 #include <boost/uuid/uuid_generators.hpp>
 #include <boost/uuid/uuid_io.hpp>
 
+#include "win32/w32strings.h"
+
 std::string HelseidAuthorization::GetAuthorizeUrl() {
     std::stringstream strurl{};
     strurl << url;
@@ -19,14 +21,14 @@ std::string HelseidAuthorization::GetAuthorizeUrl() {
     } else {
         strurl << "/connect/authorize?client_id=";
     }
-    strurl << web::uri::encode_data_string(clientId);
+    strurl << from_wstring_on_win32(web::uri::encode_data_string(as_wstring_on_win32(clientId)));
     strurl << "&nonce=";
     {
         boost::uuids::uuid uuid = boost::uuids::random_generator()();
-        strurl << web::uri::encode_data_string(to_string(uuid));
+        strurl << from_wstring_on_win32(web::uri::encode_data_string(as_wstring_on_win32(to_string(uuid))));
     }
     strurl << "&redirect_uri=";
-    strurl << web::uri::encode_data_string(redirectUri);
+    strurl << from_wstring_on_win32(web::uri::encode_data_string(as_wstring_on_win32(redirectUri)));
     strurl << "&response_mode=query&response_type=code&resource=e-helse%3Asfm.api&resource=nhn%3Akjernejournal&scope=";
     {
         std::stringstream scopeStream{};
@@ -39,20 +41,20 @@ std::string HelseidAuthorization::GetAuthorizeUrl() {
             scopeStream << " " << *iterator;
             ++iterator;
         }
-        strurl << web::uri::encode_data_string(scopeStream.str());
+        strurl << from_wstring_on_win32(web::uri::encode_data_string(as_wstring_on_win32(scopeStream.str())));
     }
     strurl << "&code_challenge=";
     {
         PkceS256 pkce{};
         verification = pkce.GetVerifier();
-        strurl << web::uri::encode_data_string(pkce.GetChallenge());
+        strurl << from_wstring_on_win32(web::uri::encode_data_string(as_wstring_on_win32(pkce.GetChallenge())));
     }
     strurl << "&code_challenge_method=S256";
     strurl << "&state=";
     {
         boost::uuids::uuid uuid = boost::uuids::random_generator()();
         state = to_string(uuid);
-        strurl << web::uri::encode_data_string(state);
+        strurl << from_wstring_on_win32(web::uri::encode_data_string(as_wstring_on_win32(state)));
     }
     return strurl.str();
 }

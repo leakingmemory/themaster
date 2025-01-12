@@ -13,7 +13,7 @@ template <class T> class WeakRefUiDispatcher;
 template <class T> concept WeakRefUiDispatcherConcept = requires (T a)
 {
     { a.GetObjectPointer() } -> std::convertible_to<void *>;
-    { a.Invoke(std::declval<const std::function<void (typeof(a.GetObjectPointer()))>>()) };
+    { a.Invoke(std::declval<const std::function<void (decltype(a.GetObjectPointer()))>>()) };
 };
 
 template <class T> class WeakRefUiDispatcherRef {
@@ -29,7 +29,7 @@ public:
     void Invoke(const std::function<void (T *)> &func) const {
         auto lck = dispatcher.lock();
         if (lck) {
-            InvokeSpecific<typeof(*lck)>(*lck, func);
+            InvokeSpecific<decltype(*lck)>(*lck, func);
         }
     }
 };

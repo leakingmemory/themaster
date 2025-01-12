@@ -27,7 +27,7 @@ public:
     DateOnly(const std::string &str);
     static DateOnly FromDateTimeOffsetString(const std::string &str);
     std::string ToString() const;
-    [[nodiscard]] constexpr typeof(year) GetYear() const {
+    [[nodiscard]] constexpr decltype(year) GetYear() const {
         return year;
     }
     [[nodiscard]] constexpr int GetMonth() const {
@@ -41,7 +41,10 @@ public:
     void AddMonths(int months);
     void AddYears(int years);
     DateOnly &operator += (Duration);
-    constexpr void SubtractDays(int days) {
+#ifndef WIN32
+    constexpr
+#endif
+    void SubtractDays(int days) {
         AddDays(0 - days);
     }
     time_t GetStartOfDaySecondsFromEpoch() const;

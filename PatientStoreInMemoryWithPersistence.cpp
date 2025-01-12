@@ -99,8 +99,10 @@ static void StorePatients(const std::vector<PatientInformation> &patients) {
         }
         jsonString = json.dump();
     }
+#ifndef WIN32
     auto prevMask = umask(00177);
     Guard resetMask{[prevMask]() { umask(prevMask); }};
+#endif
     DataDirectory::Data("themaster").WriteFile("patients.json", jsonString);
 }
 

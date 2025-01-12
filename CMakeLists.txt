@@ -10,10 +10,18 @@ find_package(cpprestsdk REQUIRED)
 
 string(REPLACE "/" "\\\\/" PREFIX_ESCAPED "${CMAKE_INSTALL_PREFIX}")
 
-add_custom_target("InstallPrefix.h"
-        ALL "cat" "${CMAKE_CURRENT_SOURCE_DIR}/InstallPrefix.h.in" | sed -e "s/PREFIX/${PREFIX_ESCAPED}/" > "${CMAKE_CURRENT_BINARY_DIR}/InstallPrefix.h"
-        DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/InstallPrefix.h.in"
-)
+if (WIN32)
+    add_custom_target("InstallPrefix.h"
+            ALL ${CMAKE_COMMAND} -E "copy" "${CMAKE_CURRENT_SOURCE_DIR}/InstallPrefix.h.fallback" "${CMAKE_CURRENT_BINARY_DIR}/InstallPrefix.h"
+            DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/InstallPrefix.h.fallback"
+    )
+    add_subdirectory(win32)
+else()
+    add_custom_target("InstallPrefix.h"
+            ALL "cat" "${CMAKE_CURRENT_SOURCE_DIR}/InstallPrefix.h.in" | sed -e "s/PREFIX/${PREFIX_ESCAPED}/" > "${CMAKE_CURRENT_BINARY_DIR}/InstallPrefix.h"
+            DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/InstallPrefix.h.in"
+    )
+endif()
 
 add_executable(themaster TheMasterApp.cpp TheMasterApp.h TheMasterFrame.cpp TheMasterFrame.h ConnectDialog.cpp ConnectDialog.h
     FindPatientDialog.cpp FindPatientDialog.h PatientStoreInMemory.cpp PatientStoreInMemory.h
@@ -43,6 +51,12 @@ target_link_libraries(themaster PRIVATE cpprestsdk::cpprest -lcrypto)
 target_link_libraries(themaster PRIVATE ${wxWidgets_LIBRARIES})
 target_include_directories(themaster PRIVATE ${wxWidgets_INCLUDE})
 target_include_directories(themaster PRIVATE ${CMAKE_CURRENT_BINARY_DIR})
+if (WIN32)
+    target_link_libraries(themaster PRIVATE win32)
+    target_include_directories(themaster PRIVATE ${SFMBASISAPI_INCLUDE_DIR})
+    target_include_directories(themaster PRIVATE ${Boost_INCLUDE_DIRS})
+    target_include_directories(themaster PRIVATE ${NLOHMANN_INCLUDE_DIR})
+endif()
 add_dependencies(themaster "InstallPrefix.h")
 
 add_custom_target(

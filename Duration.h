@@ -27,13 +27,13 @@ public:
     constexpr explicit operator bool () const {
         return valid;
     }
-    [[nodiscard]] constexpr typeof(years) GetYears() const {
+    [[nodiscard]] constexpr decltype(years) GetYears() const {
         return years;
     }
-    [[nodiscard]] constexpr typeof(months) GetMonths() const {
+    [[nodiscard]] constexpr decltype(months) GetMonths() const {
         return months;
     }
-    [[nodiscard]] constexpr typeof(days) GetDays() const {
+    [[nodiscard]] constexpr decltype(days) GetDays() const {
         return days;
     }
     constexpr bool HasNoTime() const {

@@ -10,6 +10,13 @@
 #include <array>
 #include <cstdint>
 #include <chrono>
+#ifdef WIN32
+#include <windows.h>
+#endif
+
+#ifdef WIN32
+#define timegm _mkgmtime
+#endif
 
 constexpr int Digits10(unsigned int n) {
     if (n == 0) {
@@ -174,7 +181,11 @@ constexpr void AppendIso8601ToString(std::string &str, int year, int month, int 
 
 std::string DateTime::to_iso8601() const {
     struct tm t{};
+#ifdef WIN32
+    if (gmtime_s(&t, &timeInSecondsSinceEpoch) != 0) {
+#else
     if (gmtime_r(&timeInSecondsSinceEpoch, &t) != &t) {
+#endif
         throw std::exception();
     }
     std::string str{};
@@ -184,11 +195,18 @@ std::string DateTime::to_iso8601() const {
 
 DateTimeOffset::DateTimeOffset(std::time_t timeInSecondsSinceEpoch) {
     struct tm t{};
+#ifdef WIN32
+    TIME_ZONE_INFORMATION tzinfo;
+    GetTimeZoneInformation(&tzinfo);
+    this->timeInSecondsSinceEpoch = timeInSecondsSinceEpoch - (tzinfo.Bias * 60);
+    this->offsetSeconds = (0 - tzinfo.Bias) * 60;
+#else
     if (localtime_r(&timeInSecondsSinceEpoch, &t) != &t) {
         throw std::exception();
     }
     this->timeInSecondsSinceEpoch = timeInSecondsSinceEpoch + t.tm_gmtoff;
     this->offsetSeconds = t.tm_gmtoff;
+#endif
 }
 
 constexpr void TimeOffsets(int32_t offset, int &hours, int &minutes) {
@@ -200,11 +218,17 @@ constexpr void TimeOffsets(int32_t offset, int &hours, int &minutes) {
 }
 
 int32_t DateTimeOffset::OffsetForTime(time_t tim) {
+#ifdef WIN32
+    TIME_ZONE_INFORMATION tzinfo;
+    GetTimeZoneInformation(&tzinfo);
+    return (0 - tzinfo.Bias) * 60;
+#else
     struct tm t{};
     if (localtime_r(&tim, &t) != &t) {
         throw std::exception();
     }
     return t.tm_gmtoff;
+#endif
 }
 
 DateTimeOffset DateTimeOffset::Now() {
@@ -251,11 +275,17 @@ static_assert(GetTimeOffset<int>(-2, -1) == -7260);
 
 DateTimeOffset DateTimeOffset::FromString(const std::string &str) {
     std::tm tm{};
+#ifdef WIN32
+    int offH, offM;
+#else
     int16_t offH, offM;
+#endif
     ParseDateTimeOffsetStr(str, tm.tm_year, tm.tm_mon, tm.tm_mday, tm.tm_hour, tm.tm_min, tm.tm_sec, offH, offM);
     tm.tm_year -= 1900;
     --tm.tm_mon;
+#ifndef WIN32
     tm.tm_zone = nullptr;
+#endif
     time_t t = timegm(&tm);
     auto off = GetTimeOffset<int32_t>(offH, offM);
     return {t + off, off};
@@ -263,7 +293,11 @@ DateTimeOffset DateTimeOffset::FromString(const std::string &str) {
 
 std::string DateTimeOffset::to_iso8601() const {
     struct tm t{};
+#ifdef WIN32
+    if (gmtime_s(&t, &timeInSecondsSinceEpoch) != 0) {
+#else
     if (gmtime_r(&timeInSecondsSinceEpoch, &t) != &t) {
+#endif
         throw std::exception();
     }
     std::string str{};

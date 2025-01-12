@@ -1,0 +1,10 @@
+#ifndef THEMASTER_INSTALLPRFIX_H
+#define THEMASTER_INSTALLPRFIX_H
+
+#include <string>
+
+inline std::string GetInstallPrefix() {
+    return "c:\\Program files\\TheMaster";
+}
+
+#endif

@@ -11,6 +11,7 @@
 #include <nlohmann/json.hpp>
 #include "DataDirectory.h"
 #include "Guard.h"
+#include "win32/w32strings.h"
 
 class ConnectionConfig {
 public:
@@ -248,9 +249,9 @@ void ConnectDialog::OnConnect(wxCommandEvent &) {
             auto query = uri.substr(querySeparatorPos + 1);
             std::map<std::string,std::string> queryMap{};
             {
-                auto queryMapRaw = web::uri::split_query(query);
+                auto queryMapRaw = web::uri::split_query(as_wstring_on_win32(query));
                 for (auto pair: queryMapRaw) {
-                    queryMap.insert_or_assign(web::uri::decode(pair.first), web::uri::decode(pair.second));
+                    queryMap.insert_or_assign(from_wstring_on_win32(web::uri::decode(pair.first)), from_wstring_on_win32(web::uri::decode(pair.second)));
                 }
             }
             for (auto pair: queryMap) {
@@ -266,9 +267,9 @@ void ConnectDialog::OnConnect(wxCommandEvent &) {
                                                      helseidLoginDialog.GetScopes(),
                                                      helseidLoginDialog.GetVerification()};
                     auto firstTokenRequest = tokenRequest.GetTokenRequest();
-                    web::http::client::http_client client{helseidUrl.ToStdString()};
+                    web::http::client::http_client client{as_wstring_on_win32(helseidUrl.ToStdString())};
                     web::http::http_request req{web::http::methods::POST};
-                    req.set_request_uri("/connect/token");
+                    req.set_request_uri(as_wstring_on_win32("/connect/token"));
                     {
                         std::string rqBody{};
                         {
@@ -276,14 +277,14 @@ void ConnectDialog::OnConnect(wxCommandEvent &) {
                             auto iterator = firstTokenRequest.params.begin();
                             if (iterator != firstTokenRequest.params.end()) {
                                 const auto &param = *iterator;
-                                sstr << web::uri::encode_data_string(param.first) << "=";
-                                sstr << web::uri::encode_data_string(param.second);
+                                sstr << from_wstring_on_win32(web::uri::encode_data_string(as_wstring_on_win32(param.first))) << "=";
+                                sstr << from_wstring_on_win32(web::uri::encode_data_string(as_wstring_on_win32(param.second)));
                                 ++iterator;
                             }
                             while (iterator != firstTokenRequest.params.end()) {
                                 const auto &param = *iterator;
-                                sstr << "&" << web::uri::encode_data_string(param.first) << "=";
-                                sstr << web::uri::encode_data_string(param.second);
+                                sstr << "&" << from_wstring_on_win32(web::uri::encode_data_string(as_wstring_on_win32(param.first))) << "=";
+                                sstr << from_wstring_on_win32(web::uri::encode_data_string(as_wstring_on_win32(param.second)));
                                 ++iterator;
                             }
                             rqBody = sstr.str();
@@ -301,10 +302,10 @@ void ConnectDialog::OnConnect(wxCommandEvent &) {
                                 response.extract_json().then([frameWeakRefDispatcher, helseidUrl, helseidClientId, helseidSecretJwk, helseidScopes, journalId, orgNo, childOrgNo](const pplx::task<web::json::value> &jsonTask) {
                                     try {
                                         auto json = jsonTask.get();
-                                        if (json.has_string_field("refresh_token") && json.has_number_field("rt_expires_in")) {
-                                            std::string refresh_token = json.at("refresh_token").as_string();
-                                            long rt_expires = json.at("rt_expires_in").as_number().to_int64();
-                                            std::string id_token = json.at("id_token").as_string();
+                                        if (json.has_string_field(as_wstring_on_win32("refresh_token")) && json.has_number_field(as_wstring_on_win32("rt_expires_in"))) {
+                                            std::string refresh_token = from_wstring_on_win32(json.at(as_wstring_on_win32("refresh_token")).as_string());
+                                            long rt_expires = json.at(as_wstring_on_win32("rt_expires_in")).as_number().to_int64();
+                                            std::string id_token = from_wstring_on_win32(json.at(as_wstring_on_win32("id_token")).as_string());
                                             std::cout << "Refresh token: " << refresh_token << "\n";
                                             std::cout << "Expires: " << rt_expires << "\n";
                                             wxTheApp->GetTopWindow()->GetEventHandler()->CallAfter([frameWeakRefDispatcher, helseidUrl, helseidClientId, helseidSecretJwk, helseidScopes, refresh_token, rt_expires, id_token, journalId, orgNo, childOrgNo]() {
@@ -331,10 +332,10 @@ void ConnectDialog::OnConnect(wxCommandEvent &) {
                                 });
                             } else {
                                 std::cerr << "HTTP error " << response.status_code() << "\n";
-                                typedef typeof(response.extract_string()) task_string_type;
+                                typedef decltype(response.extract_string()) task_string_type;
                                 response.extract_string().then([] (const task_string_type &t) {
                                     try {
-                                        auto str = t.get();
+                                        auto str = from_wstring_on_win32(t.get());
                                         std::cerr << str << "\n";
                                     } catch (...) {
                                         std::cerr << "Unable to retrieve error string\n";

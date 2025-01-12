@@ -13,6 +13,9 @@
 #include "PrescriptionData.h"
 #include "MedBundleData.h"
 #include "TheMasterIds.h"
+#ifdef WIN32
+#include <pplx/pplxtasks.h>
+#endif
 
 class FhirAllergyIntolerance;
 class PatientStore;
@@ -24,9 +27,11 @@ class FhirReference;
 class FhirCoding;
 class wxListView;
 class wxNotebook;
+#ifndef WIN32
 namespace pplx {
     template<class ReturnType> class task;
 }
+#endif
 class PrescriptionDialog;
 class CallContext;
 

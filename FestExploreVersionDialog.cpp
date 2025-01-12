@@ -69,7 +69,7 @@ void FestExploreVersionDialog::Init() {
         itemTypeSelector = new wxListView(this, wxID_ANY);
         itemTypeSelector->AppendColumn(wxT("Item type"));
         itemTypeSelector->SetColumnWidth(0, 150);
-        for (std::remove_const<typeof(numberOfItemTypes)>::type pos = 0; pos < numberOfItemTypes; pos++) {
+        for (std::remove_const<decltype(numberOfItemTypes)>::type pos = 0; pos < numberOfItemTypes; pos++) {
             itemTypeSelector->InsertItem(pos, wxString::FromUTF8(itemTypes[pos]));
         }
         topSizer->Add(itemTypeSelector, 3, wxALL | wxEXPAND, 5);

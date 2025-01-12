@@ -52,6 +52,7 @@
 #include "CaveDetailsDialog.h"
 #include "RegisterCaveDialog.h"
 #include "ConnectToPllDialog.h"
+#include "win32/w32strings.h"
 
 constexpr int PrescriptionNameColumnWidth = 250;
 constexpr int PllColumnWidth = 50;
@@ -434,9 +435,9 @@ pplx::task<std::string> TheMasterFrame::GetAccessToken() {
             tokenRequest.AddHelseIdConsumerChildOrgNo(childOrgNo);
         }
         auto requestData = tokenRequest.GetTokenRequest();
-        web::http::client::http_client client{helseidUrl};
+        web::http::client::http_client client{as_wstring_on_win32(helseidUrl)};
         web::http::http_request req{web::http::methods::POST};
-        req.set_request_uri("/connect/token");
+        req.set_request_uri(as_wstring_on_win32("/connect/token"));
         {
             std::string rqBody{};
             {
@@ -444,14 +445,14 @@ pplx::task<std::string> TheMasterFrame::GetAccessToken() {
                 auto iterator = requestData.params.begin();
                 if (iterator != requestData.params.end()) {
                     const auto &param = *iterator;
-                    sstr << web::uri::encode_data_string(param.first) << "=";
-                    sstr << web::uri::encode_data_string(param.second);
+                    sstr << from_wstring_on_win32(web::uri::encode_data_string(as_wstring_on_win32(param.first))) << "=";
+                    sstr << from_wstring_on_win32(web::uri::encode_data_string(as_wstring_on_win32(param.second)));
                     ++iterator;
                 }
                 while (iterator != requestData.params.end()) {
                     const auto &param = *iterator;
-                    sstr << "&" << web::uri::encode_data_string(param.first) << "=";
-                    sstr << web::uri::encode_data_string(param.second);
+                    sstr << "&" << from_wstring_on_win32(web::uri::encode_data_string(as_wstring_on_win32(param.first))) << "=";
+                    sstr << from_wstring_on_win32(web::uri::encode_data_string(as_wstring_on_win32(param.second)));
                     ++iterator;
                 }
                 rqBody = sstr.str();
@@ -464,8 +465,8 @@ pplx::task<std::string> TheMasterFrame::GetAccessToken() {
         return respTask.then([at] (const web::http::http_response &response) {
             if ((response.status_code() / 100) == 2) {
                 return response.extract_json().then([at] (const web::json::value &json) {
-                    if (json.has_string_field("access_token")) {
-                        *at = json.at("access_token").as_string();
+                    if (json.has_string_field(as_wstring_on_win32("access_token"))) {
+                        *at = from_wstring_on_win32(json.at(as_wstring_on_win32("access_token")).as_string());
                         return *at;
                     } else {
                         std::cerr << "Missing access_token\n";
@@ -655,7 +656,7 @@ void TheMasterFrame::GetMedication(CallContext &ctx, const std::function<void(co
             std::cout << "Access token: " << accessToken << "\n";
             std::string bearer{"Bearer "};
             bearer.append(accessToken);
-            request.headers().add("Authorization", bearer);
+            request.headers().add(as_wstring_on_win32("Authorization"), as_wstring_on_win32(bearer));
         }
         {
             web::json::value requestBody{};
@@ -664,14 +665,14 @@ void TheMasterFrame::GetMedication(CallContext &ctx, const std::function<void(co
                 requestParameters.AddParameter("patient", patient);
                 requestBody = requestParameters.ToJson();
             }
-            request.set_request_uri("patient/$getMedication");
+            request.set_request_uri(as_wstring_on_win32("patient/$getMedication"));
             {
                 auto jsonString = requestBody.serialize();
-                request.set_body(jsonString, "application/fhir+json; charset=utf-8");
-                *rawRequest = jsonString;
+                request.set_body(jsonString, as_wstring_on_win32("application/fhir+json; charset=utf-8"));
+                *rawRequest = from_wstring_on_win32(jsonString);
             }
         }
-        web::http::client::http_client client{apiUrl};
+        web::http::client::http_client client{as_wstring_on_win32(apiUrl)};
         return client.request(request);
     });
 
@@ -757,7 +758,7 @@ void TheMasterFrame::GetMedication(CallContext &ctx, const std::function<void(co
                 if (medicationBundle && medicationBundle->patientInformation == *patientInformation) {
                     previousBundle = medicationBundle->medBundle;
                 }
-                medicationBundleResetData = medBundle->ToJson().serialize();
+                medicationBundleResetData = from_wstring_on_win32(medBundle->ToJson().serialize());
                 medicationBundle = std::make_unique<MedBundleData>();
                 *medicationBundle = {
                         .patientInformation = *patientInformation,
@@ -787,7 +788,7 @@ void TheMasterFrame::GetMedication(CallContext &ctx, const std::function<void(co
         try {
             auto response = responseTask.get();
             try {
-                auto contentType = response.headers().content_type();
+                auto contentType = from_wstring_on_win32(response.headers().content_type());
                 if (!contentType.starts_with("application/fhir+json") && contentType != "application/json") {
                     std::string msg{"Wrong content type in response: "};
                     msg.append(contentType);
@@ -799,7 +800,7 @@ void TheMasterFrame::GetMedication(CallContext &ctx, const std::function<void(co
                             auto responseBody = responseBodyTask.get();
                             try {
                                 {
-                                    auto responseBodyStr = responseBody.serialize();
+                                    auto responseBodyStr = from_wstring_on_win32(responseBody.serialize());
                                     {
                                         std::lock_guard lock{*getMedResponseMtx};
                                         *rawResponse = responseBodyStr;
@@ -981,9 +982,9 @@ void TheMasterFrame::SendMedication(CallContext &ctx,
             std::cout << "Access token: " << accessToken << "\n";
             std::string bearer{"Bearer "};
             bearer.append(accessToken);
-            request.headers().add("Authorization", bearer);
+            request.headers().add(as_wstring_on_win32("Authorization"), as_wstring_on_win32(bearer));
         }
-        request.set_request_uri("Patient/$sendMedication");
+        request.set_request_uri(as_wstring_on_win32("Patient/$sendMedication"));
         {
             FhirParameters sendMedicationParameters{};
             {
@@ -1045,11 +1046,11 @@ void TheMasterFrame::SendMedication(CallContext &ctx,
             {
                 auto json = sendMedicationParameters.ToJson();
                 auto jsonString = json.serialize();
-                request.set_body(jsonString, "application/fhir+json; charset=utf-8");
-                *rawRequest = jsonString;
+                request.set_body(jsonString, as_wstring_on_win32("application/fhir+json; charset=utf-8"));
+                *rawRequest = from_wstring_on_win32(jsonString);
             }
         }
-        web::http::client::http_client client{apiUrl};
+        web::http::client::http_client client{as_wstring_on_win32(apiUrl)};
         return client.request(request);
     });
     std::shared_ptr<std::mutex> sendMedResponseMtx = std::make_shared<std::mutex>();
@@ -1242,7 +1243,7 @@ void TheMasterFrame::SendMedication(CallContext &ctx,
         try {
             auto response = responseTask.get();
             try {
-                auto contentType = response.headers().content_type();
+                auto contentType = from_wstring_on_win32(response.headers().content_type());
                 if (!contentType.starts_with("application/fhir+json")) {
                     std::string msg{"Wrong content type in response: "};
                     msg.append(contentType);
@@ -1255,7 +1256,7 @@ void TheMasterFrame::SendMedication(CallContext &ctx,
                             try {
                                 {
                                     std::lock_guard lock{*sendMedResponseMtx};
-                                    *rawResponse = responseBody.serialize();
+                                    *rawResponse = from_wstring_on_win32(responseBody.serialize());
                                 }
                                 std::shared_ptr<Fhir> responseParameterBundle = Fhir::Parse(responseBody);
                                 {
@@ -1976,7 +1977,7 @@ void TheMasterFrame::OnSaveBundle(wxCommandEvent &e) {
     std::string jsonStr{};
     {
         auto json = medicationBundle->medBundle->ToJson();
-        jsonStr = json.serialize();
+        jsonStr = from_wstring_on_win32(json.serialize());
     }
     wxFileDialog saveFileDialog(this, _("Save bundle"), "", "", "Json files (*.json)|*.json", wxFD_SAVE|wxFD_OVERWRITE_PROMPT);
     if (saveFileDialog.ShowModal() == wxID_CANCEL)
@@ -2244,21 +2245,7 @@ void TheMasterFrame::OnPrescriptionRecall(const wxCommandEvent &e) {
                 )
         ));
         {
-            std::time_t now = std::time(nullptr);
-            std::tm tm{};
-            localtime_r(&now, &tm);
-
-            std::ostringstream nowStream;
-            nowStream << std::put_time(&tm, "%Y-%m-%dT%H:%M:%S");
-
-            auto tzone = localtime(&now);
-            if(tzone->tm_gmtoff >= 0)
-                nowStream << "+";
-            else
-                nowStream << "-";
-            nowStream << std::setfill('0') << std::setw(2) << abs(tzone->tm_gmtoff / 3600) << ":" << std::setw(2) << abs((tzone->tm_gmtoff / 60) % 60);
-
-            std::string nowString = nowStream.str();
+            std::string nowString = DateTimeOffset::Now().to_iso8601();
 
             regInfo->AddExtension(std::make_shared<FhirValueExtension>(
                     "timestamp",
@@ -2421,21 +2408,7 @@ void TheMasterFrame::OnPrescriptionCease(const wxCommandEvent &e) {
                 )
         ));
         {
-            std::time_t now = std::time(nullptr);
-            std::tm tm{};
-            localtime_r(&now, &tm);
-
-            std::ostringstream nowStream;
-            nowStream << std::put_time(&tm, "%Y-%m-%dT%H:%M:%S");
-
-            auto tzone = localtime(&now);
-            if(tzone->tm_gmtoff >= 0)
-                nowStream << "+";
-            else
-                nowStream << "-";
-            nowStream << std::setfill('0') << std::setw(2) << abs(tzone->tm_gmtoff / 3600) << ":" << std::setw(2) << abs((tzone->tm_gmtoff / 60) % 60);
-
-            std::string nowString = nowStream.str();
+            std::string nowString = DateTimeOffset::Now().to_iso8601();
 
             regInfo->AddExtension(std::make_shared<FhirValueExtension>(
                     "timestamp",
@@ -2484,7 +2457,7 @@ void TheMasterFrame::OnPrescriptionRenew(const wxCommandEvent &e) {
         PrescriptionChangesService::Renew(*medicationStatement);
     } catch (const std::exception &e) {
         const char *wht = e.what();
-        wxMessageBox(wxString::FromUTF8(wht != nullptr ? wxString::FromUTF8(wht) : wxT("Renew failed")), wxT("Renew failed"), wxICON_ERROR);
+        wxMessageBox(wxString::FromUTF8(wht != nullptr ? wxString::FromUTF8(wht) : wxString::FromUTF8("Renew failed")), wxT("Renew failed"), wxICON_ERROR);
     }
     UpdateMedications();
 }

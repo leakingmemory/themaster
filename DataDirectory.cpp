@@ -6,8 +6,14 @@
 #include <filesystem>
 #include <iostream>
 #include <fstream>
+#ifdef WIN32
+#include <shlobj.h>
+#include <process.h>
+#else
 #include <unistd.h>
+#endif
 #include <sstream>
+#include "win32/w32strings.h"
 
 DataDirectory::DataDirectory(const std::string &parent, const std::string &name) : path(parent) {
     if (!path.ends_with("/")) {
@@ -19,6 +25,22 @@ DataDirectory::DataDirectory(const std::string &parent, const std::string &name)
     }
 }
 
+#ifdef WIN32
+
+DataDirectory DataDirectory::Appdata(const std::string &name) {
+    PWSTR path;
+    HRESULT hr = SHGetKnownFolderPath(FOLDERID_RoamingAppData, 0, nullptr, &path);
+    if (FAILED(hr)) {
+        std::cerr << "Failed to get appdata path\n";
+        throw std::exception();
+    }
+    std::wstring wpath(path);
+    CoTaskMemFree(path);
+    return {from_wstring_on_win32(wpath), name};
+}
+
+#else
+
 DataDirectory DataDirectory::Home(const std::string &name) {
     const char *home = getenv("HOME");
     if (home == nullptr) {
@@ -28,12 +50,22 @@ DataDirectory DataDirectory::Home(const std::string &name) {
     return {home, name};
 }
 
+#endif
+
 DataDirectory DataDirectory::Config(const std::string &appname) {
+#ifdef WIN32
+    return Appdata(appname).Sub("config");
+#else
     return Home(".config").Sub(appname);
+#endif
 }
 
 DataDirectory DataDirectory::Data(const std::string &appname) {
+#ifdef WIN32
+    return Appdata(appname).Sub("data");
+#else
     return Home(".local").Sub("share").Sub(appname);
+#endif
 }
 
 DataDirectory DataDirectory::Sub(const std::string &name) const {
@@ -74,7 +106,11 @@ void DataDirectory::WriteFile(const std::string &filename, const std::string &co
     {
         std::stringstream sstr{};
         sstr << fpath << ".";
+#ifdef WIN32
+        sstr << _getpid();
+#else
         sstr << getpid();
+#endif
         tmpfilename = sstr.str();
     }
     std::ofstream stream{tmpfilename};

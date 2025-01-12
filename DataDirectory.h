@@ -12,7 +12,11 @@ private:
     std::string path{};
 public:
     DataDirectory(const std::string &parent, const std::string &name);
+#ifdef WIN32
+    static DataDirectory Appdata(const std::string &name);
+#else
     static DataDirectory Home(const std::string &name);
+#endif
     static DataDirectory Config(const std::string &appname);
     static DataDirectory Data(const std::string &appname);
     DataDirectory Sub(const std::string &name) const;

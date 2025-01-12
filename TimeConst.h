@@ -68,7 +68,7 @@ template <typename T, typename Y, typename N> static constexpr T GetDaysPerYears
 static constexpr uint32_t daysPer400Years = GetDaysPerYears<uint32_t>(0, 400);
 
 template <typename T> static constexpr void AppendAsString(std::string &str, T num, int minDigits = 1) {
-    typeof(num) dec = 1;
+    decltype(num) dec = 1;
     for (int i = 1; (num / dec) > 9 || i < minDigits; i++) {
         dec *= 10;
     }
@@ -105,12 +105,12 @@ template <typename Y, typename M, typename D> static constexpr bool ParseDateStr
         if (ch < '0' || ch > '9') {
             return false;
         }
-        if (year > (std::numeric_limits<typeof(year)>::max() / 10)) {
+        if (year > (std::numeric_limits<typename std::remove_cvref<decltype(year)>::type>::max() / 10)) {
             return false;
         }
         year *= 10;
         auto d = ch - '0';
-        auto max = std::numeric_limits<typeof(year)>::max() - year;
+        auto max = std::numeric_limits<typename std::remove_cvref<decltype(year)>::type>::max() - year;
         if (d > max) {
             return false;
         }
@@ -329,8 +329,15 @@ template <typename Y, typename M, typename D, typename H, typename I, typename S
         return false;
     }
     if (str[offsetSep] == '-') {
-        tzhours = static_cast<typeof(tzhours)>(0) - tzhours;
-        tzminutes = static_cast<typeof(tzminutes)>(0) - tzminutes;
+#ifdef WIN32
+        Htz tzh0 = 0;
+        Itz tz0 = 0;
+        tzhours = tzh0 - tzhours;
+        tzminutes = tz0 - tzminutes;
+#else
+        tzhours = static_cast<decltype(tzhours)>(0) - tzhours;
+        tzminutes = static_cast<decltype(tzminutes)>(0) - tzminutes;
+#endif
     }
     return true;
 }

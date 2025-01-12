@@ -15,6 +15,8 @@
 #include <sstream>
 #include <medfest/Struct/Decoded/OppfKodeverk.h>
 #include <array>
+
+#include "DateTime.h"
 #include "WxDateConversions.h"
 
 struct NumPackagesSizers {
@@ -328,9 +330,9 @@ PrescriptionDialog &PrescriptionDialog::operator+=(const PrescriptionData &presc
         numberOfPackagesCtrl->SetValue(prescriptionData.numberOfPackages);
     }
     if (prescriptionData.amountIsSet && amountCtrl != nullptr) {
-        typeof(amountUnit.size()) byCode{amountUnit.size()};
-        typeof(amountUnit.size()) byDN{amountUnit.size()};
-        for (typeof(amountUnit.size()) i = 0; i < amountUnit.size(); i++) {
+        decltype(amountUnit.size()) byCode{amountUnit.size()};
+        decltype(amountUnit.size()) byDN{amountUnit.size()};
+        for (decltype(amountUnit.size()) i = 0; i < amountUnit.size(); i++) {
             const auto &unit = amountUnit[i];
             if (unit.GetCode() == prescriptionData.amountUnit.GetCode()) {
                 byCode = i;
@@ -542,7 +544,7 @@ PrescriptionDialogData PrescriptionDialog::GetDialogData() const {
         }
     }
     dialogData.reit = reitCtrl->GetValue();
-    typeof(applicationAreaCtrl->GetSelection()) selection = applicationAreaCtrl->GetSelection();
+    decltype(applicationAreaCtrl->GetSelection()) selection = applicationAreaCtrl->GetSelection();
     if (selection >= 0 && selection < medicamentUses.size()) {
         dialogData.applicationAreaCoded = medicamentUses[selection];
         dialogData.applicationArea = dialogData.applicationAreaCoded.GetDisplay();
@@ -607,7 +609,7 @@ void PrescriptionDialog::ProcessDialogData(PrescriptionDialogData &dialogData) c
         if (!dosingUnitSingular.empty()) {
             {
                 std::string repl = "<dose>";
-                typeof(dialogData.dosingText.find(repl)) dose;
+                decltype(dialogData.dosingText.find(repl)) dose;
                 while ((dose = dialogData.dosingText.find(repl)) != std::string::npos) {
                     dialogData.dosingText.erase(dose, repl.size());
                     dialogData.dosingText.insert(dose, dosingUnitSingular);
@@ -615,7 +617,7 @@ void PrescriptionDialog::ProcessDialogData(PrescriptionDialogData &dialogData) c
             }
             {
                 std::string repl = "<doser>";
-                typeof(dialogData.dosingText.find(repl)) dose;
+                decltype(dialogData.dosingText.find(repl)) dose;
                 while ((dose = dialogData.dosingText.find(repl)) != std::string::npos) {
                     dialogData.dosingText.erase(dose, repl.size());
                     dialogData.dosingText.insert(dose, dosingUnitPlural);
@@ -787,20 +789,7 @@ static void SetPrescriptionData(PrescriptionData &prescriptionData, const Prescr
         prescriptionData.use = {"urn:oid:2.16.578.1.12.4.1.1.9101", useCode, useName, useName};
     }
 
-    std::ostringstream nowStream;
-    std::tm tm{};
-    std::time_t now = std::time(nullptr);
-    localtime_r(&now, &tm);
-    nowStream << std::put_time(&tm, "%Y-%m-%dT%H:%M:%S");
-
-    auto tzone = localtime(&now);
-    if(tzone->tm_gmtoff >= 0)
-        nowStream << "+";
-    else
-        nowStream << "-";
-    nowStream << std::setfill('0') << std::setw(2) << abs(tzone->tm_gmtoff / 3600) << ":" << std::setw(2) << abs((tzone->tm_gmtoff / 60) % 60);
-
-    std::string nowString = nowStream.str();
+    std::string nowString = DateTimeOffset::Now().to_iso8601();
     prescriptionData.lastChanged = nowString;
 }
 
@@ -815,8 +804,8 @@ void PrescriptionDialog::OnProceed(wxCommandEvent &e) {
 }
 
 void PrescriptionDialog::OnDosingPeriodsContextMenu(wxContextMenuEvent &e) {
-    static constexpr const typeof(dosingPeriodsView->GetFirstSelected()) noneSelected = -1;
-    typeof(dosingPeriodsView->GetFirstSelected()) selected = noneSelected;
+    static constexpr const decltype(dosingPeriodsView->GetFirstSelected()) noneSelected = -1;
+    decltype(dosingPeriodsView->GetFirstSelected()) selected = noneSelected;
     if (dosingPeriodsView->GetSelectedItemCount() == 1) {
         auto index = dosingPeriodsView->GetFirstSelected();
         if (index >= 0 && index < dosingPeriods.size()) {

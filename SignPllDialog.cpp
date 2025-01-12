@@ -53,7 +53,7 @@ void SignPllDialog::OnCancel(wxCommandEvent &e) {
 }
 
 void SignPllDialog::OnOk(wxCommandEvent &e) {
-    typeof(candidates.size()) i = 0;
+    decltype(candidates.size()) i = 0;
     for (auto &candidate : candidates) {
         if (listbox->IsChecked(i)) {
             selected.emplace_back(std::move(candidate));

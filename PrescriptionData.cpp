@@ -487,21 +487,7 @@ FhirMedicationStatement PrescriptionData::ToFhir() const {
             )
         ));
         {
-            std::time_t now = std::time(nullptr);
-            std::tm tm{};
-            localtime_r(&now, &tm);
-
-            std::ostringstream nowStream;
-            nowStream << std::put_time(&tm, "%Y-%m-%dT%H:%M:%S");
-
-            auto tzone = localtime(&now);
-            if(tzone->tm_gmtoff >= 0)
-                nowStream << "+";
-            else
-                nowStream << "-";
-            nowStream << std::setfill('0') << std::setw(2) << abs(tzone->tm_gmtoff / 3600) << ":" << std::setw(2) << abs((tzone->tm_gmtoff / 60) % 60);
-
-            std::string nowString = nowStream.str();
+            std::string nowString = DateTimeOffset::Now().to_iso8601();
 
             regInfo->AddExtension(std::make_shared<FhirValueExtension>(
                 "timestamp",

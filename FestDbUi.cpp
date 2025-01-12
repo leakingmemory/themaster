@@ -11,6 +11,7 @@
 #include <medfest/FestDeserializer.h>
 #include "FestObjectStreamUi.h"
 #include "FestSerializerUi.h"
+#include "win32/w32strings.h"
 
 class FestUpdateException : public std::exception {
 private:
@@ -61,15 +62,15 @@ void FestDbUi::UpdateFromFile(DownloadFestDialog &dialog, const std::string &fil
 }
 
 void FestDbUi::Update() {
-    web::http::client::http_client httpClient{"https://www.legemiddelsok.no"};
+    web::http::client::http_client httpClient{as_wstring_on_win32("https://www.legemiddelsok.no")};
     web::http::http_request request{web::http::methods::GET};
-    request.set_request_uri("/_layouts/15/FESTmelding/fest251.zip");
+    request.set_request_uri(as_wstring_on_win32("/_layouts/15/FESTmelding/fest251.zip"));
     {
         auto dbfile = DataDirectory::Data("themaster").Sub("FEST").GetPath("fest.db");
         if (std::filesystem::exists(dbfile)) {
             std::string lastMod = DataDirectory::Data("themaster").Sub("FEST").ReadFile("lastmod");
             if (!lastMod.empty()) {
-                request.headers().add("If-Modified-Since", lastMod);
+                request.headers().add(as_wstring_on_win32("If-Modified-Since"), as_wstring_on_win32(lastMod));
             }
         }
     }
@@ -84,9 +85,9 @@ void FestDbUi::Update() {
                 uint64_t contentLength{0};
                 {
                     auto &headers = response.headers();
-                    auto findLastModified = headers.find("Last-Modified");
+                    auto findLastModified = headers.find(as_wstring_on_win32("Last-Modified"));
                     if (findLastModified != headers.end()) {
-                        lastModified = findLastModified->second;
+                        lastModified = from_wstring_on_win32(findLastModified->second);
                     }
                     contentLength = headers.content_length();
                 }
@@ -94,12 +95,16 @@ void FestDbUi::Update() {
                 std::string tmpdownload{};
                 {
                     std::stringstream sstr{};
+#ifdef WIN32
+                    sstr << "fest.zip." << _getpid();
+#else
                     sstr << "fest.zip." << getpid();
+#endif
                     tmpdownload = sstr.str();
                 }
                 tmpdownload = DataDirectory::Data("themaster").Sub("FEST").GetPath(tmpdownload);
                 std::ofstream outfile(tmpdownload, std::ofstream::binary);
-                typeof(contentLength) offset = 0;
+                decltype(contentLength) offset = 0;
                 std::string buf{};
                 while (true) {
                     auto avail = body.streambuf().in_avail();

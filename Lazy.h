@@ -13,7 +13,7 @@ template <typename T> class LazyGeneratorContainer {
 private:
     T generator;
 public:
-    typedef typeof(generator()) result_type;
+    typedef decltype(generator()) result_type;
     result_type result{};
 private:
     bool generatorStarted{false};
