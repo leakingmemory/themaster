@@ -16,7 +16,7 @@ template <typename Y, typename M, typename D, typename H, typename I, typename S
     if (!noYM) {
         if (years != 0) {
             if (years < 0) {
-                years = static_cast<typeof(years)>(0) - years;
+                years = static_cast<typename std::remove_cvref<decltype(years)>::type>(0) - years;
                 dstr.append("-");
             }
             AppendAsString(dstr, years);
@@ -24,7 +24,7 @@ template <typename Y, typename M, typename D, typename H, typename I, typename S
         }
         if (months != 0) {
             if (months < 0) {
-                months = static_cast<typeof(months)>(0) - months;
+                months = static_cast<typename std::remove_cvref<decltype(months)>::type>(0) - months;
                 dstr.append("-");
             }
             AppendAsString(dstr, months);
@@ -33,7 +33,7 @@ template <typename Y, typename M, typename D, typename H, typename I, typename S
     } else if (noTime && (days % 7) == 0) {
         days /= 7;
         if (days < 0) {
-            days = static_cast<typeof(days)>(0) - days;
+            days = static_cast<typename std::remove_cvref<decltype(days)>::type>(0) - days;
             dstr.append("-");
         }
         AppendAsString(dstr, days);
@@ -42,7 +42,7 @@ template <typename Y, typename M, typename D, typename H, typename I, typename S
     }
     if (days != 0) {
         if (days < 0) {
-            days = static_cast<typeof(days)>(0) - days;
+            days = static_cast<typename std::remove_cvref<decltype(days)>::type>(0) - days;
             dstr.append("-");
         }
         AppendAsString(dstr, days);
@@ -54,7 +54,7 @@ template <typename Y, typename M, typename D, typename H, typename I, typename S
     dstr.append("T");
     if (hours != 0) {
         if (hours < 0) {
-            hours = static_cast<typeof(hours)>(0) - hours;
+            hours = static_cast<typename std::remove_cvref<decltype(hours)>::type>(0) - hours;
             dstr.append("-");
         }
         AppendAsString(dstr, hours);
@@ -62,7 +62,7 @@ template <typename Y, typename M, typename D, typename H, typename I, typename S
     }
     if (minutes != 0) {
         if (minutes < 0) {
-            minutes = static_cast<typeof(minutes)>(0) - minutes;
+            minutes = static_cast<typename std::remove_cvref<decltype(minutes)>::type>(0) - minutes;
             dstr.append("-");
         }
         AppendAsString(dstr, minutes);
@@ -70,7 +70,7 @@ template <typename Y, typename M, typename D, typename H, typename I, typename S
     }
     if (seconds != 0) {
         if (seconds < 0) {
-            seconds = static_cast<typeof(seconds)>(0) - seconds;
+            seconds = static_cast<typename std::remove_cvref<decltype(seconds)>::type>(0) - seconds;
             dstr.append("-");
         }
         AppendAsString(dstr, seconds);
@@ -291,13 +291,13 @@ public:
     constexpr explicit operator bool () const {
         return duration.valid;
     }
-    constexpr typeof(duration.years) GetYears() const {
+    constexpr typename std::remove_cvref<decltype(duration.years)>::type GetYears() const {
         return duration.years;
     }
-    constexpr typeof(duration.months) GetMonths() const {
+    constexpr typename std::remove_cvref<decltype(duration.months)>::type GetMonths() const {
         return duration.months;
     }
-    constexpr typeof(duration.days) GetDays() const {
+    constexpr typename std::remove_cvref<decltype(duration.days)>::type GetDays() const {
         return duration.months;
     }
     constexpr bool NoYears() const {

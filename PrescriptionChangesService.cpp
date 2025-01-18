@@ -9,6 +9,8 @@
 #include <boost/uuid/uuid_generators.hpp>
 #include <boost/uuid/uuid_io.hpp>
 
+#include "DateOnly.h"
+
 const char *RenewalFailureException::what() const noexcept {
     return error.c_str();
 }
@@ -109,86 +111,44 @@ void PrescriptionChangesService::Renew(FhirMedicationStatement &medicationStatem
             }
         }
     }
-    std::tm createdDateTm{};
-    std::tm expirationDateTm{};
+    DateOnly createdDateTm{};
+    DateOnly expirationDateTm{};
+    auto nowT = DateOnly::Today();
     if (createdDateExt) {
-        int y, m, d;
-        auto n = sscanf(createdDate.c_str(), "%d-%d-%d", &y, &m, &d);
-        if (n != 3) {
-            throw RenewalFailureException("Incorrect prescription date or expiration format");
-        }
-        createdDateTm.tm_year = y - 1900;
-        createdDateTm.tm_mon = m - 1;
-        createdDateTm.tm_mday = d;
-    }
-    if (expirationDateExt) {
-        int y, m, d;
-        auto n = sscanf(expirationDate.c_str(), "%d-%d-%d", &y, &m, &d);
-        if (n != 3) {
-            throw RenewalFailureException("Incorrect prescription date or expiration format");
-        }
-        expirationDateTm.tm_year = y - 1900;
-        expirationDateTm.tm_mon = m - 1;
-        expirationDateTm.tm_mday = d;
-    }
-    auto nowT = time(nullptr);
-    if (createdDateExt) {
+        createdDateTm = DateOnly(createdDate);
         if (expirationDateExt) {
-            std::tm plusoney{createdDateTm};
-            plusoney.tm_year++;
-            auto p1 = mktime(&plusoney);
-            auto expt = mktime(&expirationDateTm);
-            auto diff = p1 - expt;
-            if (diff >= 0 && diff <= (24 * 3600)) {
-                if (localtime_r(&nowT, &createdDateTm) != &createdDateTm) {
-                    throw RenewalFailureException("Failed to get current date");
-                }
-                std::tm cplusoney{createdDateTm};
-                cplusoney.tm_year++;
-                auto cp1 = mktime(&cplusoney);
-                cp1 -= 24 * 3600;
-                if (localtime_r(&cp1, &expirationDateTm) != &expirationDateTm) {
-                    throw RenewalFailureException("Failed to get current date");
-                }
+            expirationDateTm = DateOnly(expirationDate);
+            DateOnly plusoney{createdDateTm};
+            plusoney.AddYears(1);
+            if (expirationDateTm == plusoney) {
+                createdDateTm = nowT;
+                expirationDateTm = createdDateTm;
+                expirationDateTm.AddYears(1);
+                expirationDateTm.AddDays(-1);
             } else {
-                auto p0 = mktime(&createdDateTm);
-                diff = expt - p0;
-                if (localtime_r(&nowT, &createdDateTm) != &createdDateTm) {
-                    throw RenewalFailureException("Failed to get current date");
-                }
-                expt = nowT + diff;
-                if (localtime_r(&expt, &expirationDateTm) != &expirationDateTm) {
-                    throw RenewalFailureException("Failed to get current date");
-                }
+                expirationDateTm.AddDays(1);
+                auto diff = expirationDateTm - createdDateTm;
+                createdDateTm = nowT;
+                expirationDateTm = createdDateTm + diff;
+                expirationDateTm.AddDays(-1);
             }
         } else {
-            if (localtime_r(&nowT, &createdDateTm) != &createdDateTm) {
-                throw RenewalFailureException("Failed to get current date");
-            }
+            createdDateTm = nowT;
         }
     } else if (expirationDateExt) {
-        auto expt = mktime(&expirationDateTm);
-        if (expt > nowT) {
-            if (localtime_r(&nowT, &createdDateTm) != &createdDateTm) {
-                throw RenewalFailureException("Failed to get current date");
-            }
+        expirationDateTm = DateOnly(expirationDate);
+        if (expirationDateTm > nowT) {
+            createdDateTm = nowT;
         } else {
             throw RenewalFailureException("Missing reseptdate");
         }
     }
     if (createdDateExt) {
-        std::stringstream sstr{};
-        sstr << (createdDateTm.tm_year + 1900) << "-" << (createdDateTm.tm_mon < 9 ? "0" : "");
-        sstr << (createdDateTm.tm_mon + 1) << "-" << (createdDateTm.tm_mday < 10 ? "0" : "");
-        sstr << createdDateTm.tm_mday;
-        createdDateExt->SetValue(std::make_shared<FhirDateValue>(sstr.str()));
+        createdDateExt->SetValue(std::make_shared<FhirDateValue>(createdDateTm.ToString()));
     }
     if (expirationDateExt) {
-        std::stringstream sstr{};
-        sstr << (expirationDateTm.tm_year + 1900) << "-" << (expirationDateTm.tm_mon < 9 ? "0" : "");
-        sstr << (expirationDateTm.tm_mon + 1) << "-" << (expirationDateTm.tm_mday < 10 ? "0" : "");
-        sstr << expirationDateTm.tm_mday;
-        expirationDateExt->SetValue(std::make_shared<FhirDateValue>(sstr.str()));
+
+        expirationDateExt->SetValue(std::make_shared<FhirDateValue>(expirationDateTm.ToString()));
     }
     {
         FhirCodeableConcept recallCode{"urn:oid:2.16.578.1.12.4.1.1.7500", "1", "Fornying"};

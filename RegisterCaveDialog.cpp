@@ -168,11 +168,15 @@ RegisterCaveDialog::RegisterCaveDialog(wxWindow *parent, const std::vector<CaveC
     }
     this->recorder = recorder;
     this->patient = patient;
+#ifndef WIN32
 #pragma clang diagnostic push
 #pragma ide diagnostic ignored "MemoryLeak"
+#endif
     auto *sizer = new wxBoxSizer(wxVERTICAL);
     codingsListView = new wxListView(this, wxID_ANY);
+#ifndef WIN32
 #pragma clang diagnostic pop
+#endif
     codingsListView->AppendColumn(wxT("Substance:"));
     codingsListView->AppendColumn(wxT("Type"));
     codingsListView->SetColumnWidth(0, 300);

@@ -33,7 +33,7 @@ EreseptdosingDialog::EreseptdosingDialog(wxWindow *parent, const std::vector<std
                 continue;
             }
             auto url = extension->GetUrl();
-            std::transform(url.cbegin(), url.cend(), url.begin(), [] (char ch) constexpr -> char { return std::tolower(ch); });
+            std::transform(url.cbegin(), url.cend(), url.begin(), [] (char ch) -> char { return std::tolower(ch); });
             if (url == "starttime") {
                 starttm = value->GetRawValue();
             } else if (url == "endtime") {

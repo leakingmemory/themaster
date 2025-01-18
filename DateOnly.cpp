@@ -248,7 +248,11 @@ std::string DateOnly::ToString() const {
 DateOnly DateOnly::Today() {
     auto secondsSinceEpochZ = time(nullptr);
     struct tm t{};
+#ifdef WIN32
+    if (localtime_s(&t, &secondsSinceEpochZ) != 0) {
+#else
     if (localtime_r(&secondsSinceEpochZ, &t) != &t) {
+#endif
         throw std::exception();
     }
     return DateOnly(t.tm_year + 1900, t.tm_mon + 1, t.tm_mday);
@@ -393,7 +397,7 @@ static_assert(TestAddYears(2024, 2, 29, -4, 2020, 2, 29));
 static_assert(TestAddYears(2024, 10, 23, 1, 2025, 10, 23));
 
 template <typename Y, typename M, typename D, typename T> static constexpr void InlineAddMonths(Y &year, M &month, D &day, T months) {
-    typeof(months) years = months / 12;
+    typename std::remove_cvref<decltype(months)>::type years = months / 12;
     months = months % 12;
     months += month - 1;
     years += months / 12;
@@ -509,8 +513,8 @@ template <typename T> static constexpr T InlineGetDays(DateOnly start, DateOnly 
         return 0 - InlineGetDays<T>(end, start);
     }
     T counter = GetDaysPerYear(start.GetYear()) - GetDayOfYear(start.GetYear(), start.GetMonth(), start.GetDayOfMonth());
-    typeof(end.GetYear()) year = start.GetYear() + 1;
-    typeof(end.GetYear()) remainingYears = end.GetYear() - year;
+    decltype(end.GetYear()) year = start.GetYear() + 1;
+    decltype(end.GetYear()) remainingYears = end.GetYear() - year;
     counter += (remainingYears / 400) * daysPer400Years;
     remainingYears = remainingYears % 400;
     while (remainingYears > 0) {
@@ -533,6 +537,44 @@ static_assert(InlineGetDays<int>(DateOnly(2024, 11, 8), DateOnly(2025, 11, 8)) =
 static_assert(InlineGetDays<int>(DateOnly(2024, 11, 8), DateOnly(2026, 11, 8)) == 730);
 static_assert(InlineGetDays<int>(DateOnly(2024, 11, 8), DateOnly(2424, 11, 9)) == (daysPer400Years + 1));
 
-int32_t DateOnlyDiff::GetDays() {
+int32_t DateOnlyDiff::GetDays() const {
     return InlineGetDays<int32_t>(start, end);
 }
+
+constexpr bool DateOnlyDiff::SameDay() const {
+    if (start.month == end.month && start.day == end.day) {
+        return true;
+    }
+    if (start.month == 2 && start.day == 29) {
+        if ((end.month == 2 && end.day == 28) || (end.month == 3 && end.day == 1)) {
+            return true;
+        }
+        return false;
+    }
+    if (end.month == 2 && end.day == 29) {
+        if ((start.month == 2 && start.day == 28) || (start.month == 3 && start.day == 1)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+constexpr DateOnly DateOnlyDiff::AddW(DateOnly d1) const {
+    DateOnly d0{d1.year, d1.month, d1.day};
+    if (SameDay()) {
+        auto ydiff = end.year - start.year;
+        d0.AddYears(ydiff);
+        return d0;
+    }
+    auto days = GetDays();
+    d0.AddDays(days);
+    return d0;
+}
+
+DateOnly DateOnlyDiff::operator+(DateOnly d1) const {
+    return this->AddW(d1);
+}
+DateOnly operator + (DateOnly d1, DateOnlyDiff diff) {
+    return diff + d1;
+}
+

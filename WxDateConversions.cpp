@@ -5,6 +5,7 @@
 #include "WxDateConversions.h"
 #include <wx/datetime.h>
 #include "DateOnly.h"
+#include <array>
 
 wxDateTime ToWxDateTime(DateOnly dateOnly) {
     auto setTime = wxDateTime::Now();

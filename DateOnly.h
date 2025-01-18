@@ -15,8 +15,10 @@ public:
 };
 
 class Duration;
+class DateOnlyDiff;
 
 class DateOnly {
+    friend DateOnlyDiff;
 private:
     int32_t year;
     uint8_t month;
@@ -109,11 +111,17 @@ private:
     DateOnly end;
 public:
     constexpr DateOnlyDiff(DateOnly start, DateOnly end) : start(start), end(end) {}
-    int32_t GetDays();
+    int32_t GetDays() const;
+private:
+    constexpr bool SameDay() const;
+    constexpr DateOnly AddW(DateOnly d1) const;
+public:
+    DateOnly operator + (DateOnly) const;
 };
 
 constexpr DateOnlyDiff operator - (DateOnly d1, DateOnly d2) {
     return {d2, d1};
 }
+DateOnly operator + (DateOnly d1, DateOnlyDiff diff);
 
 #endif //THEMASTER_DATEONLY_H

@@ -28,7 +28,7 @@ std::string FixedTimeAdvancedDosingPeriod::ToString() const {
     return str.str();
 }
 
-static constexpr void dosage(std::stringstream &str, float amount) {
+static void dosage(std::stringstream &str, float amount) {
     str << amount;
     if (std::abs(amount - 1.0) < 0.01) {
         str << " <dose>";
@@ -92,7 +92,7 @@ std::string FixedTimeAdvancedDosingPeriod::ToDosingText() const {
     return str.str();
 }
 
-constexpr void AddFixedDosing(FhirExtendable &extendable, double amount, std::string unit, double interval, std::string intervalUnit, bool accurate, const std::string &timerangeCode) {
+static void AddFixedDosing(FhirExtendable &extendable, double amount, std::string unit, double interval, std::string intervalUnit, bool accurate, const std::string &timerangeCode) {
     auto ext = std::make_shared<FhirExtension>("repeatingdosage");
     ext->AddExtension(std::make_shared<FhirValueExtension>("amount", std::make_shared<FhirQuantityValue>(FhirQuantity(amount, unit))));
     ext->AddExtension(std::make_shared<FhirValueExtension>("interval", std::make_shared<FhirQuantityValue>(FhirQuantity(interval, intervalUnit))));
@@ -147,7 +147,7 @@ constexpr static std::string __ToDosingText(const std::vector<std::shared_ptr<Ad
     if (dosingPeriodTexts.empty()) {
         return "Ingen dosering";
     }
-    std::string dosingText = std::accumulate(dosingPeriodTexts.cbegin() + 1, dosingPeriodTexts.cend(), dosingPeriodTexts[0], [] (const std::string &t1, const std::string &t2) constexpr -> std::string {
+    std::string dosingText = std::accumulate(dosingPeriodTexts.cbegin() + 1, dosingPeriodTexts.cend(), dosingPeriodTexts[0], [] (const std::string &t1, const std::string &t2) -> std::string {
         static constexpr const char glue[] = ".\nDeretter ";
         std::string accumulated{};
         accumulated.reserve(t1.size() + t2.size() + sizeof(glue) - 1);
