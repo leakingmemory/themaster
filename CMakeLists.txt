@@ -46,8 +46,14 @@ add_executable(themaster TheMasterApp.cpp TheMasterApp.h TheMasterFrame.cpp TheM
     WxDateConversions.h WxDateConversions.cpp EditTreatmentDialog.cpp EditTreatmentDialog.h
     CaveDetailsDialog.cpp CaveDetailsDialog.h RegisterCaveDialog.cpp RegisterCaveDialog.h
     ConnectToPllDialog.cpp ConnectToPllDialog.h)
-target_link_libraries(themaster PRIVATE -lsfmbasisapi -ljjwtid -lmedfest)
-target_link_libraries(themaster PRIVATE cpprestsdk::cpprest -lcrypto)
+if (WIN32)
+    set_target_properties(themaster PROPERTIES WIN32_EXECUTABLE TRUE)
+    target_link_libraries(themaster PRIVATE ${SFMBASISAPI_LIBRARY} ${LIBJJWTID_LIBRARY} ${MEDFEST_LIBRARY})
+    target_link_libraries(themaster PRIVATE cpprestsdk::cpprest)
+else()
+    target_link_libraries(themaster PRIVATE -lsfmbasisapi -ljjwtid -lmedfest)
+    target_link_libraries(themaster PRIVATE cpprestsdk::cpprest -lcrypto)
+endif()
 target_link_libraries(themaster PRIVATE ${wxWidgets_LIBRARIES})
 target_include_directories(themaster PRIVATE ${wxWidgets_INCLUDE})
 target_include_directories(themaster PRIVATE ${CMAKE_CURRENT_BINARY_DIR})
@@ -59,12 +65,17 @@ if (WIN32)
 endif()
 add_dependencies(themaster "InstallPrefix.h")
 
-add_custom_target(
-        "TheMaster.desktop"
-        ALL "cat" "${CMAKE_CURRENT_SOURCE_DIR}/TheMaster.desktop" | sed -e "s/PREFIX/${PREFIX_ESCAPED}/" > "${CMAKE_CURRENT_BINARY_DIR}/TheMaster.desktop"
-        DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/TheMaster.desktop"
-)
+if (WIN32)
+    install(TARGETS themaster DESTINATION bin)
+    install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/TheMasterLogo.png" DESTINATION bin)
+else()
+    add_custom_target(
+            "TheMaster.desktop"
+            ALL "cat" "${CMAKE_CURRENT_SOURCE_DIR}/TheMaster.desktop" | sed -e "s/PREFIX/${PREFIX_ESCAPED}/" > "${CMAKE_CURRENT_BINARY_DIR}/TheMaster.desktop"
+            DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/TheMaster.desktop"
+    )
 
-install(TARGETS themaster DESTINATION bin)
-install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/TheMasterLogo.png" DESTINATION share/themaster)
-install(FILES "${CMAKE_CURRENT_BINARY_DIR}/TheMaster.desktop" DESTINATION share/applications)
+    install(TARGETS themaster DESTINATION bin)
+    install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/TheMasterLogo.png" DESTINATION share/themaster)
+    install(FILES "${CMAKE_CURRENT_BINARY_DIR}/TheMaster.desktop" DESTINATION share/applications)
+endif()
