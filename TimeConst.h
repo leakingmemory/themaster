@@ -335,8 +335,8 @@ template <typename Y, typename M, typename D, typename H, typename I, typename S
         tzhours = tzh0 - tzhours;
         tzminutes = tz0 - tzminutes;
 #else
-        tzhours = static_cast<decltype(tzhours)>(0) - tzhours;
-        tzminutes = static_cast<decltype(tzminutes)>(0) - tzminutes;
+        tzhours = static_cast<std::remove_cvref<decltype(tzhours)>::type>(0) - tzhours;
+        tzminutes = static_cast<std::remove_cvref<decltype(tzminutes)>::type>(0) - tzminutes;
 #endif
     }
     return true;
