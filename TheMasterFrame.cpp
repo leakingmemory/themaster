@@ -17,6 +17,7 @@
 #include <boost/uuid/uuid_io.hpp>
 #include <cstdio>
 #include <ctime>
+#include <filesystem>
 #include <sfmbasisapi/fhir/bundleentry.h>
 #include <sfmbasisapi/fhir/person.h>
 #include <sfmbasisapi/fhir/parameters.h>
@@ -62,12 +63,32 @@ TheMasterFrame::TheMasterFrame() : wxFrame(nullptr, wxID_ANY, "The Master"),
                                    weakRefDispatcher(std::make_shared<WeakRefUiDispatcher<TheMasterFrame>>(this)),
                                    patientStore(std::make_shared<PatientStoreInMemoryWithPersistence>())
 {
+#ifdef WIN32
+    std::string iconPath{};
+    {
+        constexpr int size = 1024;
+        wchar_t buf[size];
+        auto bytes = GetModuleFileName(NULL, buf, size);
+        if (bytes > 0) {
+            std::wstring wbuf(buf, bytes);
+            iconPath = from_wstring_on_win32(wbuf);
+            const std::filesystem::path p{iconPath};
+            iconPath = p.parent_path().string();
+            if (!iconPath.ends_with("\\")) {
+                iconPath.append("\\");
+            }
+        }
+    }
+    iconPath.append("TheMasterLogo.bmp");
+    wxIcon icon{iconPath, wxBITMAP_TYPE_BMP};
+#else
     std::string iconPath{GetInstallPrefix()};
     if (!iconPath.ends_with("/")) {
         iconPath.append("/");
     }
     iconPath.append("share/themaster/TheMasterLogo.png");
     wxIcon icon{iconPath, wxBITMAP_TYPE_PNG};
+#endif
     SetIcon(icon);
     auto *festMenu = new wxMenu();
     festMenu->Append(TheMaster_UpdateFest_Id, "Update FEST");
@@ -668,7 +689,7 @@ void TheMasterFrame::GetMedication(CallContext &ctx, const std::function<void(co
             request.set_request_uri(as_wstring_on_win32("patient/$getMedication"));
             {
                 auto jsonString = requestBody.serialize();
-                request.set_body(jsonString, as_wstring_on_win32("application/fhir+json; charset=utf-8"));
+                request.set_body(from_wstring_on_win32(jsonString), "application/fhir+json; charset=utf-8");
                 *rawRequest = from_wstring_on_win32(jsonString);
             }
         }
@@ -1046,7 +1067,7 @@ void TheMasterFrame::SendMedication(CallContext &ctx,
             {
                 auto json = sendMedicationParameters.ToJson();
                 auto jsonString = json.serialize();
-                request.set_body(jsonString, as_wstring_on_win32("application/fhir+json; charset=utf-8"));
+                request.set_body(from_wstring_on_win32(jsonString), "application/fhir+json; charset=utf-8");
                 *rawRequest = from_wstring_on_win32(jsonString);
             }
         }
@@ -2058,24 +2079,26 @@ void TheMasterFrame::OnPrescribeMedicament(wxCommandEvent &e) {
     findMedicamentDialog.ShowModal();
     auto medicament = findMedicamentDialog.GetSelected();
     if (medicament) {
-        SfmMedicamentMapper medicamentMapper{festDb, medicament};
-        std::vector<MedicamentPackage> packages{};
-        {
-            auto packageMappers = medicamentMapper.GetPackages();
-            packages.reserve(packageMappers.size());
-            for (const auto &packageMapper : packageMappers) {
-                auto description = packageMapper.GetPackageDescription();
-                packages.emplace_back(std::make_shared<FhirMedication>(packageMapper.GetMedication()), description);
+        wxTheApp->GetTopWindow()->GetEventHandler()->CallAfter([this, festDb, medicament]() {
+            SfmMedicamentMapper medicamentMapper{festDb, medicament};
+            std::vector<MedicamentPackage> packages{};
+            {
+                auto packageMappers = medicamentMapper.GetPackages();
+                packages.reserve(packageMappers.size());
+                for (const auto &packageMapper : packageMappers) {
+                    auto description = packageMapper.GetPackageDescription();
+                    packages.emplace_back(std::make_shared<FhirMedication>(packageMapper.GetMedication()), description);
+                }
             }
-        }
-        std::vector<MedicalCodedValue> dosingUnits = GetMedicamentDosingUnit(festDb, *medicament).operator std::vector<MedicalCodedValue>();
-        std::vector<MedicalCodedValue> kortdoser = GetLegemiddelKortdoser(festDb, *medicament).operator std::vector<MedicalCodedValue>();
-        PrescriptionDialog prescriptionDialog{this, festDb, std::make_shared<FhirMedication>(medicamentMapper.GetMedication()), medicamentMapper.GetPrescriptionUnit(), medicamentMapper.GetMedicamentType(), medicamentMapper.GetMedicamentUses(), medicamentMapper.IsPackage(), packages, dosingUnits, kortdoser, medicamentMapper.GetPrescriptionValidity()};
-        auto res = prescriptionDialog.ShowModal();
-        if (res != wxID_OK) {
-            return;
-        }
-        PrescribeMedicament(prescriptionDialog);
+            std::vector<MedicalCodedValue> dosingUnits = GetMedicamentDosingUnit(festDb, *medicament).operator std::vector<MedicalCodedValue>();
+            std::vector<MedicalCodedValue> kortdoser = GetLegemiddelKortdoser(festDb, *medicament).operator std::vector<MedicalCodedValue>();
+            PrescriptionDialog prescriptionDialog{this, festDb, std::make_shared<FhirMedication>(medicamentMapper.GetMedication()), medicamentMapper.GetPrescriptionUnit(), medicamentMapper.GetMedicamentType(), medicamentMapper.GetMedicamentUses(), medicamentMapper.IsPackage(), packages, dosingUnits, kortdoser, medicamentMapper.GetPrescriptionValidity()};
+            auto res = prescriptionDialog.ShowModal();
+            if (res != wxID_OK) {
+                return;
+            }
+            PrescribeMedicament(prescriptionDialog);
+        });
     }
 }
 

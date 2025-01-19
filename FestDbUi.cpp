@@ -76,7 +76,8 @@ void FestDbUi::Update() {
     }
     std::shared_ptr<DownloadFestDialog> downloadFestDialog = std::make_shared<DownloadFestDialog>(parent);
     auto self = shared_from_this();
-    httpClient.request(request).then([self, downloadFestDialog] (const pplx::task<web::http::http_response> &responseTask) {
+    auto callAfter = std::make_shared<std::function<void ()>>([] () {});
+    httpClient.request(request).then([self, downloadFestDialog, callAfter] (const pplx::task<web::http::http_response> &responseTask) {
         try {
             auto response = responseTask.get();
             auto statusCode = response.status_code();
@@ -138,31 +139,40 @@ void FestDbUi::Update() {
                     DataDirectory::Data("themaster").Sub("FEST").WriteFile("lastmod", lastModified);
                 }
             } else {
-                wxTheApp->GetTopWindow()->GetEventHandler()->CallAfter([&downloadFestDialog]() {
+                wxTheApp->GetTopWindow()->GetEventHandler()->CallAfter([downloadFestDialog, callAfter]() {
+                    *callAfter= [] () {
+                        wxMessageBox(wxT("FEST is up to date, and no need to download"), wxT("FEST is up to date"),
+                                     wxICON_INFORMATION);
+                    };
                     downloadFestDialog->EndModal(0);
-                    wxMessageBox(wxT("FEST is up to date, and no need to download"), wxT("FEST is up to date"),
-                                 wxICON_INFORMATION);
                 });
                 return;
             }
         } catch (const std::exception &e) {
             std::string msg{e.what()};
-            wxTheApp->GetTopWindow()->GetEventHandler()->CallAfter([&downloadFestDialog, msg]() {
+            wxTheApp->GetTopWindow()->GetEventHandler()->CallAfter([downloadFestDialog, callAfter, msg]() {
                 wxString err{msg};
+                *callAfter = [err] () {
+                    wxMessageBox(err, wxT("Download failed"), wxICON_ERROR);
+                };
                 downloadFestDialog->EndModal(0);
-                wxMessageBox(err, wxT("Download failed"), wxICON_ERROR);
             });
             return;
         } catch (...) {
-            wxTheApp->GetTopWindow()->GetEventHandler()->CallAfter([&downloadFestDialog]() {
+            wxTheApp->GetTopWindow()->GetEventHandler()->CallAfter([downloadFestDialog, callAfter]() {
+                *callAfter = [] () {
+                    wxMessageBox(wxT("Downloading fest failed"), wxT("Download failed"), wxICON_ERROR);
+                };
                 downloadFestDialog->EndModal(0);
-                wxMessageBox(wxT("Downloading fest failed"), wxT("Download failed"), wxICON_ERROR);
             });
             return;
         }
-        wxTheApp->GetTopWindow()->GetEventHandler()->CallAfter([&downloadFestDialog]() {
+        wxTheApp->GetTopWindow()->GetEventHandler()->CallAfter([downloadFestDialog]() {
             downloadFestDialog->EndModal(0);
         });
     });
     downloadFestDialog->ShowModal();
+    wxTheApp->GetTopWindow()->GetEventHandler()->CallAfter([downloadFestDialog, callAfter]() {
+        (*callAfter)();
+    });
 }
