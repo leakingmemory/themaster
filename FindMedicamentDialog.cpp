@@ -23,7 +23,7 @@ enum class FindMedicamentSelections {
 };
 
 FindMedicamentDialog::FindMedicamentDialog(wxWindow *parent, const std::shared_ptr<FestDb> &festDb) :
-    wxDialog(parent, wxID_ANY, wxT("Find medicament")),
+    wxDialog(parent, wxID_ANY, wxT("Find medicament"), wxDefaultPosition, wxSize(300, 400)),
     festDb(festDb),
     searchDebouncer(),
     merkevareToPrescriptionValidity([this] () { return CreateMerkevareToPrescriptionValidity(); }),
