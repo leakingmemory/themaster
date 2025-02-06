@@ -11,6 +11,7 @@
 #include <map>
 #include "WeakRefUiDispatcher.h"
 #include "PrescriptionData.h"
+#include "MerchData.h"
 #include "MedBundleData.h"
 #include "TheMasterIds.h"
 #ifdef WIN32
@@ -33,6 +34,7 @@ namespace pplx {
 }
 #endif
 class PrescriptionDialog;
+class PrescribeMerchandiseDialog;
 class CallContext;
 
 class TheMasterFrame : public wxFrame {
@@ -43,6 +45,7 @@ private:
     std::string medicationBundleResetData{};
     std::unique_ptr<MedBundleData> medicationBundle{};
     std::vector<std::vector<std::shared_ptr<FhirMedicationStatement>>> displayedMedicationStatements{};
+    std::vector<std::vector<std::shared_ptr<FhirBasic>>> displayedMerch{};
     std::vector<std::shared_ptr<FhirAllergyIntolerance>> displayedAllergies{};
     std::string lastGetmedRequest{};
     std::string lastGetmedResponse{};
@@ -63,11 +66,13 @@ private:
     wxListView *header;
     wxNotebook *mainCategories;
     wxListView *prescriptions;
+    wxListView *merchPrescriptions;
     wxListView *caveListView;
 public:
     TheMasterFrame();
     void UpdateHeader();
     void UpdateMedications();
+    void UpdateMerch();
     void UpdateCave();
     void OnConnect(wxCommandEvent &e);
     void OnFindPatient(wxCommandEvent &e);
@@ -93,12 +98,16 @@ public:
     void OnSaveBundle(wxCommandEvent &e);
     [[nodiscard]] PrescriberRef GetPrescriber() const ;
     void SetPrescriber(PrescriptionData &prescriptionData) const ;
+    void SetPrescriber(MerchData &merchData) const;
     [[nodiscard]] FhirReference GetSubjectRef() const ;
     void SetPatient(PrescriptionData &prescriptionData) const ;
+    void SetPatient(MerchData &merchData) const;
     //pplx::task<PrescriptionData> SetPrescriber(const PrescriptionData &prescriptionData);
     void PrescribeMedicament(const PrescriptionDialog &prescriptionDialog, const std::string &renewPrescriptionId = "");
+    void PrescribeMerch(const PrescribeMerchandiseDialog &prescriptionDialog, const std::string &renewPrescriptionId = "");
     void OnPrescribeMagistral(wxCommandEvent &e);
     void OnPrescribeMedicament(wxCommandEvent &e);
+    void OnPrescribeMerch(wxCommandEvent &e);
     WeakRefUiDispatcherRef<TheMasterFrame> GetWeakRefDispatcher();
     void SetHelseid(const std::string &url, const std::string &clientId, const std::string &secretJwk, const std::vector<std::string> &scopes, const std::string &refreshToken, long expiresIn, const std::string &idToken, const std::string &journalId, const std::string &orgNo, const std::string &childOrgNo);
     void Connect(const std::string &url);
@@ -106,7 +115,9 @@ public:
     void OnShowFestVersions(wxCommandEvent &e);
     void OnShowFestDbQuotas(wxCommandEvent &e);
     void OnPrescriptionContextMenu(const wxContextMenuEvent &e);
+    void OnMerchPrescriptionContextMenu(const wxContextMenuEvent &e);
     void OnPrescriptionDetails(const wxCommandEvent &e);
+    void OnMerchPrescriptionDetails(const wxCommandEvent &e);
     void OnPrescriptionRecall(const wxCommandEvent &e);
     void OnPrescriptionCease(const wxCommandEvent &e);
     void OnPrescriptionRenew(const wxCommandEvent &e);

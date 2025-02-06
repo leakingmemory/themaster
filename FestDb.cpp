@@ -13,6 +13,7 @@
 #include <medfest/Struct/Decoded/OppfVirkestoffMedStyrke.h>
 #include <medfest/Struct/Decoded/OppfVirkestoff.h>
 #include <medfest/Struct/Decoded/OppfKodeverk.h>
+#include <medfest/Struct/Decoded/OppfHandelsvare.h>
 #include <medfest/Struct/Packed/PPakningsinfo.h>
 #include "DataDirectory.h"
 #include <filesystem>
@@ -592,6 +593,21 @@ std::vector<Element> FestDb::GetKodeverkElements(const std::string &kodeverkId, 
                 }
                 break;
             }
+        }
+    }
+    return oppfs;
+}
+
+std::vector<OppfMedForbrMatr> FestDb::GetOppfMedForbrMatr(const std::string &festVersion) const {
+    std::vector<OppfMedForbrMatr> oppfs{};
+    {
+        FestDbContainer festDbContainer = GetFestDb(festVersion);
+        if (!festDbContainer.festVectors) {
+            return {};
+        }
+        auto poppfs = festDbContainer.festVectors->GetMedForbrMatr(*festDeserializer);
+        for (const auto &poppf : poppfs) {
+            oppfs.emplace_back(festDeserializer->Unpack(poppf));
         }
     }
     return oppfs;

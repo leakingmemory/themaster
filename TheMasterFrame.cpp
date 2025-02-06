@@ -40,6 +40,7 @@
 #include "FestDbUi.h"
 #include "FindMedicamentDialog.h"
 #include <medfest/Struct/Decoded/LegemiddelCore.h>
+#include <medfest/Struct/Decoded/OppfHandelsvare.h>
 #include "SfmMedicamentMapper.h"
 #include "FestVersionsDialog.h"
 #include "PrescriptionDetailsDialog.h"
@@ -54,6 +55,8 @@
 #include "RegisterCaveDialog.h"
 #include "ConnectToPllDialog.h"
 #include "win32/w32strings.h"
+#include "MerchTree.h"
+#include "PrescribeMerchandiseDialog.h"
 
 constexpr int PrescriptionNameColumnWidth = 250;
 constexpr int PllColumnWidth = 50;
@@ -99,6 +102,7 @@ TheMasterFrame::TheMasterFrame() : wxFrame(nullptr, wxID_ANY, "The Master"),
     auto *medicationMenu = new wxMenu();
     medicationMenu->Append(TheMaster_PrescribeMagistral_Id, "Prescribe magistral");
     medicationMenu->Append(TheMaster_PrescribeMedicament_Id, "Prescribe medicament");
+    medicationMenu->Append(TheMaster_PrescribeMedForbMatr_Id, "Prescribe merchandise");
     auto *patientMenu = new wxMenu();
     patientMenu->Append(TheMaster_FindPatient_Id, "Find patient");
     patientMenu->Append(TheMaster_CreatePatient_Id, "Create patient");
@@ -154,6 +158,18 @@ TheMasterFrame::TheMasterFrame() : wxFrame(nullptr, wxID_ANY, "The Master"),
     medicationPage->SetSizerAndFit(medicationPageSizer);
     mainCategories->AddPage(medicationPage, wxT("Medication"));
 
+    auto *merchPrescriptionsPage = new wxPanel(mainCategories, wxID_ANY);
+    auto *merchPrescriptionsPageSizer = new wxBoxSizer(wxVERTICAL);
+    merchPrescriptions = new wxListView(merchPrescriptionsPage, wxID_ANY);
+    merchPrescriptions->AppendColumn(wxT("Name"));
+    merchPrescriptions->AppendColumn(wxT("Published"));
+    merchPrescriptions->SetColumnWidth(0, PrescriptionNameColumnWidth);
+    merchPrescriptions->SetColumnWidth(1, PrescriptionRemoteColumnWidth);
+    merchPrescriptions->Bind(wxEVT_CONTEXT_MENU, &TheMasterFrame::OnMerchPrescriptionContextMenu, this, wxID_ANY);
+    merchPrescriptionsPageSizer->Add(merchPrescriptions, 1, wxEXPAND | wxALL, 5);
+    merchPrescriptionsPage->SetSizerAndFit(merchPrescriptionsPageSizer);
+    mainCategories->AddPage(merchPrescriptionsPage, wxT("Merch/Nour"));
+
     auto *cavePage = new wxPanel(mainCategories, wxID_ANY);
     auto *cavePageSizer = new wxBoxSizer(wxVERTICAL);
     caveListView = new wxListView(cavePage, wxID_ANY);
@@ -180,6 +196,7 @@ TheMasterFrame::TheMasterFrame() : wxFrame(nullptr, wxID_ANY, "The Master"),
     Bind(wxEVT_MENU, &TheMasterFrame::OnSaveBundle, this, TheMaster_SaveBundle_Id);
     Bind(wxEVT_MENU, &TheMasterFrame::OnPrescribeMagistral, this, TheMaster_PrescribeMagistral_Id);
     Bind(wxEVT_MENU, &TheMasterFrame::OnPrescribeMedicament, this, TheMaster_PrescribeMedicament_Id);
+    Bind(wxEVT_MENU, &TheMasterFrame::OnPrescribeMerch, this, TheMaster_PrescribeMedForbMatr_Id);
     Bind(wxEVT_MENU, &TheMasterFrame::OnUpdateFest, this, TheMaster_UpdateFest_Id);
     Bind(wxEVT_MENU, &TheMasterFrame::OnShowFestVersions, this, TheMaster_ShowFestVersions_Id);
     Bind(wxEVT_MENU, &TheMasterFrame::OnShowFestDbQuotas, this, TheMaster_ShowFestDbQuotas_Id);
@@ -191,6 +208,8 @@ TheMasterFrame::TheMasterFrame() : wxFrame(nullptr, wxID_ANY, "The Master"),
     Bind(wxEVT_MENU, &TheMasterFrame::OnPrescriptionRenewWithChanges, this, TheMaster_PrescriptionRenewWithChanges_Id);
     Bind(wxEVT_MENU, &TheMasterFrame::OnTreatmentEdit, this, TheMaster_TreatmentEdit_Id);
     Bind(wxEVT_MENU, &TheMasterFrame::OnConnectToPll, this, TheMaster_ConnectToPll_Id);
+
+    Bind(wxEVT_MENU, &TheMasterFrame::OnMerchPrescriptionDetails, this, TheMaster_MerchPrescriptionDetails_Id);
 
     Bind(wxEVT_MENU, &TheMasterFrame::OnCaveDetails, this, TheMaster_CaveDetails_Id);
     Bind(wxEVT_MENU, &TheMasterFrame::OnAddCaveMedicament, this, TheMaster_AddCaveMedicament_Id);
@@ -312,6 +331,82 @@ void TheMasterFrame::UpdateMedications() {
     this->displayedMedicationStatements = displayedMedicationStatements;
 }
 
+void TheMasterFrame::UpdateMerch() {
+    merchPrescriptions->ClearAll();
+    merchPrescriptions->AppendColumn(wxT("Name"));
+    merchPrescriptions->AppendColumn(wxT("PLL"));
+    merchPrescriptions->AppendColumn(wxT("Published"));
+    merchPrescriptions->SetColumnWidth(0, PrescriptionNameColumnWidth);
+    merchPrescriptions->SetColumnWidth(1, PllColumnWidth);
+    merchPrescriptions->SetColumnWidth(2, PrescriptionRemoteColumnWidth);
+    std::vector<std::vector<std::shared_ptr<FhirBasic>>> displayedMerch{};
+    auto pos = 0;
+    std::map<std::string,std::shared_ptr<FhirBasic>> merchMap{};
+    FhirCompositionSection otherPrescriptionsSection{};
+    if (medicationBundle && medicationBundle->medBundle) {
+        for (const auto &bundleEntry: medicationBundle->medBundle->GetEntries()) {
+            auto resource = bundleEntry.GetResource();
+            auto fhirBasic = std::dynamic_pointer_cast<FhirBasic>(resource);
+            if (fhirBasic) {
+                merchMap.insert_or_assign(bundleEntry.GetFullUrl(), fhirBasic);
+                continue;
+            }
+            auto composition = std::dynamic_pointer_cast<FhirComposition>(resource);
+            if (composition) {
+                auto sections = composition->GetSections();
+                for (const auto &section: sections) {
+                    auto coding = section.GetCode().GetCoding();
+                    if (coding.size() == 1 && coding[0].GetCode() == "sectionOtherPrescriptions") {
+                        otherPrescriptionsSection = section;
+                        break;
+                    }
+                }
+            }
+        }
+    }
+    for (const auto &sectionEntry : otherPrescriptionsSection.GetEntries()) {
+        auto merchIterator = merchMap.find(sectionEntry.GetReference());
+        if (merchIterator == merchMap.end()) {
+            continue;
+        }
+        auto fhirBasic = merchIterator->second;
+        std::vector<std::shared_ptr<FhirBasic>> versions{};
+        versions.emplace_back(merchIterator->second);
+        auto basedOn = fhirBasic->GetBasedOn();
+        while (!basedOn.empty()) {
+            fhirBasic = {};
+            for (const auto &bo : basedOn) {
+                merchIterator = merchMap.find(bo.GetReference());
+                if (merchIterator != merchMap.end()) {
+                    fhirBasic = merchIterator->second;
+                    break;
+                }
+            }
+            if (!fhirBasic) {
+                break;
+            }
+            versions.emplace_back(fhirBasic);
+            basedOn = fhirBasic->GetBasedOn();
+        }
+        fhirBasic = versions[0];
+        if (fhirBasic) {
+            auto row = pos++;
+            displayedMerch.emplace_back(versions);
+            // TODO - Try product group as display
+            merchPrescriptions->InsertItem(row, fhirBasic->GetDisplay());
+            auto statusInfo = PrescriptionChangesService::GetPrescriptionStatusInfo(*fhirBasic);
+            if (versions.size() > 1) {
+                prescriptions->SetItem(row, 1, wxT("*"));
+            } else {
+                prescriptions->SetItem(row, 1, wxT(""));
+            }
+            auto statusStr = PrescriptionChangesService::GetPrescriptionStatusString(statusInfo);
+            prescriptions->SetItem(row, 2, wxString::FromUTF8(statusStr));
+        }
+    }
+    this->displayedMerch = displayedMerch;
+}
+
 void TheMasterFrame::UpdateCave() {
     caveListView->ClearAll();
     displayedAllergies.clear();
@@ -396,6 +491,7 @@ void TheMasterFrame::OnFindPatient(wxCommandEvent &e) {
         medicationBundle = {};
         UpdateHeader();
         UpdateMedications();
+        UpdateMerch();
         UpdateCave();
     }
 }
@@ -410,6 +506,7 @@ void TheMasterFrame::OnCreatePatient(wxCommandEvent &e) {
         medicationBundle = {};
         UpdateHeader();
         UpdateMedications();
+        UpdateMerch();
         UpdateCave();
     }
 }
@@ -800,6 +897,7 @@ void TheMasterFrame::GetMedication(CallContext &ctx, const std::function<void(co
                 }
                 UpdateHeader();
                 UpdateMedications();
+                UpdateMerch();
                 UpdateCave();
             }
         }
@@ -869,6 +967,7 @@ void TheMasterFrame::OnResetMedication(wxCommandEvent &e) {
     *(medicationBundle->medBundle) = FhirBundle::Parse(web::json::value::parse(medicationBundleResetData));
     UpdateHeader();
     UpdateMedications();
+    UpdateMerch();
     UpdateCave();
 }
 
@@ -1253,6 +1352,7 @@ void TheMasterFrame::SendMedication(CallContext &ctx,
         }
         pllResultsFunc(pllResults);
         UpdateMedications();
+        UpdateMerch();
         UpdateCave();
         std::stringstream str{};
         str << "Recalled " << recallCount << (recallCount == 1 ? " prescription and prescribed " : " prescriptions and prescribed ")
@@ -2021,6 +2121,12 @@ void TheMasterFrame::SetPrescriber(PrescriptionData &prescriptionData) const {
     prescriptionData.prescribedByDisplay = prescriber.name;
 }
 
+void TheMasterFrame::SetPrescriber(MerchData &prescriptionData) const {
+    auto prescriber = GetPrescriber();
+    prescriptionData.prescribedByReference = prescriber.uuid;
+    prescriptionData.prescribedByDisplay = prescriber.name;
+}
+
 FhirReference TheMasterFrame::GetSubjectRef() const {
     if (!medicationBundle) {
         return {};
@@ -2037,6 +2143,15 @@ void TheMasterFrame::SetPatient(PrescriptionData &prescriptionData) const {
     prescriptionData.subjectDisplay = ref.GetDisplay();
 }
 
+void TheMasterFrame::SetPatient(MerchData &prescriptionData) const {
+    auto ref = GetSubjectRef();
+    if (!ref.IsSet()) {
+        return;
+    }
+    prescriptionData.subjectReference = ref.GetReference();
+    prescriptionData.subjectDisplay = ref.GetDisplay();
+}
+
 void TheMasterFrame::PrescribeMedicament(const PrescriptionDialog &prescriptionDialog, const std::string &renewPrescriptionId) {
     PrescriptionData prescriptionData = prescriptionDialog.GetPrescriptionData();
     std::shared_ptr<FhirMedication> medicament = prescriptionDialog.GetMedication();
@@ -2044,6 +2159,16 @@ void TheMasterFrame::PrescribeMedicament(const PrescriptionDialog &prescriptionD
     SetPatient(prescriptionData);
     medicationBundle->Prescribe(medicament, prescriptionData, renewPrescriptionId);
     UpdateMedications();
+}
+
+void TheMasterFrame::PrescribeMerch(const PrescribeMerchandiseDialog &prescriptionDialog,
+                                    const std::string &renewPrescriptionId) {
+    auto prescriptionData = prescriptionDialog.GetMerchData();
+    prescriptionData.SetDefaults();
+    SetPrescriber(prescriptionData);
+    SetPatient(prescriptionData);
+    medicationBundle->Prescribe(prescriptionData, renewPrescriptionId);
+    UpdateMerch();
 }
 
 void TheMasterFrame::OnPrescribeMagistral(wxCommandEvent &e) {
@@ -2100,6 +2225,27 @@ void TheMasterFrame::OnPrescribeMedicament(wxCommandEvent &e) {
             PrescribeMedicament(prescriptionDialog);
         });
     }
+}
+
+void TheMasterFrame::OnPrescribeMerch(wxCommandEvent &e) {
+    std::shared_ptr<FestDb> festDb = std::make_shared<FestDb>();
+    if (!festDb->IsOpen()) {
+        return;
+    }
+    std::string festVersion{};
+    {
+        auto versions = festDb->GetFestVersions();
+        if (versions.empty()) {
+            return;
+        }
+        festVersion = versions[0];
+    }
+    MerchTreeImpl merchTree{*festDb, festVersion, festDb->GetOppfMedForbrMatr(festVersion)};
+    PrescribeMerchandiseDialog prescribeMerchandiseDialog{this, merchTree};
+    if (prescribeMerchandiseDialog.ShowModal() != wxID_OK) {
+        return;
+    }
+    PrescribeMerch(prescribeMerchandiseDialog);
 }
 
 WeakRefUiDispatcherRef<TheMasterFrame> TheMasterFrame::GetWeakRefDispatcher() {
@@ -2169,6 +2315,21 @@ void TheMasterFrame::OnPrescriptionContextMenu(const wxContextMenuEvent &e) {
     PopupMenu(&menu);
 }
 
+void TheMasterFrame::OnMerchPrescriptionContextMenu(const wxContextMenuEvent &e) {
+    if (merchPrescriptions->GetSelectedItemCount() != 1) {
+        return;
+    }
+    auto selected = merchPrescriptions->GetFirstSelected();
+    if (selected < 0 || selected >= displayedMerch.size()) {
+        return;
+    }
+    auto fhirBasic = displayedMerch[selected][0];
+    auto display = fhirBasic->GetDisplay();
+    wxMenu menu(wxString::FromUTF8(display));
+    menu.Append(TheMaster_MerchPrescriptionDetails_Id, wxT("Details"));
+    PopupMenu(&menu);
+}
+
 void TheMasterFrame::OnPrescriptionDetails(const wxCommandEvent &e) {
     if (prescriptions->GetSelectedItemCount() != 1) {
         return;
@@ -2179,6 +2340,19 @@ void TheMasterFrame::OnPrescriptionDetails(const wxCommandEvent &e) {
     }
     auto medicationStatements = displayedMedicationStatements[selected];
     PrescriptionDetailsDialog dialog{this, medicationStatements};
+    dialog.ShowModal();
+}
+
+void TheMasterFrame::OnMerchPrescriptionDetails(const wxCommandEvent &e) {
+    if (merchPrescriptions->GetSelectedItemCount() != 1) {
+        return;
+    }
+    auto selected = merchPrescriptions->GetFirstSelected();
+    if (selected < 0 || selected >= displayedMerch.size()) {
+        return;
+    }
+    auto fhirBasics = displayedMerch[selected];
+    PrescriptionDetailsDialog dialog{this, fhirBasics};
     dialog.ShowModal();
 }
 

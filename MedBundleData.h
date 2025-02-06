@@ -15,6 +15,7 @@
 class FhirMedication;
 class FhirAllergyIntolerance;
 struct PrescriptionData;
+struct MerchData;
 
 struct PrescriberRef {
     std::string uuid;
@@ -45,6 +46,7 @@ public:
     void InsertNonexistingMedicationPrescriptionsFrom(const std::shared_ptr<FhirBundle> &otherBundle, const std::string &helseidIdToken);
     void ReplayRenewals(const std::shared_ptr<FhirBundle> &otherBundle);
     void Prescribe(const std::shared_ptr<FhirMedication> &, const PrescriptionData &, const std::string &renewPrescriptionId = "");
+    void Prescribe(const MerchData &, const std::string &renewPrescriptionId = "");
     void AddCave(const std::shared_ptr<FhirAllergyIntolerance> &allergy);
     void DeleteCave(const std::shared_ptr<FhirAllergyIntolerance> &allergy);
 };

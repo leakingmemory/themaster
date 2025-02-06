@@ -5,11 +5,109 @@
 #include "PrescriptionDetailsDialog.h"
 #include <wx/listctrl.h>
 #include <sfmbasisapi/fhir/medstatement.h>
+#include <sfmbasisapi/fhir/fhirbasic.h>
 #include <sfmbasisapi/fhir/extension.h>
 #include "EreseptdosingDialog.h"
 
+template <class T> concept PrescriptionDetailsDialogEntryRequirements = requires (const T &entry) {
+    { entry.GetDisplay() } -> std::convertible_to<std::string>;
+    { entry.GetExtensions() } -> std::convertible_to<std::vector<std::shared_ptr<FhirExtension>>>;
+    { entry.GetIdentifiers() } -> std::convertible_to<std::vector<FhirIdentifier>>;
+};
+
+template <class T> concept PrescriptionDetailsDialogEntryHasDosage = requires (const T &entry) {
+    { entry.GetDosage() } -> std::convertible_to<std::vector<FhirDosage>>;
+};
+
+template <class T> concept PrescriptionDetailsDialogEntryHasGetEffectiveDateTime = requires (const T &entry) {
+    { entry.GetEffectiveDateTime() } -> std::convertible_to<std::string>;
+};
+
+template <class T> struct GetDosageFromFhir {
+    GetDosageFromFhir(const T &) {
+    }
+    operator std::vector<FhirDosage> () const {
+        return {};
+    }
+};
+
+template <PrescriptionDetailsDialogEntryHasDosage T> struct GetDosageFromFhir<T> {
+    std::vector<FhirDosage> result;
+    GetDosageFromFhir(const T &obj) : result(obj.GetDosage()) {
+    }
+    operator std::vector<FhirDosage> () const {
+        return result;
+    }
+};
+
+template <class T> struct GetEffectiveDateTimeFromFhir {
+    GetEffectiveDateTimeFromFhir(const T &) {
+    }
+    operator std::string () const {
+        return "";
+    }
+};
+
+template <PrescriptionDetailsDialogEntryHasGetEffectiveDateTime T> struct GetEffectiveDateTimeFromFhir<T> {
+    std::string result;
+    GetEffectiveDateTimeFromFhir(const T &obj) : result(obj.GetEffectiveDateTime()) {}
+    operator std::string () const {
+        return result;
+    }
+};
+
+template <PrescriptionDetailsDialogEntryRequirements T> class PrescriptionDetailsDialogEntryImpl : public PrescriptionDetailsDialogEntry {
+private:
+    std::shared_ptr<const T> ref{};
+public:
+    PrescriptionDetailsDialogEntryImpl(const std::shared_ptr<const T> &ref) : ref(ref) {}
+    PrescriptionDetailsDialogEntryImpl(std::shared_ptr<const T> &&ref) : ref(std::move(ref)) {}
+    std::string GetDisplay() const override {
+        return ref->GetDisplay();
+    }
+    [[nodiscard]] std::vector<FhirDosage> GetDosage() const override {
+        return GetDosageFromFhir(*ref);
+    }
+    [[nodiscard]] std::vector<std::shared_ptr<FhirExtension>> GetExtensions() const override {
+        return ref->GetExtensions();
+    }
+    [[nodiscard]] std::vector<FhirIdentifier> GetIdentifiers() const override {
+        return ref->GetIdentifiers();
+    }
+    [[nodiscard]] std::string GetEffectiveDateTime() const override {
+        return GetEffectiveDateTimeFromFhir(*ref);
+    }
+};
+
+template <PrescriptionDetailsDialogEntryRequirements T> std::vector<std::shared_ptr<PrescriptionDetailsDialogEntry>> GetInterface(const std::vector<std::shared_ptr<const T>> &input) {
+    std::vector<std::shared_ptr<PrescriptionDetailsDialogEntry>> output{};
+    for (const auto &ref : input) {
+        output.emplace_back(std::make_shared<PrescriptionDetailsDialogEntryImpl<T>>(ref));
+    }
+    return output;
+}
+
+template <PrescriptionDetailsDialogEntryRequirements T> std::vector<std::shared_ptr<PrescriptionDetailsDialogEntry>> GetInterface(const std::vector<std::shared_ptr<T>> &input) {
+    std::vector<std::shared_ptr<PrescriptionDetailsDialogEntry>> output{};
+    for (const auto &ref : input) {
+        std::shared_ptr<const T> constRef{ref};
+        output.emplace_back(std::make_shared<PrescriptionDetailsDialogEntryImpl<T>>(std::move(constRef)));
+    }
+    return output;
+}
+
 PrescriptionDetailsDialog::PrescriptionDetailsDialog(wxWindow *parent,
                                                      const std::vector<std::shared_ptr<FhirMedicationStatement>> &statements) :
+                                                     PrescriptionDetailsDialog(parent, GetInterface<FhirMedicationStatement>(statements)) {
+}
+
+PrescriptionDetailsDialog::PrescriptionDetailsDialog(wxWindow *parent,
+                                                     const std::vector<std::shared_ptr<FhirBasic>> &statements) :
+        PrescriptionDetailsDialog(parent, GetInterface<FhirBasic>(statements)) {
+}
+
+PrescriptionDetailsDialog::PrescriptionDetailsDialog(wxWindow *parent,
+                                                     const std::vector<std::shared_ptr<PrescriptionDetailsDialogEntry>> &statements) :
         wxDialog(parent, wxID_ANY, wxT("Prescription details")), statements(statements) {
     auto *sizer = new wxBoxSizer(wxVERTICAL);
     versionsView = new wxListView(this, wxID_ANY);
@@ -39,11 +137,11 @@ PrescriptionDetailsDialog::PrescriptionDetailsDialog(wxWindow *parent,
     SetSizerAndFit(sizer);
 }
 
-void PrescriptionDetailsDialog::AddVersion(int row, const std::shared_ptr<FhirMedicationStatement> &statement) {
+void PrescriptionDetailsDialog::AddVersion(int row, const std::shared_ptr<PrescriptionDetailsDialogEntry> &statement) {
     versionsView->InsertItem(row, wxString::FromUTF8(statement->GetDisplay()));
 }
 
-void PrescriptionDetailsDialog::DisplayStatement(const std::shared_ptr<FhirMedicationStatement> &statement) {
+void PrescriptionDetailsDialog::DisplayStatement(const std::shared_ptr<PrescriptionDetailsDialogEntry> &statement) {
     listView->ClearAll();
     listView->AppendColumn(wxT(""));
     listView->AppendColumn(wxT(""));

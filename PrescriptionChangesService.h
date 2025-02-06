@@ -7,8 +7,13 @@
 
 #include <exception>
 #include <string>
+#include <vector>
+#include <memory>
 
 class FhirMedicationStatement;
+class FhirIdentifier;
+class FhirExtension;
+class FhirBasic;
 
 class RenewalFailureException : public std::exception {
 private:
@@ -31,6 +36,11 @@ struct PrescriptionStatusInfo {
     bool HasBeenValidPrescription{false};
 };
 
+template <class T> concept CanGetPrescriptionStatusInfoFor = requires (const T &fhir) {
+    { fhir.GetIdentifiers() } -> std::convertible_to<std::vector<FhirIdentifier>>;
+    { fhir.GetExtensions() } -> std::convertible_to<std::vector<std::shared_ptr<FhirExtension>>>;
+};
+
 class PrescriptionChangesService {
 public:
     static void Renew(FhirMedicationStatement &);
@@ -39,7 +49,11 @@ public:
     static std::string GetPrescriptionId(const FhirMedicationStatement &);
     static bool IsRenewedWithoutChangesAssumingIsEprescription(const FhirMedicationStatement &);
     static bool IsRenewedWithoutChanges(const FhirMedicationStatement &);
+private:
+    template <CanGetPrescriptionStatusInfoFor T> static PrescriptionStatusInfo GetPrescriptionStatusInfoImpl(const T &);
+public:
     static PrescriptionStatusInfo GetPrescriptionStatusInfo(const FhirMedicationStatement &);
+    static PrescriptionStatusInfo GetPrescriptionStatusInfo(const FhirBasic &);
     static std::string GetPrescriptionStatusString(const PrescriptionStatusInfo &);
 };
 

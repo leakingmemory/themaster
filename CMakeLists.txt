@@ -45,7 +45,8 @@ add_executable(themaster TheMasterApp.cpp TheMasterApp.h TheMasterFrame.cpp TheM
     DateOnly.cpp DateOnly.h TimeConst.cpp TimeConst.h Duration.cpp Duration.h Lazy.cpp Lazy.h
     WxDateConversions.h WxDateConversions.cpp EditTreatmentDialog.cpp EditTreatmentDialog.h
     CaveDetailsDialog.cpp CaveDetailsDialog.h RegisterCaveDialog.cpp RegisterCaveDialog.h
-    ConnectToPllDialog.cpp ConnectToPllDialog.h)
+    ConnectToPllDialog.cpp ConnectToPllDialog.h MerchTree.cpp MerchTree.h MerchData.cpp MerchData.h
+    PrescribeMerchandiseDialog.cpp PrescribeMerchandiseDialog.h)
 if (WIN32)
     set_target_properties(themaster PROPERTIES WIN32_EXECUTABLE TRUE)
     target_link_libraries(themaster PRIVATE ${SFMBASISAPI_LIBRARY} ${LIBJJWTID_LIBRARY} ${MEDFEST_LIBRARY})

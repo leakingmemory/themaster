@@ -5,6 +5,7 @@
 #include "PrescriptionChangesService.h"
 #include "FestDb.h"
 #include <sfmbasisapi/fhir/medstatement.h>
+#include <sfmbasisapi/fhir/fhirbasic.h>
 #include <boost/uuid/uuid.hpp>
 #include <boost/uuid/uuid_generators.hpp>
 #include <boost/uuid/uuid_io.hpp>
@@ -399,7 +400,7 @@ bool PrescriptionChangesService::IsRenewedWithoutChanges(const FhirMedicationSta
     return !prescriptionId.empty() && IsRenewedWithoutChangesAssumingIsEprescription(medicationStatement);
 }
 
-PrescriptionStatusInfo PrescriptionChangesService::GetPrescriptionStatusInfo(const FhirMedicationStatement &medicationStatement) {
+template<CanGetPrescriptionStatusInfoFor T> PrescriptionStatusInfo PrescriptionChangesService::GetPrescriptionStatusInfoImpl(const T &medicationStatement) {
     PrescriptionStatusInfo prescriptionStatusInfo{};
     auto identifiers = medicationStatement.GetIdentifiers();
     for (const auto &identifier : identifiers) {
@@ -526,6 +527,14 @@ PrescriptionStatusInfo PrescriptionChangesService::GetPrescriptionStatusInfo(con
         prescriptionStatusInfo.IsValidPrescription = false;
     }
     return prescriptionStatusInfo;
+}
+
+PrescriptionStatusInfo PrescriptionChangesService::GetPrescriptionStatusInfo(const FhirMedicationStatement &statement) {
+    return GetPrescriptionStatusInfoImpl(statement);
+}
+
+PrescriptionStatusInfo PrescriptionChangesService::GetPrescriptionStatusInfo(const FhirBasic &basic) {
+    return GetPrescriptionStatusInfoImpl(basic);
 }
 
 std::string PrescriptionChangesService::GetPrescriptionStatusString(const PrescriptionStatusInfo &info) {
