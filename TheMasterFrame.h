@@ -108,6 +108,7 @@ public:
     void OnPrescribeMagistral(wxCommandEvent &e);
     void OnPrescribeMedicament(wxCommandEvent &e);
     void OnPrescribeMerch(wxCommandEvent &e);
+    void OnPrescribeNourishment(wxCommandEvent &e);
     WeakRefUiDispatcherRef<TheMasterFrame> GetWeakRefDispatcher();
     void SetHelseid(const std::string &url, const std::string &clientId, const std::string &secretJwk, const std::vector<std::string> &scopes, const std::string &refreshToken, long expiresIn, const std::string &idToken, const std::string &journalId, const std::string &orgNo, const std::string &childOrgNo);
     void Connect(const std::string &url);

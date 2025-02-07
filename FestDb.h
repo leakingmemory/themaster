@@ -35,6 +35,7 @@ class OppfLegemiddelpakning;
 class OppfLegemiddeldose;
 class OppfKodeverk;
 class OppfMedForbrMatr;
+class OppfNaringsmiddel;
 class Element;
 
 template <class T> struct FestModified {
@@ -98,6 +99,7 @@ public:
     [[nodiscard]] std::vector<OppfKodeverk> GetOppfKodeverk(const std::string &festVersion) const;
     [[nodiscard]] std::vector<Element> GetKodeverkElements(const std::string &kodeverkId, const std::string &festVersion) const;
     [[nodiscard]] std::vector<OppfMedForbrMatr> GetOppfMedForbrMatr(const std::string &festVersion) const;
+    [[nodiscard]] std::vector<OppfNaringsmiddel> GetOppfNaringsmiddel(const std::string &festVersion) const;
     [[nodiscard]] FestDiff<OppfRefusjon> GetOppfRefusjonDiff(const std::function<void (int addsAndRemovesDone, int addsAndRemovesMax, int modificationsDone, int modificationsMax)> &progress, const std::string &firstVersion, const std::string &secondVersion) const;
     [[nodiscard]] FestDiff<OppfLegemiddelMerkevare> GetOppfLegemiddelMerkevareDiff(const std::function<void (int addsAndRemovesDone, int addsAndRemovesMax, int modificationsDone, int modificationsMax)> &progress, const std::string &firstVersion, const std::string &secondVersion) const;
     [[nodiscard]] FestDiff<OppfLegemiddelVirkestoff> GetOppfLegemiddelVirkestoffDiff(const std::function<void (int addsAndRemovesDone, int addsAndRemovesMax, int modificationsDone, int modificationsMax)> &progress, const std::string &firstVersion, const std::string &secondVersion) const;

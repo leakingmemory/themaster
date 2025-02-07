@@ -103,6 +103,7 @@ TheMasterFrame::TheMasterFrame() : wxFrame(nullptr, wxID_ANY, "The Master"),
     medicationMenu->Append(TheMaster_PrescribeMagistral_Id, "Prescribe magistral");
     medicationMenu->Append(TheMaster_PrescribeMedicament_Id, "Prescribe medicament");
     medicationMenu->Append(TheMaster_PrescribeMedForbMatr_Id, "Prescribe merchandise");
+    medicationMenu->Append(TheMaster_PrescribeNaringsmiddel_Id, "Prescribe nourishment");
     auto *patientMenu = new wxMenu();
     patientMenu->Append(TheMaster_FindPatient_Id, "Find patient");
     patientMenu->Append(TheMaster_CreatePatient_Id, "Create patient");
@@ -197,6 +198,7 @@ TheMasterFrame::TheMasterFrame() : wxFrame(nullptr, wxID_ANY, "The Master"),
     Bind(wxEVT_MENU, &TheMasterFrame::OnPrescribeMagistral, this, TheMaster_PrescribeMagistral_Id);
     Bind(wxEVT_MENU, &TheMasterFrame::OnPrescribeMedicament, this, TheMaster_PrescribeMedicament_Id);
     Bind(wxEVT_MENU, &TheMasterFrame::OnPrescribeMerch, this, TheMaster_PrescribeMedForbMatr_Id);
+    Bind(wxEVT_MENU, &TheMasterFrame::OnPrescribeNourishment, this, TheMaster_PrescribeNaringsmiddel_Id);
     Bind(wxEVT_MENU, &TheMasterFrame::OnUpdateFest, this, TheMaster_UpdateFest_Id);
     Bind(wxEVT_MENU, &TheMasterFrame::OnShowFestVersions, this, TheMaster_ShowFestVersions_Id);
     Bind(wxEVT_MENU, &TheMasterFrame::OnShowFestDbQuotas, this, TheMaster_ShowFestDbQuotas_Id);
@@ -2241,6 +2243,27 @@ void TheMasterFrame::OnPrescribeMerch(wxCommandEvent &e) {
         festVersion = versions[0];
     }
     MerchTreeImpl merchTree{*festDb, festVersion, festDb->GetOppfMedForbrMatr(festVersion)};
+    PrescribeMerchandiseDialog prescribeMerchandiseDialog{this, merchTree};
+    if (prescribeMerchandiseDialog.ShowModal() != wxID_OK) {
+        return;
+    }
+    PrescribeMerch(prescribeMerchandiseDialog);
+}
+
+void TheMasterFrame::OnPrescribeNourishment(wxCommandEvent &e) {
+    std::shared_ptr<FestDb> festDb = std::make_shared<FestDb>();
+    if (!festDb->IsOpen()) {
+        return;
+    }
+    std::string festVersion{};
+    {
+        auto versions = festDb->GetFestVersions();
+        if (versions.empty()) {
+            return;
+        }
+        festVersion = versions[0];
+    }
+    MerchTreeImpl merchTree{*festDb, festVersion, festDb->GetOppfNaringsmiddel(festVersion)};
     PrescribeMerchandiseDialog prescribeMerchandiseDialog{this, merchTree};
     if (prescribeMerchandiseDialog.ShowModal() != wxID_OK) {
         return;

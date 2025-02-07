@@ -613,6 +613,21 @@ std::vector<OppfMedForbrMatr> FestDb::GetOppfMedForbrMatr(const std::string &fes
     return oppfs;
 }
 
+std::vector<OppfNaringsmiddel> FestDb::GetOppfNaringsmiddel(const std::string &festVersion) const {
+    std::vector<OppfNaringsmiddel> oppfs{};
+    {
+        FestDbContainer festDbContainer = GetFestDb(festVersion);
+        if (!festDbContainer.festVectors) {
+            return {};
+        }
+        auto poppfs = festDbContainer.festVectors->GetNaringsmiddel(*festDeserializer);
+        for (const auto &poppf : poppfs) {
+            oppfs.emplace_back(festDeserializer->Unpack(poppf));
+        }
+    }
+    return oppfs;
+}
+
 FestDiff<OppfRefusjon> FestDb::GetOppfRefusjonDiff(const std::function<void (int addsAndRemovesDone, int addsAndRemovesMax, int modificationsDone, int modificationsMax)> &progress, const std::string &firstVersion, const std::string &secondVersion) const {
     FestDiff<OppfRefusjon> oppfs{};
     {
