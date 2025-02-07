@@ -8,7 +8,7 @@
 
 constexpr int PatientListPatientColumnWidth = 300;
 
-FindPatientDialog::FindPatientDialog(const std::shared_ptr<PatientStore> &patientStore, TheMasterFrame *frame) : wxDialog(frame, wxID_ANY, wxT("Find patient")), patientStore(patientStore) {
+FindPatientDialog::FindPatientDialog(const std::shared_ptr<PatientStore> &patientStore, TheMasterFrame *frame) : wxDialog(frame, wxID_ANY, wxT("Find patient"), wxDefaultPosition, wxSize(300, 400)), patientStore(patientStore) {
     // Add a sizer to handle the layout
     wxBoxSizer* sizer = new wxBoxSizer(wxVERTICAL);
 
