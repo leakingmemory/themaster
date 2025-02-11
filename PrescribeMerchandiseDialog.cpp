@@ -121,7 +121,7 @@ PrescribeMerchandiseDialog::PrescribeMerchandiseDialog(wxWindow *parent, const M
     auto *buttonsSizer = new wxBoxSizer(wxHORIZONTAL);
     okButton = new wxButton(this, wxID_OK, wxT("Ok"));
     buttonsSizer->Add(okButton, 1, wxALL | wxEXPAND, 5);
-    cancelButton = new wxButton(this, wxID_OK, wxT("Cancel"));
+    cancelButton = new wxButton(this, wxID_CANCEL, wxT("Cancel"));
     buttonsSizer->Add(cancelButton, 1, wxALL | wxEXPAND, 5);
     superSizer->Add(buttonsSizer, 0, wxCENTER | wxALL, 5);
     okButton->Enable(false);

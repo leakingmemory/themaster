@@ -28,6 +28,7 @@
 #include <sfmbasisapi/fhir/operationoutcome.h>
 #include <sfmbasisapi/fhir/fhir.h>
 #include <sfmbasisapi/fhir/allergy.h>
+#include <sfmbasisapi/nhnfhir/SfmBandaPrescription.h>
 #include <jjwtid/Jwt.h>
 #include <jjwtid/OidcTokenRequest.h>
 #include <cpprest/http_client.h>
@@ -346,9 +347,19 @@ void TheMasterFrame::UpdateMerch() {
     std::map<std::string,std::shared_ptr<FhirBasic>> merchMap{};
     FhirCompositionSection otherPrescriptionsSection{};
     if (medicationBundle && medicationBundle->medBundle) {
-        for (const auto &bundleEntry: medicationBundle->medBundle->GetEntries()) {
+        auto entries = medicationBundle->medBundle->GetEntries();
+        bool entriesChanged{false};
+        for (auto &bundleEntry: entries) {
             auto resource = bundleEntry.GetResource();
-            auto fhirBasic = std::dynamic_pointer_cast<FhirBasic>(resource);
+            std::shared_ptr<FhirBasic> fhirBasic = std::dynamic_pointer_cast<SfmBandaPrescription>(resource);
+            if (!fhirBasic) {
+                fhirBasic = std::dynamic_pointer_cast<FhirBasic>(resource);
+                if (fhirBasic && SfmBandaPrescription::CanHandle(*fhirBasic)) {
+                    fhirBasic = std::make_shared<SfmBandaPrescription>(*fhirBasic);
+                    bundleEntry.SetResource(fhirBasic);
+                    entriesChanged = true;
+                }
+            }
             if (fhirBasic) {
                 merchMap.insert_or_assign(bundleEntry.GetFullUrl(), fhirBasic);
                 continue;
@@ -364,6 +375,9 @@ void TheMasterFrame::UpdateMerch() {
                     }
                 }
             }
+        }
+        if (entriesChanged) {
+            medicationBundle->medBundle->SetEntries(entries);
         }
     }
     for (const auto &sectionEntry : otherPrescriptionsSection.GetEntries()) {
@@ -395,7 +409,7 @@ void TheMasterFrame::UpdateMerch() {
             auto row = pos++;
             displayedMerch.emplace_back(versions);
             // TODO - Try product group as display
-            merchPrescriptions->InsertItem(row, fhirBasic->GetDisplay());
+            merchPrescriptions->InsertItem(row, wxString::FromUTF8(fhirBasic->GetDisplay()));
             auto statusInfo = PrescriptionChangesService::GetPrescriptionStatusInfo(*fhirBasic);
             if (versions.size() > 1) {
                 prescriptions->SetItem(row, 1, wxT("*"));

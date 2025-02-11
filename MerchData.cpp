@@ -3,7 +3,7 @@
 //
 
 #include "MerchData.h"
-#include <sfmbasisapi/fhir/fhirbasic.h>
+#include <sfmbasisapi/nhnfhir/SfmBandaPrescription.h>
 #include <boost/uuid/uuid_generators.hpp> // for random_generator
 #include <boost/uuid/uuid_io.hpp> // for to_string
 
@@ -192,7 +192,7 @@ MerchData MerchData::FromFhir(const FhirBasic &fhir) {
 }
 
 FhirBasic MerchData::ToFhir() const {
-    FhirBasic basic{};
+    SfmBandaPrescription basic{};
     {
         boost::uuids::random_generator generator;
         boost::uuids::uuid randomUUID = generator();
@@ -202,10 +202,6 @@ FhirBasic MerchData::ToFhir() const {
     if (!prescribedByReference.empty()) {
         basic.SetAuthor({prescribedByReference, "http://ehelse.no/fhir/StructureDefinition/sfm-PractitionerRole", prescribedByDisplay});
     }
-    {
-        FhirCodeableConcept code{"urn:oid:2.16.578.1.12.4.1.1.7402", "A", "Annet"};
-        basic.SetCode(code);
-    }
     if (!refund.productGroup.GetCode().empty()) {
         std::string system{refund.productGroup.GetSystem()};
         if (!system.starts_with("urn:oid:")) {
@@ -214,10 +210,7 @@ FhirBasic MerchData::ToFhir() const {
             system.append(sys);
         }
         FhirCodeableConcept codeable{system, refund.productGroup.GetCode(), refund.productGroup.GetDisplay()};
-        auto value = std::make_shared<FhirCodeableConceptValue>(codeable);
-        auto extension = std::make_shared<FhirExtension>("http://ehelse.no/fhir/StructureDefinition/sfm-reseptdocbanda");
-        extension->AddExtension(std::make_shared<FhirValueExtension>("productgroup", value));
-        basic.AddExtension(extension);
+        basic.SetProductGroup(codeable);
     }
     {
         auto amendment = std::make_shared<FhirExtension>("http://ehelse.no/fhir/StructureDefinition/sfm-reseptamendment");
@@ -266,7 +259,6 @@ FhirBasic MerchData::ToFhir() const {
         ));
         basic.AddExtension(amendment);
     }
-    basic.SetProfile("http://ehelse.no/fhir/StructureDefinition/sfm-BandaPrescription");
     if (!subjectReference.empty()) {
         basic.SetSubject({subjectReference, "http://ehelse.no/fhir/StructureDefinition/sfm-Patient", subjectDisplay});
     }

@@ -7,7 +7,7 @@
 #include <sfmbasisapi/fhir/composition.h>
 #include <sfmbasisapi/fhir/person.h>
 #include <sfmbasisapi/fhir/allergy.h>
-#include <sfmbasisapi/fhir/fhirbasic.h>
+#include <sfmbasisapi/nhnfhir/SfmBandaPrescription.h>
 #include <boost/uuid/uuid.hpp>
 #include <boost/uuid/uuid_generators.hpp>
 #include <boost/uuid/uuid_io.hpp>
@@ -983,7 +983,7 @@ void MedBundleData::Prescribe(const MerchData &merchData, const std::string &ren
             throw MedBundleDataException("Prescription to renew is not head of chain");
         }
     }
-    std::shared_ptr<FhirBasic> fhirBasic = std::make_shared<FhirBasic>(merchData.ToFhir());
+    std::shared_ptr<FhirBasic> fhirBasic = std::make_shared<SfmBandaPrescription>(merchData.ToFhir());
     std::string fhirBasicFullUrl{"urn:uuid:"};
     fhirBasicFullUrl.append(fhirBasic->GetId());
     FhirBundleEntry fhirBasicEntry{fhirBasicFullUrl, fhirBasic};
