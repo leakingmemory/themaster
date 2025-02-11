@@ -41,7 +41,8 @@ enum {
     TheMaster_EditCaveMedicament_Id = 33,
     TheMaster_DeleteCaveMedicament_Id = 34,
     TheMaster_ConnectToPll_Id = 35,
-    TheMaster_MerchPrescriptionDetails_Id = 36
+    TheMaster_MerchPrescriptionDetails_Id = 36,
+    TheMaster_MerchPrescriptionRenew_Id = 37
 };
 
 #endif //DRWHATSNOT_THEMASTERIDS_H

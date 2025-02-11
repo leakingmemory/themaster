@@ -41,9 +41,18 @@ template <class T> concept CanGetPrescriptionStatusInfoFor = requires (const T &
     { fhir.GetExtensions() } -> std::convertible_to<std::vector<std::shared_ptr<FhirExtension>>>;
 };
 
+template <class T> concept RenewableFhirObject = requires (T &renewable) {
+    { renewable.GetIdentifiers() } -> std::convertible_to<std::vector<FhirIdentifier>>;
+    { renewable.SetIdentifiers(std::declval<std::vector<FhirIdentifier>>()) };
+    { renewable.GetExtensions() } -> std::convertible_to<std::vector<std::shared_ptr<FhirExtension>>>;
+};
+
 class PrescriptionChangesService {
+private:
+    template <RenewableFhirObject T> static void GenericRenew(T &);
 public:
     static void Renew(FhirMedicationStatement &);
+    static void Renew(FhirBasic &);
     static void RenewRevokedOrExpiredPll(FhirMedicationStatement &);
     static std::string GetPreviousPrescriptionId(const FhirMedicationStatement &);
     static std::string GetPrescriptionId(const FhirMedicationStatement &);

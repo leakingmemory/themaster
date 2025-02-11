@@ -16,7 +16,7 @@ const char *RenewalFailureException::what() const noexcept {
     return error.c_str();
 }
 
-void PrescriptionChangesService::Renew(FhirMedicationStatement &medicationStatement) {
+template<RenewableFhirObject T> void PrescriptionChangesService::GenericRenew(T &medicationStatement) {
     std::shared_ptr<FhirExtension> reseptAmendment{};
     {
         auto extensions = medicationStatement.GetExtensions();
@@ -166,6 +166,14 @@ void PrescriptionChangesService::Renew(FhirMedicationStatement &medicationStatem
     if (addCreate) {
         reseptAmendment->AddExtension(std::make_shared<FhirValueExtension>("createeresept", std::make_shared<FhirBooleanValue>(true)));
     }
+}
+
+void PrescriptionChangesService::Renew(FhirMedicationStatement &medicationStatement) {
+    GenericRenew(medicationStatement);
+}
+
+void PrescriptionChangesService::Renew(FhirBasic &fhirBasic) {
+    GenericRenew(fhirBasic);
 }
 
 void PrescriptionChangesService::RenewRevokedOrExpiredPll(FhirMedicationStatement &medicationStatement) {

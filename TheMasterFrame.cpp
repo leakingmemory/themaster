@@ -213,6 +213,7 @@ TheMasterFrame::TheMasterFrame() : wxFrame(nullptr, wxID_ANY, "The Master"),
     Bind(wxEVT_MENU, &TheMasterFrame::OnConnectToPll, this, TheMaster_ConnectToPll_Id);
 
     Bind(wxEVT_MENU, &TheMasterFrame::OnMerchPrescriptionDetails, this, TheMaster_MerchPrescriptionDetails_Id);
+    Bind(wxEVT_MENU, &TheMasterFrame::OnMerchPrescriptionRenew, this, TheMaster_MerchPrescriptionRenew_Id);
 
     Bind(wxEVT_MENU, &TheMasterFrame::OnCaveDetails, this, TheMaster_CaveDetails_Id);
     Bind(wxEVT_MENU, &TheMasterFrame::OnAddCaveMedicament, this, TheMaster_AddCaveMedicament_Id);
@@ -2364,6 +2365,7 @@ void TheMasterFrame::OnMerchPrescriptionContextMenu(const wxContextMenuEvent &e)
     auto display = fhirBasic->GetDisplay();
     wxMenu menu(wxString::FromUTF8(display));
     menu.Append(TheMaster_MerchPrescriptionDetails_Id, wxT("Details"));
+    menu.Append(TheMaster_MerchPrescriptionRenew_Id, wxT("Renew"));
     PopupMenu(&menu);
 }
 
@@ -2694,6 +2696,24 @@ void TheMasterFrame::OnPrescriptionRenew(const wxCommandEvent &e) {
         wxMessageBox(wxString::FromUTF8(wht != nullptr ? wxString::FromUTF8(wht) : wxString::FromUTF8("Renew failed")), wxT("Renew failed"), wxICON_ERROR);
     }
     UpdateMedications();
+}
+
+void TheMasterFrame::OnMerchPrescriptionRenew(const wxCommandEvent &e) {
+    if (merchPrescriptions->GetSelectedItemCount() != 1) {
+        return;
+    }
+    auto selected = merchPrescriptions->GetFirstSelected();
+    if (selected < 0 || selected >= displayedMerch.size()) {
+        return;
+    }
+    auto fhirBasic = displayedMerch[selected][0];
+    try {
+        PrescriptionChangesService::Renew(*fhirBasic);
+    } catch (const std::exception &e) {
+        const char *wht = e.what();
+        wxMessageBox(wxString::FromUTF8(wht != nullptr ? wxString::FromUTF8(wht) : wxString::FromUTF8("Renew failed")), wxT("Renew failed"), wxICON_ERROR);
+    }
+    UpdateMerch();
 }
 
 void TheMasterFrame::OnPrescriptionRenewWithChanges(const wxCommandEvent &e) {
