@@ -120,6 +120,7 @@ public:
     void OnPrescriptionDetails(const wxCommandEvent &e);
     void OnMerchPrescriptionDetails(const wxCommandEvent &e);
     void OnPrescriptionRecall(const wxCommandEvent &e);
+    void OnMerchPrescriptionRecall(const wxCommandEvent &e);
     void OnPrescriptionCease(const wxCommandEvent &e);
     void OnPrescriptionRenew(const wxCommandEvent &e);
     void OnMerchPrescriptionRenew(const wxCommandEvent &e);

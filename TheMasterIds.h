@@ -43,7 +43,8 @@ enum {
     TheMaster_ConnectToPll_Id = 35,
     TheMaster_MerchPrescriptionDetails_Id = 36,
     TheMaster_MerchPrescriptionRenew_Id = 37,
-    TheMaster_MerchPrescriptionRenewWithChanges_Id = 38
+    TheMaster_MerchPrescriptionRenewWithChanges_Id = 38,
+    TheMaster_MerchPrescriptionRecall_Id = 39
 };
 
 #endif //DRWHATSNOT_THEMASTERIDS_H

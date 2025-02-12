@@ -213,6 +213,7 @@ TheMasterFrame::TheMasterFrame() : wxFrame(nullptr, wxID_ANY, "The Master"),
     Bind(wxEVT_MENU, &TheMasterFrame::OnConnectToPll, this, TheMaster_ConnectToPll_Id);
 
     Bind(wxEVT_MENU, &TheMasterFrame::OnMerchPrescriptionDetails, this, TheMaster_MerchPrescriptionDetails_Id);
+    Bind(wxEVT_MENU, &TheMasterFrame::OnMerchPrescriptionRecall, this, TheMaster_MerchPrescriptionRecall_Id);
     Bind(wxEVT_MENU, &TheMasterFrame::OnMerchPrescriptionRenew, this, TheMaster_MerchPrescriptionRenew_Id);
     Bind(wxEVT_MENU, &TheMasterFrame::OnMerchPrescriptionRenewWithChanges, this, TheMaster_MerchPrescriptionRenewWithChanges_Id);
 
@@ -2366,6 +2367,7 @@ void TheMasterFrame::OnMerchPrescriptionContextMenu(const wxContextMenuEvent &e)
     auto display = fhirBasic->GetDisplay();
     wxMenu menu(wxString::FromUTF8(display));
     menu.Append(TheMaster_MerchPrescriptionDetails_Id, wxT("Details"));
+    menu.Append(TheMaster_MerchPrescriptionRecall_Id, wxT("Recall"));
     menu.Append(TheMaster_MerchPrescriptionRenew_Id, wxT("Renew"));
     menu.Append(TheMaster_MerchPrescriptionRenewWithChanges_Id, wxT("Renew with changes"));
     PopupMenu(&menu);
@@ -2517,6 +2519,128 @@ void TheMasterFrame::OnPrescriptionRecall(const wxCommandEvent &e) {
         }
     }
     UpdateMedications();
+}
+
+void TheMasterFrame::OnMerchPrescriptionRecall(const wxCommandEvent &e) {
+    if (merchPrescriptions->GetSelectedItemCount() != 1) {
+        return;
+    }
+    auto selected = merchPrescriptions->GetFirstSelected();
+    if (selected < 0 || selected >= displayedMerch.size()) {
+        return;
+    }
+    auto medicationStatement = displayedMerch[selected][0];
+    std::shared_ptr<FhirExtension> reseptAmendment{};
+    {
+        auto extensions = medicationStatement->GetExtensions();
+        for (const auto extension : extensions) {
+            auto url = extension->GetUrl();
+            if (url == "http://ehelse.no/fhir/StructureDefinition/sfm-reseptamendment") {
+                reseptAmendment = extension;
+            }
+        }
+    }
+    if (!reseptAmendment) {
+        wxMessageBox(wxT("The prescription is not valid"), wxT("Can not recall prescription"), wxICON_ERROR);
+        return;
+    }
+    {
+        auto extensions = reseptAmendment->GetExtensions();
+        for (const auto &extension : extensions) {
+            auto url = extension->GetUrl();
+            if (url == "recallinfo") {
+                wxMessageBox(wxT("The prescription is already recalled"), wxT("Can not recall prescription"), wxICON_ERROR);
+                return;
+            }
+            if (url == "lastchanged") {
+                auto valueExt = std::dynamic_pointer_cast<FhirValueExtension>(extension);
+                if (valueExt) {
+                    valueExt->SetValue(std::make_shared<FhirDateTimeValue>(DateTimeOffset::Now().to_iso8601()));
+                }
+            }
+        }
+    }
+    RecallPrescriptionDialog dialog{this, medicationStatement};
+    {
+        auto res = dialog.ShowModal();
+        if (res != wxID_OK) {
+            return;
+        }
+    }
+    {
+        auto recallCode = std::make_shared<FhirCodeableConceptValue>(dialog.GetReason().ToCodeableConcept());
+        auto recallInfoExt = std::make_shared<FhirExtension>("recallinfo");
+        recallInfoExt->AddExtension(std::make_shared<FhirValueExtension>("recallcode", recallCode));
+        recallInfoExt->AddExtension(std::make_shared<FhirValueExtension>("text", std::make_shared<FhirString>("Tilbakekalt")));
+        recallInfoExt->AddExtension(std::make_shared<FhirValueExtension>("notsent", std::make_shared<FhirBooleanValue>(true)));
+        reseptAmendment->AddExtension(recallInfoExt);
+    }
+    auto prescriber = GetPrescriber();
+    {
+        std::shared_ptr<FhirExtension> regInfo = std::make_shared<FhirExtension>("http://ehelse.no/fhir/StructureDefinition/sfm-regInfo");
+        regInfo->AddExtension(std::make_shared<FhirValueExtension>(
+                "status",
+                std::make_shared<FhirCodeableConceptValue>(
+                        FhirCodeableConcept(
+                                "http://ehelse.no/fhir/CodeSystem/sfm-medicationstatement-registration-status",
+                                "3",
+                                "Godkjent"
+                        )
+                )
+        ));
+        regInfo->AddExtension(std::make_shared<FhirValueExtension>(
+                "type",
+                std::make_shared<FhirCodeableConceptValue>(
+                        FhirCodeableConcept(
+                                "http://ehelse.no/fhir/CodeSystem/sfm-performer-roles",
+                                "3",
+                                "Seponert av"
+                        )
+                )
+        ));
+        regInfo->AddExtension(std::make_shared<FhirValueExtension>(
+                "provider",
+                std::make_shared<FhirReference>(
+                        prescriber.uuid,
+                        "http://ehelse.no/fhir/StructureDefinition/sfm-Practitioner",
+                        prescriber.name
+                )
+        ));
+        {
+            std::string nowString = DateTimeOffset::Now().to_iso8601();
+
+            regInfo->AddExtension(std::make_shared<FhirValueExtension>(
+                    "timestamp",
+                    std::make_shared<FhirDateTimeValue>(nowString)
+            ));
+        }
+        bool noRegInfo{true};
+        {
+            auto extensions = medicationStatement->GetExtensions();
+            auto iterator = extensions.begin();
+            while (iterator != extensions.end()) {
+                const auto &extension = *iterator;
+                auto url = extension->GetUrl();
+                std::transform(url.cbegin(), url.cend(), url.begin(), [] (char ch) {return std::tolower(ch);});
+                if (url == "http://ehelse.no/fhir/structuredefinition/sfm-reginfo") {
+                    if (noRegInfo) {
+                        *iterator = regInfo;
+                        ++iterator;
+                        noRegInfo = false;
+                    } else {
+                        iterator = extensions.erase(iterator);
+                    }
+                } else {
+                    ++iterator;
+                }
+            }
+            medicationStatement->SetExtensions(extensions);
+        }
+        if (noRegInfo) {
+            medicationStatement->AddExtension(regInfo);
+        }
+    }
+    UpdateMerch();
 }
 
 void TheMasterFrame::OnPrescriptionCease(const wxCommandEvent &e) {

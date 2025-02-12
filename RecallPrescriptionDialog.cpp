@@ -4,14 +4,15 @@
 
 #include "RecallPrescriptionDialog.h"
 #include <sfmbasisapi/fhir/medstatement.h>
+#include <sfmbasisapi/fhir/fhirbasic.h>
 #include "MedicalCodedValue.h"
 
 static std::vector<MedicalCodedValue> recallCodes = MedicalCodedValue::GetVolvenRecallCode();
 
-RecallPrescriptionDialog::RecallPrescriptionDialog(wxWindow *parent, const std::shared_ptr<FhirMedicationStatement> &medicationStatement) : wxDialog(parent, wxID_ANY, wxT("Recall prescription")) {
+template <ObjectWithGetDisplay T> RecallPrescriptionDialog::RecallPrescriptionDialog(wxWindow *parent, const T &medicationStatement) : wxDialog(parent, wxID_ANY, wxT("Recall prescription")) {
     auto *sizer = new wxBoxSizer(wxVERTICAL);
     {
-        auto display = medicationStatement->GetDisplay();
+        auto display = medicationStatement.GetDisplay();
         sizer->Add(new wxStaticText(this, wxID_ANY, wxString::FromUTF8(display)), 1, wxALL | wxEXPAND, 5);
     }
     sizer->Add(new wxStaticText(this, wxID_ANY, wxT("Recall code:")), 1, wxALL | wxEXPAND, 5);
@@ -32,6 +33,12 @@ RecallPrescriptionDialog::RecallPrescriptionDialog(wxWindow *parent, const std::
     recallCode->Bind(wxEVT_COMBOBOX, &RecallPrescriptionDialog::OnModified, this);
     cancelButton->Bind(wxEVT_BUTTON, &RecallPrescriptionDialog::OnCancel, this);
     recallButton->Bind(wxEVT_BUTTON, &RecallPrescriptionDialog::OnRecall, this);
+}
+
+RecallPrescriptionDialog::RecallPrescriptionDialog(wxWindow *parent, const std::shared_ptr<FhirMedicationStatement> &medicationStatement) : RecallPrescriptionDialog(parent, *medicationStatement) {
+}
+
+RecallPrescriptionDialog::RecallPrescriptionDialog(wxWindow *parent, const std::shared_ptr<FhirBasic> &medicationStatement) : RecallPrescriptionDialog(parent, *medicationStatement) {
 }
 
 void RecallPrescriptionDialog::OnCancel(wxCommandEvent &e) {
