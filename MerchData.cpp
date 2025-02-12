@@ -36,7 +36,7 @@ MerchData MerchData::FromFhir(const FhirBasic &fhir) {
                 }
             }
         } else if (url == "http://ehelse.no/fhir/structuredefinition/sfm-reseptamendment") {
-            for (const auto &extension : fhir.GetExtensions()) {
+            for (const auto &extension : extension->GetExtensions()) {
                 auto url = extension->GetUrl();
                 std::transform(url.cbegin(), url.cend(), url.begin(),
                                [](char ch) -> char { return static_cast<char>(std::tolower(ch)); });

@@ -214,6 +214,7 @@ TheMasterFrame::TheMasterFrame() : wxFrame(nullptr, wxID_ANY, "The Master"),
 
     Bind(wxEVT_MENU, &TheMasterFrame::OnMerchPrescriptionDetails, this, TheMaster_MerchPrescriptionDetails_Id);
     Bind(wxEVT_MENU, &TheMasterFrame::OnMerchPrescriptionRenew, this, TheMaster_MerchPrescriptionRenew_Id);
+    Bind(wxEVT_MENU, &TheMasterFrame::OnMerchPrescriptionRenewWithChanges, this, TheMaster_MerchPrescriptionRenewWithChanges_Id);
 
     Bind(wxEVT_MENU, &TheMasterFrame::OnCaveDetails, this, TheMaster_CaveDetails_Id);
     Bind(wxEVT_MENU, &TheMasterFrame::OnAddCaveMedicament, this, TheMaster_AddCaveMedicament_Id);
@@ -2366,6 +2367,7 @@ void TheMasterFrame::OnMerchPrescriptionContextMenu(const wxContextMenuEvent &e)
     wxMenu menu(wxString::FromUTF8(display));
     menu.Append(TheMaster_MerchPrescriptionDetails_Id, wxT("Details"));
     menu.Append(TheMaster_MerchPrescriptionRenew_Id, wxT("Renew"));
+    menu.Append(TheMaster_MerchPrescriptionRenewWithChanges_Id, wxT("Renew with changes"));
     PopupMenu(&menu);
 }
 
@@ -2815,6 +2817,45 @@ void TheMasterFrame::OnPrescriptionRenewWithChanges(const wxCommandEvent &e) {
         return;
     }
     PrescribeMedicament(prescriptionDialog, reseptId);
+}
+
+void TheMasterFrame::OnMerchPrescriptionRenewWithChanges(const wxCommandEvent &e) {
+    if (merchPrescriptions->GetSelectedItemCount() != 1) {
+        return;
+    }
+    auto selected = merchPrescriptions->GetFirstSelected();
+    if (selected < 0 || selected >= displayedMerch.size()) {
+        return;
+    }
+    auto medicationStatement = displayedMerch[selected][0];
+    std::string reseptId{};
+    {
+        auto identifiers = medicationStatement->GetIdentifiers();
+        auto iterator = identifiers.begin();
+        while (iterator != identifiers.end()) {
+            auto identifier = *iterator;
+            auto key = identifier.GetType().GetText();
+            std::transform(key.cbegin(), key.cend(), key.begin(), [](char ch) -> char { return std::tolower(ch); });
+            if (key == "reseptid") {
+                reseptId = identifier.GetValue();
+                break;
+            }
+            ++iterator;
+        }
+    }
+    if (reseptId.empty()) {
+        wxMessageBox(wxT("The entry does not contain a prescription to renew"), wxT("Renew failed"), wxICON_ERROR);
+        return;
+    }
+    std::shared_ptr<FestDb> festDb = std::make_shared<FestDb>();
+
+    auto prescriptionData = MerchData::FromFhir(*medicationStatement);
+    PrescribeMerchandiseDialog prescriptionDialog{this, prescriptionData};
+    auto res = prescriptionDialog.ShowModal();
+    if (res != wxID_OK) {
+        return;
+    }
+    PrescribeMerch(prescriptionDialog, reseptId);
 }
 
 void TheMasterFrame::OnTreatmentEdit(const wxCommandEvent &e) {

@@ -1044,10 +1044,6 @@ void MedBundleData::Prescribe(const MerchData &merchData, const std::string &ren
         *renewReference = {fhirBasicFullUrl,
                            "http://ehelse.no/fhir/StructureDefinition/sfm-BandaPrescription",
                            fhirBasic->GetDisplay()};
-        renewBasic->SetPartOf({*renewReference});
-        fhirBasic->SetBasedOn({{renewFullUrl,
-                                          "http://ehelse.no/fhir/StructureDefinition/sfm-MedicationStatement",
-                                          renewBasic->GetDisplay()}});
     }
     otherPrescriptionSectionInList.SetEntries(entries);
     composition->SetSections(otherPrescriptionSectionInList.GetSections());

@@ -128,6 +128,32 @@ PrescribeMerchandiseDialog::PrescribeMerchandiseDialog(wxWindow *parent, const M
     SetSizerAndFit(superSizer);
 }
 
+class EmptyMerchTree : public MerchTree {
+public:
+    std::shared_ptr<ContainerElement> GetContainerElement(const std::string &) const override;
+    std::vector<MerchRefund> GetRefunds() const override;
+};
+
+std::shared_ptr<MerchTree::ContainerElement> EmptyMerchTree::GetContainerElement(const std::string &) const {
+    return {};
+}
+
+std::vector<MerchRefund> EmptyMerchTree::GetRefunds() const {
+    return {};
+}
+
+static EmptyMerchTree GetEmptyMerchTree() {
+    return {};
+}
+
+PrescribeMerchandiseDialog::PrescribeMerchandiseDialog(wxWindow *parent, const MerchData &data) : PrescribeMerchandiseDialog(parent, GetEmptyMerchTree()) {
+    refundInfo = data.refund;
+    paragraph->SetValue(wxString::FromUTF8(refundInfo.paragraph.GetDisplay()));
+    productGroup->SetValue(wxString::FromUTF8(refundInfo.productGroup.GetDisplay()));
+    dssn->SetValue(wxString::FromUTF8(data.dssn));
+    RefreshButons();
+}
+
 void PrescribeMerchandiseDialog::OnSelectedRefundTreeItem(wxCommandEvent &) {
     auto selectedId = treeView->GetSelection();
     auto iterator = refundInfoMap.find(selectedId);

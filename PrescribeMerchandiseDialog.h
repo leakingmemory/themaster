@@ -30,6 +30,7 @@ private:
     wxButton *cancelButton;
 public:
     PrescribeMerchandiseDialog(wxWindow *parent, const MerchTree &);
+    PrescribeMerchandiseDialog(wxWindow *parent, const MerchData &);
 private:
     void OnSelectedRefundTreeItem(wxCommandEvent &);
     void OnDssnChanged(wxCommandEvent &e);
