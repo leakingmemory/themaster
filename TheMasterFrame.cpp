@@ -796,7 +796,7 @@ void TheMasterFrame::GetMedication(CallContext &ctx, const std::function<void(co
             request.headers().add(as_wstring_on_win32("Authorization"), as_wstring_on_win32(bearer));
         }
         {
-            web::json::value requestBody{};
+            std::string requestBody{};
             {
                 FhirParameters requestParameters{};
                 requestParameters.AddParameter("patient", patient);
@@ -804,9 +804,8 @@ void TheMasterFrame::GetMedication(CallContext &ctx, const std::function<void(co
             }
             request.set_request_uri(as_wstring_on_win32("patient/$getMedication"));
             {
-                auto jsonString = requestBody.serialize();
-                request.set_body(from_wstring_on_win32(jsonString), "application/fhir+json; charset=utf-8");
-                *rawRequest = from_wstring_on_win32(jsonString);
+                request.set_body(requestBody, "application/fhir+json; charset=utf-8");
+                *rawRequest = requestBody;
             }
         }
         web::http::client::http_client client{as_wstring_on_win32(apiUrl)};
@@ -895,7 +894,7 @@ void TheMasterFrame::GetMedication(CallContext &ctx, const std::function<void(co
                 if (medicationBundle && medicationBundle->patientInformation == *patientInformation) {
                     previousBundle = medicationBundle->medBundle;
                 }
-                medicationBundleResetData = from_wstring_on_win32(medBundle->ToJson().serialize());
+                medicationBundleResetData = medBundle->ToJson();
                 medicationBundle = std::make_unique<MedBundleData>();
                 *medicationBundle = {
                         .patientInformation = *patientInformation,
@@ -936,15 +935,13 @@ void TheMasterFrame::GetMedication(CallContext &ctx, const std::function<void(co
                             const pplx::task<web::json::value> &responseBodyTask) {
                         try {
                             auto responseBody = responseBodyTask.get();
+                            auto responseBodyStr = from_wstring_on_win32(responseBody.serialize());
                             try {
                                 {
-                                    auto responseBodyStr = from_wstring_on_win32(responseBody.serialize());
-                                    {
-                                        std::lock_guard lock{*getMedResponseMtx};
-                                        *rawResponse = responseBodyStr;
-                                    }
+                                    std::lock_guard lock{*getMedResponseMtx};
+                                    *rawResponse = responseBodyStr;
                                 }
-                                FhirParameters responseParameterBundle = FhirParameters::Parse(responseBody);
+                                FhirParameters responseParameterBundle = FhirParameters::ParseJson(responseBodyStr);
                                 {
                                     std::lock_guard lock{*getMedResponseMtx};
                                     *getMedResponse = std::make_unique<FhirParameters>(
@@ -983,7 +980,7 @@ void TheMasterFrame::OnResetMedication(wxCommandEvent &e) {
         wxMessageBox(wxT("Please run 'get medication' before reset local changes"), wxT("Run get medication"), wxICON_ERROR);
         return;
     }
-    *(medicationBundle->medBundle) = FhirBundle::Parse(web::json::value::parse(medicationBundleResetData));
+    *(medicationBundle->medBundle) = FhirBundle::ParseJson(medicationBundleResetData);
     UpdateHeader();
     UpdateMedications();
     UpdateMerch();
@@ -1128,7 +1125,7 @@ void TheMasterFrame::SendMedication(CallContext &ctx,
             FhirParameters sendMedicationParameters{};
             {
                 std::shared_ptr<FhirBundle> medBundle = std::make_shared<FhirBundle>();
-                *medBundle = FhirBundle::Parse(bundle->ToJson());
+                *medBundle = FhirBundle::ParseJson(bundle->ToJson());
                 FilterRecallInfos(*medBundle, [] (const auto &prescriptionId, const auto &recallInfo) -> bool {
                     bool keep{false};
                     auto extensions = recallInfo->GetExtensions();
@@ -1183,10 +1180,9 @@ void TheMasterFrame::SendMedication(CallContext &ctx,
                 sendMedicationParameters.AddParameter("medication", medBundle);
             }
             {
-                auto json = sendMedicationParameters.ToJson();
-                auto jsonString = json.serialize();
-                request.set_body(from_wstring_on_win32(jsonString), "application/fhir+json; charset=utf-8");
-                *rawRequest = from_wstring_on_win32(jsonString);
+                auto jsonString = sendMedicationParameters.ToJson();
+                request.set_body(jsonString, "application/fhir+json; charset=utf-8");
+                *rawRequest = jsonString;
             }
         }
         web::http::client::http_client client{as_wstring_on_win32(apiUrl)};
@@ -1394,11 +1390,12 @@ void TheMasterFrame::SendMedication(CallContext &ctx,
                         try {
                             auto responseBody = responseBodyTask.get();
                             try {
+                                auto jsonString = from_wstring_on_win32(responseBody.serialize());
                                 {
                                     std::lock_guard lock{*sendMedResponseMtx};
-                                    *rawResponse = from_wstring_on_win32(responseBody.serialize());
+                                    *rawResponse = jsonString;
                                 }
-                                std::shared_ptr<Fhir> responseParameterBundle = Fhir::Parse(responseBody);
+                                std::shared_ptr<Fhir> responseParameterBundle = Fhir::ParseJson(jsonString);
                                 {
                                     std::lock_guard lock{*sendMedResponseMtx};
                                     *sendMedResponse = responseParameterBundle;
@@ -2114,11 +2111,7 @@ void TheMasterFrame::OnSaveLastSendmed(wxCommandEvent &e) {
 }
 
 void TheMasterFrame::OnSaveBundle(wxCommandEvent &e) {
-    std::string jsonStr{};
-    {
-        auto json = medicationBundle->medBundle->ToJson();
-        jsonStr = from_wstring_on_win32(json.serialize());
-    }
+    std::string jsonStr = medicationBundle->medBundle->ToJson();
     wxFileDialog saveFileDialog(this, _("Save bundle"), "", "", "Json files (*.json)|*.json", wxFD_SAVE|wxFD_OVERWRITE_PROMPT);
     if (saveFileDialog.ShowModal() == wxID_CANCEL)
         return; // the user changed their mind

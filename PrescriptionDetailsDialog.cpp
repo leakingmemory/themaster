@@ -8,6 +8,7 @@
 #include <sfmbasisapi/fhir/fhirbasic.h>
 #include <sfmbasisapi/fhir/extension.h>
 #include "EreseptdosingDialog.h"
+#include <sstream>
 
 template <class T> concept PrescriptionDetailsDialogEntryRequirements = requires (const T &entry) {
     { entry.GetDisplay() } -> std::convertible_to<std::string>;

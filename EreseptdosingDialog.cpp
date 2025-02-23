@@ -7,6 +7,7 @@
 #include <sfmbasisapi/fhir/fhir.h>
 #include <sfmbasisapi/fhir/value.h>
 #include <wx/listctrl.h>
+#include <sstream>
 
 EreseptdosingDialog::EreseptdosingDialog(wxWindow *parent, const std::vector<std::shared_ptr<FhirExtension>> &ereseptdosing) : wxDialog(parent, wxID_ANY, wxT("Ereseptdosing")), ereseptdosing(ereseptdosing) {
     wxBoxSizer *sizer = new wxBoxSizer(wxVERTICAL);

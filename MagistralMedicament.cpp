@@ -6,6 +6,7 @@
 #include <sfmbasisapi/fhir/medication.h>
 #include <boost/uuid/uuid_generators.hpp> // for random_generator
 #include <boost/uuid/uuid_io.hpp> // for to_string
+#include <sstream>
 
 FhirMedication MagistralMedicament::ToFhir() {
     FhirMedication fhir{};

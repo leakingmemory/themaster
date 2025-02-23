@@ -9,6 +9,8 @@
 #include <sfmbasisapi/fhir/medstatement.h>
 #include <boost/uuid/uuid_generators.hpp> // for random_generator
 #include <boost/uuid/uuid_io.hpp> // for to_string
+#include <functional>
+#include <sstream>
 
 struct DosingPeriodData {
     DateOnly startDate{};

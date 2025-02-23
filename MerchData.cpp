@@ -6,6 +6,7 @@
 #include <sfmbasisapi/nhnfhir/SfmBandaPrescription.h>
 #include <boost/uuid/uuid_generators.hpp> // for random_generator
 #include <boost/uuid/uuid_io.hpp> // for to_string
+#include <functional>
 
 void MerchData::SetDefaults() {
     itemGroup = {"urn:oid:2.16.578.1.12.4.1.1.7402", "A", "Annet", "Annet"};

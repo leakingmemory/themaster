@@ -17,6 +17,7 @@
 #include "PrescriptionChangesService.h"
 #include "PrescriptionData.h"
 #include "MerchData.h"
+#include <sstream>
 
 class MedBundleDataException : public std::exception {
 private:
