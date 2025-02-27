@@ -19,6 +19,14 @@ struct DosingPeriodData {
     float morgen{0}, formiddag{0}, middag{0}, ettermiddag{0}, kveld{0}, natt{0};
 };
 
+static MedicalCodedValue GetMedicalCodedValue(const FhirCodeableConcept &codeableConcept) {
+    auto codings = codeableConcept.GetCoding();
+    if (!codings.empty()) {
+        return {codings[0].GetSystem(), codings[0].GetCode(), codings[0].GetDisplay(), codings[0].GetDisplay()};
+    }
+    return {"", "", codeableConcept.GetText(), codeableConcept.GetText()};
+}
+
 void PrescriptionData::FromFhir(const FhirMedicationStatement &medicationStatement) {
     {
         auto dosages = medicationStatement.GetDosage();
@@ -126,7 +134,17 @@ void PrescriptionData::FromFhir(const FhirMedicationStatement &medicationStateme
                 });
                 SingleThreadedLazy<std::function<FhirQuantity ()>> quantity([&value] () -> FhirQuantity {
                     auto quantityValue = std::dynamic_pointer_cast<FhirQuantityValue>(value.operator std::shared_ptr<FhirValue> &());
+                    if (!quantityValue) {
+                        return {};
+                    }
                     return *quantityValue;
+                });
+                SingleThreadedLazy<std::function<FhirCodeableConcept ()>> codeableConcept([&value] () -> FhirCodeableConcept {
+                    auto codeableConceptValue = std::dynamic_pointer_cast<FhirCodeableConceptValue>(value.operator std::shared_ptr<FhirValue> &());
+                    if (!codeableConceptValue) {
+                        return {};
+                    }
+                    return *codeableConceptValue;
                 });
                 if (url == "dssn") {
                     dssn = stringValue.operator std::string();
@@ -137,6 +155,10 @@ void PrescriptionData::FromFhir(const FhirMedicationStatement &medicationStateme
                     amount = quantity.operator FhirQuantity &().GetValue();
                     amountUnit = {"", quantity.operator FhirQuantity &().GetUnit(), "", ""};
                     amountIsSet = (amount > 0.001);
+                } else if (url == "reimbursementcode") {
+                    reimbursementCode = GetMedicalCodedValue(codeableConcept.operator FhirCodeableConcept &());
+                } else if (url == "reimbursementparagraph") {
+                    reimbursementParagraph = GetMedicalCodedValue(codeableConcept.operator FhirCodeableConcept &());
                 } else if (url == "reit") {
                     reit = stringInterpretedAsInt.operator int();
                 } else if (url == "ereseptdosing") {
@@ -370,6 +392,32 @@ FhirMedicationStatement PrescriptionData::ToFhir() const {
             reseptAmendment->AddExtension(std::make_shared<FhirValueExtension>(
                     "amount",
                     std::make_shared<FhirQuantityValue>(FhirQuantity(amount, amountUnit.GetDisplay()))
+            ));
+        }
+        if (!reimbursementCode.GetCode().empty()) {
+            auto system = reimbursementCode.GetSystem();
+            if (!system.starts_with("urn:oid:")) {
+                std::string sys{"urn:oid:"};
+                sys.append(system);
+                system = sys;
+            }
+            FhirCodeableConcept codeable{system, reimbursementCode.GetCode(), reimbursementCode.GetDisplay()};
+            reseptAmendment->AddExtension(std::make_shared<FhirValueExtension>(
+                    "reimbursementcode",
+                    std::make_shared<FhirCodeableConceptValue>(codeable)
+            ));
+        }
+        if (!reimbursementParagraph.GetCode().empty()) {
+            auto system = reimbursementParagraph.GetSystem();
+            if (!system.starts_with("urn:oid:")) {
+                std::string sys{"urn:oid:"};
+                sys.append(system);
+                system = sys;
+            }
+            FhirCodeableConcept codeable{system, reimbursementParagraph.GetCode(), reimbursementParagraph.GetDisplay()};
+            reseptAmendment->AddExtension(std::make_shared<FhirValueExtension>(
+                    "reimbursementparagraph",
+                    std::make_shared<FhirCodeableConceptValue>(codeable)
             ));
         }
         {

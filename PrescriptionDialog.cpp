@@ -63,7 +63,7 @@ wxBoxSizer *PrescriptionDialog::CreateAmount(wxWindow *parent) {
     return amountSizer;
 }
 
-PrescriptionDialog::PrescriptionDialog(TheMasterFrame *frame, const std::shared_ptr<FestDb> &festDb, const std::shared_ptr<FhirMedication> &medication, const std::vector<MedicalCodedValue> &amountUnit, const std::vector<MedicalCodedValue> &medicamentType, const std::vector<MedicalCodedValue> &listOfMedicamentUses, bool package, const std::vector<MedicamentPackage> &packages, const std::vector<MedicalCodedValue> &dosingUnit, const std::vector<MedicalCodedValue> &kortdoser, const std::vector<PrescriptionValidity> &prescriptionValidity) : wxDialog(frame, wxID_ANY, wxT("Prescription")), festDb(festDb), medication(medication), amountUnit(amountUnit), packages(packages), dosingUnit(dosingUnit), kortdoser(kortdoser), medicamentUses(listOfMedicamentUses), prescriptionValidity(prescriptionValidity) {
+PrescriptionDialog::PrescriptionDialog(TheMasterFrame *frame, const std::shared_ptr<FestDb> &festDb, const std::shared_ptr<FhirMedication> &medication, const std::vector<MedicalCodedValue> &amountUnit, const std::vector<MedicalCodedValue> &medicamentType, const std::vector<MedicalCodedValue> &listOfMedicamentUses, bool package, const std::vector<MedicamentPackage> &packages, const std::vector<MedicamentRefund> &refunds, const std::vector<MedicalCodedValue> &dosingUnit, const std::vector<MedicalCodedValue> &kortdoser, const std::vector<PrescriptionValidity> &prescriptionValidity) : wxDialog(frame, wxID_ANY, wxT("Prescription")), festDb(festDb), medication(medication), amountUnit(amountUnit), packages(packages), refunds(refunds), dosingUnit(dosingUnit), kortdoser(kortdoser), medicamentUses(listOfMedicamentUses), prescriptionValidity(prescriptionValidity) {
     DateOnly startDate = DateOnly::Today();
     DateOnly endDate = startDate;
     endDate.AddYears(1);
@@ -120,6 +120,17 @@ PrescriptionDialog::PrescriptionDialog(TheMasterFrame *frame, const std::shared_
         } else {
             amountSizer = CreateAmount(this);
         }
+        auto *refundSizer = new wxBoxSizer(wxHORIZONTAL);
+        auto *refundLabel = new wxStaticText(this, wxID_ANY, wxT("Refund:"));
+        refundSizer->Add(refundLabel, 0, wxEXPAND | wxALL, 5);
+        refundSelection = new wxComboBox(this, wxID_ANY);
+        refundSelection->SetEditable(false);
+        refundSizer->Add(refundSelection);
+        auto *refundCodeLabel = new wxStaticText(this, wxID_ANY, wxT("Code:"));
+        refundSizer->Add(refundCodeLabel, 1, wxEXPAND | wxALL, 5);
+        refundCodeSelection = new wxComboBox(this, wxID_ANY);
+        refundCodeSelection->SetEditable(false);
+        refundSizer->Add(refundCodeSelection, 1, wxEXPAND | wxALL, 5);
         auto *reitSizer = new wxBoxSizer(wxHORIZONTAL);
         auto *reitLabel = new wxStaticText(this, wxID_ANY, wxT("Reit:"));
         reitCtrl = new wxSpinCtrl(this, wxID_ANY);
@@ -148,6 +159,7 @@ PrescriptionDialog::PrescriptionDialog(TheMasterFrame *frame, const std::shared_
         if (amountSizer != nullptr) {
             sizer->Add(amountSizer, 0, wxEXPAND | wxALL, 5);
         }
+        sizer->Add(refundSizer, 0, wxEXPAND | wxALL, 5);
         sizer->Add(reitSizer, 0, wxEXPAND | wxALL, 5);
         sizer->Add(applicationAreaSizer, 0, wxEXPAND | wxALL, 5);
         hzSizer->Add(sizer, 0, wxEXPAND | wxALL, 5);
@@ -275,6 +287,7 @@ PrescriptionDialog::PrescriptionDialog(TheMasterFrame *frame, const std::shared_
     buttonsSizer->Add(proceedButton, 0, wxEXPAND | wxALL, 5);
     vSizer->Add(buttonsSizer, 0, wxEXPAND | wxALL, 5);
     SetSizerAndFit(vSizer);
+    PopulateRefunds(refunds);
     dosingNotebook->Bind(wxEVT_NOTEBOOK_PAGE_CHANGED, &PrescriptionDialog::OnModified, this);
     dssnCtrl->Bind(wxEVT_TEXT, &PrescriptionDialog::OnModified, this);
     kortdoseDosingUnitCtrl->Bind(wxEVT_COMBOBOX, &PrescriptionDialog::OnModified, this);
@@ -287,7 +300,7 @@ PrescriptionDialog::PrescriptionDialog(TheMasterFrame *frame, const std::shared_
         packageAmountNotebook->Bind(wxEVT_NOTEBOOK_PAGE_CHANGED, &PrescriptionDialog::OnModifiedPC, this);
     }
     if (selectPackage != nullptr) {
-        selectPackage->Bind(wxEVT_COMBOBOX, &PrescriptionDialog::OnModified, this);
+        selectPackage->Bind(wxEVT_COMBOBOX, &PrescriptionDialog::OnModifiedPackageSelection, this);
     }
     if (numberOfPackagesCtrl != nullptr) {
         numberOfPackagesCtrl->Bind(wxEVT_SPINCTRLDOUBLE, &PrescriptionDialog::OnModified, this);
@@ -296,6 +309,8 @@ PrescriptionDialog::PrescriptionDialog(TheMasterFrame *frame, const std::shared_
         amountCtrl->Bind(wxEVT_SPINCTRLDOUBLE, &PrescriptionDialog::OnModified, this);
         amountUnitCtrl->Bind(wxEVT_SPINCTRLDOUBLE, &PrescriptionDialog::OnModified, this);
     }
+    refundSelection->Bind(wxEVT_COMBOBOX, &PrescriptionDialog::OnModifiedRefundSelection, this);
+    refundCodeSelection->Bind(wxEVT_COMBOBOX, &PrescriptionDialog::OnModified, this);
     reitCtrl->Bind(wxEVT_SPINCTRL, &PrescriptionDialog::OnModified, this);
     applicationAreaCtrl->Bind(wxEVT_TEXT, &PrescriptionDialog::OnModified, this);
     applicationAreaCtrl->Bind(wxEVT_COMBOBOX, &PrescriptionDialog::OnModified, this);
@@ -346,6 +361,29 @@ PrescriptionDialog &PrescriptionDialog::operator+=(const PrescriptionData &presc
         } else if (byDN < amountUnit.size() && byDN == static_cast<int>(byDN)) {
             amountCtrl->SetValue(prescriptionData.amount);
             amountUnitCtrl->SetSelection(static_cast<int>(byDN));
+        }
+    }
+    {
+        auto reimbursementParagraph = prescriptionData.reimbursementParagraph.GetCode();
+        auto reimbursementCode = prescriptionData.reimbursementCode.GetCode();
+        if (!reimbursementParagraph.empty()) {
+            for (decltype(displayedRefunds.size()) i = 0; i < displayedRefunds.size(); i++) {
+                if (displayedRefunds[i].refund.GetCode() == reimbursementParagraph) {
+                    refundSelection->SetSelection(i + 1);
+                    OnPotentiallyModifiedRefundSelection();
+                    if (!reimbursementCode.empty()) {
+                        const auto &codes = displayedRefunds[i].codes;
+                        for (decltype(codes.size()) i = 0;
+                             i < codes.size(); i++) {
+                            if (codes[i].GetCode() == reimbursementCode) {
+                                refundCodeSelection->SetSelection(i + 1);
+                                break;
+                            }
+                        }
+                    }
+                    break;
+                }
+            }
         }
     }
     reitCtrl->SetValue(prescriptionData.reit);
@@ -417,6 +455,8 @@ struct PrescriptionDialogData {
     std::string applicationArea{};
     double numberOfPackages{0};
     double amount{0};
+    MedicalCodedValue refund{};
+    MedicalCodedValue refundCode{};
     DateOnly startDate{};
     DateOnly expirationDate{};
     DateOnly ceaseDate{};
@@ -425,6 +465,19 @@ struct PrescriptionDialogData {
     bool amountIsSet{false};
     bool invalidField{false};
 };
+
+void PrescriptionDialog::PopulateRefunds(const std::vector<MedicamentRefund> &refunds) {
+    refundSelection->Clear();
+    refundSelection->Append(wxT(""));
+    for (const auto &refund : refunds) {
+        refundSelection->Append(wxString::FromUTF8(refund.refund.GetDisplay()));
+    }
+    refundSelection->SetSelection(0);
+    displayedRefunds = refunds;
+    refundCodeSelection->Clear();
+    refundCodeSelection->Append(wxT(""));
+    refundCodeSelection->SetSelection(0);
+}
 
 PrescriptionDialogData PrescriptionDialog::GetDialogData() const {
     PrescriptionDialogData dialogData{};
@@ -533,6 +586,17 @@ PrescriptionDialogData PrescriptionDialog::GetDialogData() const {
             dialogData.amountIsSet = false;
         } else if (page == 1) {
             dialogData.numberOfPackagesSet = false;
+        }
+    }
+    {
+        auto selection = refundSelection->GetSelection();
+        if (selection > 0 && selection < (displayedRefunds.size() + 1)) {
+            auto refund = displayedRefunds[selection - 1];
+            dialogData.refund = refund.refund;
+            selection = refundCodeSelection->GetSelection();
+            if (selection > 0 && selection < (refund.codes.size() + 1)) {
+                dialogData.refundCode = refund.codes[selection - 1];
+            }
         }
     }
     dialogData.startDate = ToDateOnly(startDate->GetValue());
@@ -672,6 +736,11 @@ bool PrescriptionDialog::IsValid(const PrescriptionDialogData &dialogData) const
     } else {
         return false;
     }
+    if (dialogData.refund.GetCode() == "200" || dialogData.refund.GetCode() == "950") {
+        if (dialogData.refundCode.GetCode().empty()) {
+            return false;
+        }
+    }
     if (dialogData.reit < 0) {
         return false;
     }
@@ -695,12 +764,56 @@ void PrescriptionDialog::OnModifiedCeaseIsSet() {
     OnModified();
 }
 
+void PrescriptionDialog::OnPotentiallyModifiedPackageSelecion() {
+    auto dialogData = GetDialogData();
+    auto refunds = this->refunds;
+    if (selectPackage != nullptr && packageAmountNotebook != nullptr && packageAmountNotebook->GetSelection() == 0) {
+        auto selected = selectPackage->GetSelection();
+        if (selected >= 0 && selected < packages.size()) {
+            refunds = packages[selected].GetRefunds();
+        }
+    }
+    PopulateRefunds(refunds);
+}
+
+void PrescriptionDialog::OnPotentiallyModifiedRefundSelection() {
+    auto dialogData = GetDialogData();
+    for (const auto &refund : displayedRefunds) {
+        if (refund.refund.GetCode() == dialogData.refund.GetCode()) {
+            auto selection = refundCodeSelection->GetSelection();
+            refundCodeSelection->Clear();
+            refundCodeSelection->Append(wxT(""));
+            for (const auto &code : refund.codes) {
+                std::string display{code.GetCode()};
+                display.append(" ");
+                display.append(code.GetDisplay());
+                refundCodeSelection->Append(wxString::FromUTF8(display));
+            }
+            if (selection >= 0) {
+                refundCodeSelection->SetSelection(0);
+            }
+            break;
+        }
+    }
+}
+
 void PrescriptionDialog::OnModified(wxCommandEvent &e) {
     OnModified();
 }
 
+void PrescriptionDialog::OnModifiedPackageSelection(wxCommandEvent &e) {
+    OnModified();
+    OnPotentiallyModifiedPackageSelecion();
+}
+
+void PrescriptionDialog::OnModifiedRefundSelection(wxCommandEvent &e) {
+    OnModified();
+    OnPotentiallyModifiedRefundSelection();
+}
+
 void PrescriptionDialog::OnModifiedPC(wxBookCtrlEvent &e) {
     OnModified();
+    OnPotentiallyModifiedPackageSelecion();
 }
 
 void PrescriptionDialog::OnModifiedCeaseIsSet(wxCommandEvent &e) {
@@ -741,6 +854,8 @@ static void SetPrescriptionData(PrescriptionData &prescriptionData, const Prescr
     prescriptionData.amount = dialogData.amount;
     prescriptionData.amountUnit = dialogData.amountUnit;
     prescriptionData.amountIsSet = dialogData.amountIsSet;
+    prescriptionData.reimbursementParagraph = dialogData.refund;
+    prescriptionData.reimbursementCode = dialogData.refundCode;
     prescriptionData.reit = dialogData.reit;
     prescriptionData.applicationAreaCoded = dialogData.applicationAreaCoded;
     prescriptionData.applicationArea = dialogData.applicationArea;

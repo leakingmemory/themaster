@@ -10,6 +10,7 @@
 #include "PrescriptionData.h"
 #include "AdvancedDosingPeriod.h"
 #include "SfmMedicamentMapper.h"
+#include "MedicamentRefund.h"
 #include <memory>
 #include <functional>
 
@@ -26,6 +27,7 @@ class MedicamentPackage {
 private:
     std::shared_ptr<FhirMedication> medication;
     std::string description;
+    std::vector<MedicamentRefund> refunds{};
 public:
     MedicamentPackage(std::shared_ptr<FhirMedication> medication, std::string description) : medication(medication), description(description) {}
     [[nodiscard]] std::shared_ptr<FhirMedication> GetMedication() const {
@@ -33,6 +35,15 @@ public:
     }
     [[nodiscard]] std::string GetDescription() const {
         return description;
+    }
+    [[nodiscard]] std::vector<MedicamentRefund> GetRefunds() const {
+        return refunds;
+    }
+    void SetRefunds(const std::vector<MedicamentRefund> &refunds) {
+        this->refunds = refunds;
+    }
+    void SetRefunds(std::vector<MedicamentRefund> &&refunds) {
+        this->refunds = std::move(refunds);
     }
 };
 
@@ -57,6 +68,8 @@ private:
     wxSpinCtrlDouble *numberOfPackagesCtrl{nullptr};
     wxSpinCtrlDouble *amountCtrl{nullptr};
     wxComboBox *amountUnitCtrl{nullptr};
+    wxComboBox *refundSelection{nullptr};
+    wxComboBox *refundCodeSelection{nullptr};
     wxSpinCtrl *reitCtrl{};
     wxComboBox *applicationAreaCtrl{};
     wxComboBox *prescriptionValidityCtrl{};
@@ -67,6 +80,8 @@ private:
     std::shared_ptr<FestDb> festDb;
     std::shared_ptr<FhirMedication> medication;
     std::vector<MedicamentPackage> packages;
+    std::vector<MedicamentRefund> refunds;
+    std::vector<MedicamentRefund> displayedRefunds{};
     std::vector<MedicalCodedValue> amountUnit;
     std::vector<MedicalCodedValue> dosingUnit;
     std::vector<MedicalCodedValue> kortdoser;
@@ -81,17 +96,22 @@ private:
     NumPackagesSizers CreateNumPackages(wxWindow *parent);
     wxBoxSizer *CreateAmount(wxWindow *parent);
 public:
-    PrescriptionDialog(TheMasterFrame *, const std::shared_ptr<FestDb> &festDb, const std::shared_ptr<FhirMedication> &, const std::vector<MedicalCodedValue> &amountUnit, const std::vector<MedicalCodedValue> &medicamentType, const std::vector<MedicalCodedValue> &listOfMedicamentUses, bool package = false, const std::vector<MedicamentPackage> &packages = {}, const std::vector<MedicalCodedValue> &dosingUnit = {}, const std::vector<MedicalCodedValue> &kortdoser = {}, const std::vector<PrescriptionValidity> &prescriptionValidity = {});
+    PrescriptionDialog(TheMasterFrame *, const std::shared_ptr<FestDb> &festDb, const std::shared_ptr<FhirMedication> &, const std::vector<MedicalCodedValue> &amountUnit, const std::vector<MedicalCodedValue> &medicamentType, const std::vector<MedicalCodedValue> &listOfMedicamentUses, bool package = false, const std::vector<MedicamentPackage> &packages = {}, const std::vector<MedicamentRefund> &refunds = {}, const std::vector<MedicalCodedValue> &dosingUnit = {}, const std::vector<MedicalCodedValue> &kortdoser = {}, const std::vector<PrescriptionValidity> &prescriptionValidity = {});
     PrescriptionDialog & operator += (const PrescriptionData &);
     void OnCancel(wxCommandEvent &e);
 private:
+    void PopulateRefunds(const std::vector<MedicamentRefund> &refunds);
     [[nodiscard]] PrescriptionDialogData GetDialogData() const;
     void ProcessDialogData(PrescriptionDialogData &) const;
     bool IsValid(const PrescriptionDialogData &dialogData) const;
     void OnModified();
     void OnModifiedCeaseIsSet();
+    void OnPotentiallyModifiedPackageSelecion();
+    void OnPotentiallyModifiedRefundSelection();
 public:
     void OnModified(wxCommandEvent &e);
+    void OnModifiedPackageSelection(wxCommandEvent &e);
+    void OnModifiedRefundSelection(wxCommandEvent &e);
     void OnModifiedPC(wxBookCtrlEvent &e);
     void OnModifiedCeaseIsSet(wxCommandEvent &e);
     void OnModifiedDate(wxDateEvent &e);

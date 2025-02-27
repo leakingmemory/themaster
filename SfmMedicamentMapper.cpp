@@ -11,6 +11,7 @@
 #include <boost/uuid/uuid_generators.hpp> // for random_generator
 #include <boost/uuid/uuid_io.hpp> // for to_string
 #include "DateOnly.h"
+#include "GetLegemiddelRefunds.h"
 
 SfmMedicamentMapper::SfmMedicamentMapper(const std::shared_ptr<FestDb> &festDb, const std::shared_ptr<LegemiddelCore> &legemiddelCore) : festDb(festDb) {
     {
@@ -31,6 +32,7 @@ SfmMedicamentMapper::SfmMedicamentMapper(const std::shared_ptr<FestDb> &festDb, 
             medication.AddExtension(ext);
         }
     }
+    medicamentRefunds = GetLegemiddelRefunds::GetMedicamentRefunds(*festDb, GetLegemiddelRefunds(*legemiddelCore));
     {
         std::shared_ptr<LegemiddelMerkevare> merkevare = std::dynamic_pointer_cast<LegemiddelMerkevare>(legemiddelCore);
         if (merkevare) {
@@ -88,6 +90,30 @@ void SfmMedicamentMapper::Map(const LegemiddelMerkevare &legemiddelMerkevare) {
         auto pakninger = festDb->GetLegemiddelpakningForMerkevare(merkevareId);
         for (const auto &pakning : pakninger) {
             auto &mapper = packages.emplace_back(festDb, std::make_shared<Legemiddelpakning>(pakning));
+            for (const auto &refund : mapper.GetMedicamentRefunds()) {
+                bool found{false};
+                for (auto &existingRefund : medicamentRefunds) {
+                    if (refund.refund.GetCode() == existingRefund.refund.GetCode()) {
+                        for (const auto &refundCode : refund.codes) {
+                            bool found{false};
+                            for (const auto &existigCode : existingRefund.codes) {
+                                if (refundCode.GetCode() == existigCode.GetCode()) {
+                                    found = true;
+                                    break;
+                                }
+                            }
+                            if (!found) {
+                                existingRefund.codes.emplace_back(refundCode);
+                            }
+                        }
+                        found = true;
+                        break;
+                    }
+                }
+                if (!found) {
+                    medicamentRefunds.emplace_back(refund);
+                }
+            }
             auto pInfos = pakning.GetPakningsinfo();
             for (const auto pInfo : pInfos) {
                 auto packingUnit = pInfo.GetEnhetPakning();

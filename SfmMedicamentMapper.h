@@ -9,6 +9,7 @@
 #include <sfmbasisapi/fhir/medication.h>
 #include "MedicalCodedValue.h"
 #include "Duration.h"
+#include "MedicamentRefund.h"
 
 class FestDb;
 class LegemiddelCore;
@@ -32,6 +33,7 @@ private:
     std::vector<MedicalCodedValue> medicamentType{};
     std::vector<MedicalCodedValue> medicamentUses{};
     std::vector<PrescriptionValidity> prescriptionValidity{};
+    std::vector<MedicamentRefund> medicamentRefunds{};
     std::string packageDescription{};
     std::shared_ptr<FestDb> festDb;
     bool isPackage{false};
@@ -56,6 +58,9 @@ public:
     }
     [[nodiscard]] std::vector<PrescriptionValidity> GetPrescriptionValidity() const {
         return prescriptionValidity;
+    }
+    [[nodiscard]] std::vector<MedicamentRefund> GetMedicamentRefunds() const {
+        return medicamentRefunds;
     }
     [[nodiscard]] bool IsPackage() const {
         return isPackage;
