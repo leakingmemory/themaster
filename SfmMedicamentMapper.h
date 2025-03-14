@@ -10,6 +10,7 @@
 #include "MedicalCodedValue.h"
 #include "Duration.h"
 #include "MedicamentRefund.h"
+#include "ICD10.h"
 
 class FestDb;
 class LegemiddelCore;
@@ -60,7 +61,13 @@ public:
         return prescriptionValidity;
     }
     [[nodiscard]] std::vector<MedicamentRefund> GetMedicamentRefunds() const {
-        return medicamentRefunds;
+        auto refunds = medicamentRefunds;
+        for (auto &refund : refunds) {
+            if (refund.refund.GetCode() == "950") {
+                refund.codes = ICD10::GetFullCodelist();
+            }
+        }
+        return refunds;
     }
     [[nodiscard]] bool IsPackage() const {
         return isPackage;

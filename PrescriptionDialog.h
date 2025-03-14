@@ -50,6 +50,7 @@ public:
 struct NumPackagesSizers;
 struct PrescriptionDialogData;
 class FestDb;
+class ComboSearchControl;
 
 class PrescriptionDialog : public wxDialog {
 private:
@@ -69,7 +70,7 @@ private:
     wxSpinCtrlDouble *amountCtrl{nullptr};
     wxComboBox *amountUnitCtrl{nullptr};
     wxComboBox *refundSelection{nullptr};
-    wxComboBox *refundCodeSelection{nullptr};
+    ComboSearchControl *refundCodeSelection{nullptr};
     wxSpinCtrl *reitCtrl{};
     wxComboBox *applicationAreaCtrl{};
     wxComboBox *prescriptionValidityCtrl{};

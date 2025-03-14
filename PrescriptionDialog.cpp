@@ -7,6 +7,7 @@
 #include <wx/listctrl.h>
 #include <wx/datectrl.h>
 #include <wx/dateevt.h>
+#include "ComboSearchControl.h"
 #include "PrescriptionDialog.h"
 #include "FestDb.h"
 #include "TheMasterFrame.h"
@@ -128,8 +129,8 @@ PrescriptionDialog::PrescriptionDialog(TheMasterFrame *frame, const std::shared_
         refundSizer->Add(refundSelection);
         auto *refundCodeLabel = new wxStaticText(this, wxID_ANY, wxT("Code:"));
         refundSizer->Add(refundCodeLabel, 1, wxEXPAND | wxALL, 5);
-        refundCodeSelection = new wxComboBox(this, wxID_ANY);
-        refundCodeSelection->SetEditable(false);
+        refundCodeSelection = new ComboSearchControl(this, wxID_ANY);
+        refundCodeSelection->SetEditable(true);
         refundSizer->Add(refundCodeSelection, 1, wxEXPAND | wxALL, 5);
         auto *reitSizer = new wxBoxSizer(wxHORIZONTAL);
         auto *reitLabel = new wxStaticText(this, wxID_ANY, wxT("Reit:"));

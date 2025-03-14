@@ -8,7 +8,11 @@ include(${wxWidgets_USE_FILE})
 
 find_package(cpprestsdk REQUIRED)
 
+add_compile_options(-fconstexpr-ops-limit=536870912)
+
 string(REPLACE "/" "\\\\/" PREFIX_ESCAPED "${CMAKE_INSTALL_PREFIX}")
+
+add_subdirectory(CsvGenerator)
 
 if (WIN32)
     add_custom_target("InstallPrefix.h"
@@ -23,13 +27,22 @@ else()
     )
 endif()
 
+add_custom_target("ICD-10-codeset.gen.h"
+            ALL "${CMAKE_CURRENT_BINARY_DIR}/CsvGenerator/CsvGenerator" "${CMAKE_CURRENT_SOURCE_DIR}/ICD-10-codeset.csv" > "${CMAKE_CURRENT_BINARY_DIR}/ICD-10-codeset.gen.h"
+            DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/ICD-10-codeset.csv" "${CMAKE_CURRENT_BINARY_DIR}/CsvGenerator/CsvGenerator"
+)
+
+add_library(codelists OBJECT MedicalCodedValue.cpp MedicalCodedValue.h ICD10.cpp ICD10.h)
+target_include_directories(codelists PRIVATE "${CMAKE_CURRENT_BINARY_DIR}")
+add_dependencies(codelists "ICD-10-codeset.gen.h")
+
 add_executable(themaster TheMasterApp.cpp TheMasterApp.h TheMasterFrame.cpp TheMasterFrame.h ConnectDialog.cpp ConnectDialog.h
     FindPatientDialog.cpp FindPatientDialog.h PatientStoreInMemory.cpp PatientStoreInMemory.h
     CreatePatientDialog.cpp CreatePatientDialog.h WaitingForApiDialog.cpp WaitingForApiDialog.h
     HelseidLoginDialog.cpp HelseidLoginDialog.h HelseidAuthorization.cpp HelseidAuthorization.h
     DataDirectory.cpp DataDirectory.h PatientStoreInMemoryWithPersistence.cpp PatientStoreInMemoryWithPersistence.h
     MagistralBuilderDialog.cpp MagistralBuilderDialog.h  UnitsOfMeasure.cpp UnitsOfMeasure.h
-    MedicalCodedValue.cpp MedicalCodedValue.h PrescriptionDialog.cpp PrescriptionDialog.h
+    PrescriptionDialog.cpp PrescriptionDialog.h ComboSearchControl.cpp ComboSearchControl.h
     MagistralMedicament.cpp MagistralMedicament.h PrescriptionData.cpp PrescriptionData.h FestDbUi.cpp FestDbUi.h
     DownloadFestDialog.cpp DownloadFestDialog.h FestSerializerUi.cpp FestSerializerUi.h
     FestObjectStreamUi.cpp FestObjectStreamUi.h FestDb.cpp FestDb.h FindMedicamentDialog.cpp FindMedicamentDialog.h
@@ -47,6 +60,7 @@ add_executable(themaster TheMasterApp.cpp TheMasterApp.h TheMasterFrame.cpp TheM
     CaveDetailsDialog.cpp CaveDetailsDialog.h RegisterCaveDialog.cpp RegisterCaveDialog.h
     ConnectToPllDialog.cpp ConnectToPllDialog.h MerchTree.cpp MerchTree.h MerchData.cpp MerchData.h
     PrescribeMerchandiseDialog.cpp PrescribeMerchandiseDialog.h GetLegemiddelRefunds.cpp GetLegemiddelRefunds.h)
+target_link_libraries(themaster PRIVATE codelists)
 if (WIN32)
     set_target_properties(themaster PROPERTIES WIN32_EXECUTABLE TRUE)
     target_link_libraries(themaster PRIVATE ${SFMBASISAPI_LIBRARY} ${LIBJJWTID_LIBRARY} ${MEDFEST_LIBRARY})
