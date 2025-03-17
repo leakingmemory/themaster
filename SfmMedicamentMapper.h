@@ -67,6 +67,10 @@ public:
                 refund.codes = ICD10::GetFullCodelist();
             }
         }
+        MedicamentRefund p3{.refund = {"2.16.578.1.12.4.1.1.7427", "300", "\u00a75-14 \u00a73", "\u00a75-14 \u00a73"}, .codes = {}};
+        MedicamentRefund y{.refund = {"2.16.578.1.12.4.1.1.7427", "800", "\u00a75-25", "\u00a75-25"}, .codes = {}};
+        refunds.emplace_back(std::move(p3));
+        refunds.emplace_back(std::move(y));
         return refunds;
     }
     [[nodiscard]] bool IsPackage() const {
