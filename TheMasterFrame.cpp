@@ -2190,7 +2190,19 @@ void TheMasterFrame::OnPrescribeMagistral(wxCommandEvent &e) {
         return;
     }
     if (magistralBuilderDialog.ShowModal() == wxID_OK) {
-        PrescriptionDialog prescriptionDialog{this, std::make_shared<FestDb>(), std::make_shared<FhirMedication>(magistralBuilderDialog.GetMagistralMedicament().ToFhir()), {}, {}, {}, true};
+        std::vector<MedicamentRefund> refunds{};
+        MedicamentRefund p2{
+            .refund = {"2.16.578.1.12.4.1.1.7427", "200", "\u00a75-14 \u00a72", "\u00a75-14 \u00a72"},
+            .codes = {{"2.16.578.1.12.4.1.1.7435", "-90", "Palliativ behandling i livets sluttfase", "Palliativ behandling i livets sluttfase"}}
+        };
+        MedicamentRefund p3{.refund = {"2.16.578.1.12.4.1.1.7427", "300", "\u00a75-14 \u00a73", "\u00a75-14 \u00a73"}, .codes = {}};
+        MedicamentRefund y{.refund = {"2.16.578.1.12.4.1.1.7427", "800", "\u00a75-25", "\u00a75-25"}, .codes = {}};
+        MedicamentRefund hPres{.refund = {"2.16.578.1.12.4.1.1.7427", "950", "H-resept", "H-resept"}, .codes = ICD10::GetFullCodelist()};
+        refunds.emplace_back(std::move(p2));
+        refunds.emplace_back(std::move(p3));
+        refunds.emplace_back(std::move(y));
+        refunds.emplace_back(std::move(hPres));
+        PrescriptionDialog prescriptionDialog{this, std::make_shared<FestDb>(), std::make_shared<FhirMedication>(magistralBuilderDialog.GetMagistralMedicament().ToFhir()), {}, {}, {}, true, {}, refunds};
         auto res = prescriptionDialog.ShowModal();
         if (res != wxID_OK) {
             return;
