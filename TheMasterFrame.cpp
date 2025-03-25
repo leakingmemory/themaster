@@ -58,6 +58,7 @@
 #include "win32/w32strings.h"
 #include "MerchTree.h"
 #include "PrescribeMerchandiseDialog.h"
+#include "EditReferenceNumbersDialog.h"
 
 constexpr int PrescriptionNameColumnWidth = 250;
 constexpr int PllColumnWidth = 50;
@@ -129,6 +130,36 @@ TheMasterFrame::TheMasterFrame() : wxFrame(nullptr, wxID_ANY, "The Master"),
 
     wxBoxSizer* sizer = new wxBoxSizer(wxVERTICAL);
 
+    wxBoxSizer *consentAndRefBar = new wxBoxSizer(wxHORIZONTAL);
+    consentAndRefBar->Add(new wxStaticText(this, wxID_ANY, "KJ Consent: "), 0, wxEXPAND | wxALL, 5);
+    kjConsentSelect = new wxComboBox(this, wxID_ANY);
+    kjConsentSelect->Append(wxT(""));
+    kjConsentSelect->Append(wxT("Exempt"));
+    kjConsentSelect->Append(wxT("Patient"));
+    kjConsentSelect->Append(wxT("Emergency"));
+    consentAndRefBar->Add(kjConsentSelect, 0, wxEXPAND | wxALL, 5);
+    consentAndRefBar->Add(new wxStaticText(this, wxID_ANY, "KJ Locked: "), 0, wxEXPAND | wxALL, 5);
+    kjLockedConsentSelect = new wxComboBox(this, wxID_ANY);
+    kjLockedConsentSelect->Append(wxT(""));
+    kjLockedConsentSelect->Append(wxT("Exempt"));
+    kjLockedConsentSelect->Append(wxT("Patient"));
+    kjLockedConsentSelect->Append(wxT("Emergency"));
+    consentAndRefBar->Add(kjLockedConsentSelect, 0, wxEXPAND | wxALL, 5);
+    consentAndRefBar->Add(new wxStaticText(this, wxID_ANY, "KJ Barred: "), 0, wxEXPAND | wxALL, 5);
+    kjBarredConsentSelect = new wxComboBox(this, wxID_ANY);
+    kjBarredConsentSelect->Append(wxT(""));
+    kjBarredConsentSelect->Append(wxT("Exempt"));
+    kjBarredConsentSelect->Append(wxT("Patient"));
+    kjBarredConsentSelect->Append(wxT("Emergency"));
+    consentAndRefBar->Add(kjBarredConsentSelect, 0, wxEXPAND | wxALL, 5);
+    consentAndRefBar->Add(new wxStaticText(this, wxID_ANY, "Ref nums: "), 0, wxEXPAND | wxALL, 5);
+    refNumberListing = new wxTextCtrl(this, wxID_ANY, wxT(""));
+    refNumberListing->SetEditable(false);
+    consentAndRefBar->Add(refNumberListing, 0, wxEXPAND | wxALL, 5);
+    auto *editRefNumbersButton = new wxButton(this, wxID_ANY, "Edit");
+    consentAndRefBar->Add(editRefNumbersButton, 0, wxEXPAND | wxALL, 5);
+    sizer->Add(consentAndRefBar, 0, wxEXPAND | wxALL, 5);
+
     header = new wxListView(this, wxID_ANY, wxDefaultPosition, wxSize(-1, 100));
     header->AppendColumn(wxT(""));
     header->AppendColumn(wxT(""));
@@ -184,6 +215,10 @@ TheMasterFrame::TheMasterFrame() : wxFrame(nullptr, wxID_ANY, "The Master"),
 
     SetSizerAndFit(sizer);
 
+    kjConsentSelect->Bind(wxEVT_COMBOBOX, &TheMasterFrame::OnKjConsent, this, wxID_ANY);
+    kjLockedConsentSelect->Bind(wxEVT_COMBOBOX, &TheMasterFrame::OnKjLockedConsent, this, wxID_ANY);
+    kjBarredConsentSelect->Bind(wxEVT_COMBOBOX, &TheMasterFrame::OnKjBarredConsent, this, wxID_ANY);
+    editRefNumbersButton->Bind(wxEVT_BUTTON, &TheMasterFrame::OnRefNumsEdit, this, wxID_ANY);
     Bind(wxEVT_MENU, &TheMasterFrame::OnConnect, this, TheMaster_Connect_Id);
     Bind(wxEVT_MENU, &TheMasterFrame::OnFindPatient, this, TheMaster_FindPatient_Id);
     Bind(wxEVT_MENU, &TheMasterFrame::OnCreatePatient, this, TheMaster_CreatePatient_Id);
@@ -497,6 +532,69 @@ void TheMasterFrame::UpdateCave() {
     }
 }
 
+void TheMasterFrame::OnKjConsent(wxCommandEvent &e) {
+    switch (kjConsentSelect->GetSelection()) {
+        case 1:
+            kjConsent = "HPUNNTAK";
+            break;
+        case 2:
+            kjConsent = "HPMOTTATTSAMTYKKE";
+            break;
+        case 3:
+            kjConsent = "HPAKUTT";
+            break;
+        default:
+            kjConsent = "";
+    }
+}
+
+void TheMasterFrame::OnKjLockedConsent(wxCommandEvent &e) {
+    switch (kjLockedConsentSelect->GetSelection()) {
+        case 1:
+            kjLockedConsent = "HPUNNTAK";
+            break;
+        case 2:
+            kjLockedConsent = "HPMOTTATTSAMTYKKE";
+            break;
+        case 3:
+            kjLockedConsent = "HPAKUTT";
+            break;
+        default:
+            kjLockedConsent = "";
+    }
+}
+
+void TheMasterFrame::OnKjBarredConsent(wxCommandEvent &e) {
+    switch (kjBarredConsentSelect->GetSelection()) {
+        case 1:
+            kjBarredConsent = "HPUNNTAK";
+            break;
+        case 2:
+            kjBarredConsent = "HPMOTTATTSAMTYKKE";
+            break;
+        case 3:
+            kjBarredConsent = "HPAKUTT";
+            break;
+        default:
+            kjBarredConsent = "";
+    }
+}
+
+void TheMasterFrame::OnRefNumsEdit(wxCommandEvent &e) {
+    EditReferenceNumbersDialog dialog{this, refNumbers};
+    if (dialog.ShowModal() == wxID_OK) {
+        refNumbers = dialog.GetReferenceNumbers();
+        wxString refNumStr{};
+        for (const auto &refNumber : refNumbers) {
+            if (!refNumStr.empty()) {
+                refNumStr.append(wxT(", "));
+            }
+            refNumStr.append(refNumber);
+        }
+        refNumberListing->SetValue(refNumStr);
+    }
+}
+
 void TheMasterFrame::OnConnect(wxCommandEvent( &e)) {
     ConnectDialog dialog{this};
     dialog.ShowModal();
@@ -508,6 +606,8 @@ void TheMasterFrame::OnFindPatient(wxCommandEvent &e) {
         patientInformation = dialog.GetPatient();
         medicationBundleResetData = "";
         medicationBundle = {};
+        refNumbers = {};
+        refNumberListing->SetValue(wxT(""));
         UpdateHeader();
         UpdateMedications();
         UpdateMerch();
@@ -523,6 +623,8 @@ void TheMasterFrame::OnCreatePatient(wxCommandEvent &e) {
         patientInformation = std::make_shared<PatientInformation>(std::move(patient));
         medicationBundleResetData = "";
         medicationBundle = {};
+        refNumbers = {};
+        refNumberListing->SetValue(wxT(""));
         UpdateHeader();
         UpdateMedications();
         UpdateMerch();
@@ -787,7 +889,11 @@ void TheMasterFrame::GetMedication(CallContext &ctx, const std::function<void(co
     pplx::task<web::http::http_response> responseTask;
     auto accessTokenTask = GetAccessToken();
     std::shared_ptr<std::string> rawRequest = std::make_shared<std::string>();
-    responseTask = accessTokenTask.then([apiUrl, patient, rawRequest] (const std::string &accessToken) {
+    auto refNumbers = this->refNumbers;
+    auto kjConsent = this->kjConsent;
+    auto kjBarredConsent = this->kjBarredConsent;
+    auto kjLockedConsent = this->kjLockedConsent;
+    responseTask = accessTokenTask.then([apiUrl, patient, rawRequest, kjConsent, kjBarredConsent, kjLockedConsent, refNumbers] (const std::string &accessToken) {
         web::http::http_request request{web::http::methods::POST};
         if (!accessToken.empty()) {
             std::cout << "Access token: " << accessToken << "\n";
@@ -800,6 +906,18 @@ void TheMasterFrame::GetMedication(CallContext &ctx, const std::function<void(co
             {
                 FhirParameters requestParameters{};
                 requestParameters.AddParameter("patient", patient);
+                for (const auto &refNumber : refNumbers) {
+                    requestParameters.AddParameter("Referansenummer", std::make_shared<FhirString>(refNumber));
+                }
+                if (!kjConsent.empty()) {
+                    requestParameters.AddParameter("SamtykkeKjernejournal", std::make_shared<FhirString>(kjConsent));
+                }
+                if (!kjBarredConsent.empty()) {
+                    requestParameters.AddParameter("SamtykkeSperretLegemidler", std::make_shared<FhirString>(kjBarredConsent));
+                }
+                if (!kjLockedConsent.empty()) {
+                    requestParameters.AddParameter("SamtykkeLasteResepter", std::make_shared<FhirString>(kjLockedConsent));
+                }
                 requestBody = requestParameters.ToJson();
             }
             request.set_request_uri(as_wstring_on_win32("patient/$getMedication"));

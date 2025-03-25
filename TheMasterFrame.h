@@ -42,6 +42,10 @@ private:
     std::shared_ptr<WeakRefUiDispatcher<TheMasterFrame>> weakRefDispatcher;
     std::shared_ptr<PatientStore> patientStore{};
     std::shared_ptr<PatientInformation> patientInformation;
+    std::string kjConsent{};
+    std::string kjLockedConsent{};
+    std::string kjBarredConsent{};
+    std::vector<std::string> refNumbers{};
     std::string medicationBundleResetData{};
     std::unique_ptr<MedBundleData> medicationBundle{};
     std::vector<std::vector<std::shared_ptr<FhirMedicationStatement>>> displayedMedicationStatements{};
@@ -63,6 +67,10 @@ private:
     std::string orgNo{};
     std::string childOrgNo{};
     std::shared_ptr<std::string> accessToken{};
+    wxComboBox *kjConsentSelect;
+    wxComboBox *kjLockedConsentSelect;
+    wxComboBox *kjBarredConsentSelect;
+    wxTextCtrl *refNumberListing;
     wxListView *header;
     wxNotebook *mainCategories;
     wxListView *prescriptions;
@@ -74,6 +82,10 @@ public:
     void UpdateMedications();
     void UpdateMerch();
     void UpdateCave();
+    void OnKjConsent(wxCommandEvent &e);
+    void OnKjLockedConsent(wxCommandEvent &e);
+    void OnKjBarredConsent(wxCommandEvent &e);
+    void OnRefNumsEdit(wxCommandEvent &e);
     void OnConnect(wxCommandEvent &e);
     void OnFindPatient(wxCommandEvent &e);
     void OnCreatePatient(wxCommandEvent &e);

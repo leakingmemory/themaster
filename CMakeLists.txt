@@ -59,7 +59,8 @@ add_executable(themaster TheMasterApp.cpp TheMasterApp.h TheMasterFrame.cpp TheM
     WxDateConversions.h WxDateConversions.cpp EditTreatmentDialog.cpp EditTreatmentDialog.h
     CaveDetailsDialog.cpp CaveDetailsDialog.h RegisterCaveDialog.cpp RegisterCaveDialog.h
     ConnectToPllDialog.cpp ConnectToPllDialog.h MerchTree.cpp MerchTree.h MerchData.cpp MerchData.h
-    PrescribeMerchandiseDialog.cpp PrescribeMerchandiseDialog.h GetLegemiddelRefunds.cpp GetLegemiddelRefunds.h)
+    PrescribeMerchandiseDialog.cpp PrescribeMerchandiseDialog.h GetLegemiddelRefunds.cpp GetLegemiddelRefunds.h
+    EditReferenceNumbersDialog.cpp EditReferenceNumbersDialog.h)
 target_link_libraries(themaster PRIVATE codelists)
 if (WIN32)
     set_target_properties(themaster PROPERTIES WIN32_EXECUTABLE TRUE)
