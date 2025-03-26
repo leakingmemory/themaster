@@ -244,6 +244,7 @@ TheMasterFrame::TheMasterFrame() : wxFrame(nullptr, wxID_ANY, "The Master"),
     Bind(wxEVT_MENU, &TheMasterFrame::OnPrescriptionCease, this, TheMaster_PrescriptionCease_Id);
     Bind(wxEVT_MENU, &TheMasterFrame::OnPrescriptionRenew, this, TheMaster_PrescriptionRenew_Id);
     Bind(wxEVT_MENU, &TheMasterFrame::OnPrescriptionRenewWithChanges, this, TheMaster_PrescriptionRenewWithChanges_Id);
+    Bind(wxEVT_MENU, &TheMasterFrame::OnConvertToWithoutPrescription, this, TheMaster_ConvertToWithoutPrescription_Id);
     Bind(wxEVT_MENU, &TheMasterFrame::OnTreatmentEdit, this, TheMaster_TreatmentEdit_Id);
     Bind(wxEVT_MENU, &TheMasterFrame::OnConnectToPll, this, TheMaster_ConnectToPll_Id);
 
@@ -2468,6 +2469,7 @@ void TheMasterFrame::OnPrescriptionContextMenu(const wxContextMenuEvent &e) {
     menu.Append(TheMaster_PrescriptionCease_Id, wxT("Cease"));
     menu.Append(TheMaster_PrescriptionRenew_Id, wxT("Renew"));
     menu.Append(TheMaster_PrescriptionRenewWithChanges_Id, wxT("Renew with changes"));
+    menu.Append(TheMaster_ConvertToWithoutPrescription_Id, wxT("Convert to without prescription"));
     menu.Append(TheMaster_TreatmentEdit_Id, wxT("Edit treatment"));
     auto identifiers = medicationStatement->GetIdentifiers();
     if (std::find_if(identifiers.cbegin(), identifiers.cend(), [] (const auto &identifier) {
@@ -3068,6 +3070,43 @@ void TheMasterFrame::OnPrescriptionRenewWithChanges(const wxCommandEvent &e) {
         return;
     }
     PrescribeMedicament(prescriptionDialog, reseptId);
+}
+
+void TheMasterFrame::OnConvertToWithoutPrescription(const wxCommandEvent &e) {
+    if (prescriptions->GetSelectedItemCount() != 1) {
+        return;
+    }
+    auto selected = prescriptions->GetFirstSelected();
+    if (selected < 0 || selected >= displayedMedicationStatements.size()) {
+        return;
+    }
+    auto medicationStatement = displayedMedicationStatements[selected][0];
+    std::string reseptId{};
+    {
+        auto identifiers = medicationStatement->GetIdentifiers();
+        auto iterator = identifiers.begin();
+        while (iterator != identifiers.end()) {
+            auto identifier = *iterator;
+            auto key = identifier.GetType().GetText();
+            std::transform(key.cbegin(), key.cend(), key.begin(), [](char ch) -> char { return std::tolower(ch); });
+            if (key == "reseptid") {
+                reseptId = identifier.GetValue();
+                break;
+            }
+            ++iterator;
+        }
+    }
+    if (reseptId.empty()) {
+        wxMessageBox(wxT("The entry does not contain a prescription to renew"), wxT("Renew failed"), wxICON_ERROR);
+        return;
+    }
+    try {
+        medicationBundle->ConvertToWithoutPrescription(reseptId);
+        UpdateMedications();
+    } catch (const std::exception &e) {
+        wxString error = wxString::FromUTF8(e.what());
+        wxMessageBox(error, wxT("Convert to without prescription failed"), wxICON_ERROR);
+    }
 }
 
 void TheMasterFrame::OnMerchPrescriptionRenewWithChanges(const wxCommandEvent &e) {

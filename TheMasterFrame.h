@@ -137,6 +137,7 @@ public:
     void OnPrescriptionRenew(const wxCommandEvent &e);
     void OnMerchPrescriptionRenew(const wxCommandEvent &e);
     void OnPrescriptionRenewWithChanges(const wxCommandEvent &e);
+    void OnConvertToWithoutPrescription(const wxCommandEvent &e);
     void OnMerchPrescriptionRenewWithChanges(const wxCommandEvent &e);
     void OnTreatmentEdit(const wxCommandEvent &e);
     void OnConnectToPll(const wxCommandEvent &e);
