@@ -115,7 +115,7 @@ public:
     void SetPatient(PrescriptionData &prescriptionData) const ;
     void SetPatient(MerchData &merchData) const;
     //pplx::task<PrescriptionData> SetPrescriber(const PrescriptionData &prescriptionData);
-    void PrescribeMedicament(const PrescriptionDialog &prescriptionDialog, const std::string &renewPrescriptionId = "");
+    void PrescribeMedicament(const PrescriptionDialog &prescriptionDialog, const std::string &renewPrescriptionId = "", const std::string &pllId = "");
     void PrescribeMerch(const PrescribeMerchandiseDialog &prescriptionDialog, const std::string &renewPrescriptionId = "");
     void OnPrescribeMagistral(wxCommandEvent &e);
     void OnPrescribeMedicament(wxCommandEvent &e);

@@ -780,18 +780,25 @@ public:
     }
 };
 
-void MedBundleData::Prescribe(const std::shared_ptr<FhirMedication> &medicament, const PrescriptionData &prescriptionData, const std::string &renewPrescriptionId) {
+void MedBundleData::Prescribe(const std::shared_ptr<FhirMedication> &medicament, const PrescriptionData &prescriptionData, const std::string &renewPrescriptionId, const std::string &pllId) {
     std::shared_ptr<FhirComposition> composition{};
     std::vector<RenewStatement> renewStatements{};
     for (const auto &entry : medBundle->GetEntries()) {
-        if (!renewPrescriptionId.empty()) {
+        if (!renewPrescriptionId.empty() || !pllId.empty()) {
             auto medicationStatement = std::dynamic_pointer_cast<FhirMedicationStatement>(entry.GetResource());
             if (medicationStatement) {
                 auto identifiers = medicationStatement->GetIdentifiers();
-                if (std::find_if(identifiers.cbegin(), identifiers.cend(), [&renewPrescriptionId] (const FhirIdentifier &identifier) -> bool {
+                if (!renewPrescriptionId.empty() && std::find_if(identifiers.cbegin(), identifiers.cend(), [&renewPrescriptionId] (const FhirIdentifier &identifier) -> bool {
                     auto type = identifier.GetType().GetText();
                     std::transform(type.cbegin(), type.cend(), type.begin(), [] (char ch) -> char { return static_cast<char>(std::tolower(ch)); });
                     return (type == "reseptid" && identifier.GetValue() == renewPrescriptionId);
+                }) != identifiers.cend()) {
+                    RenewStatement renewStatement{.renewStatement = medicationStatement, .renewUrl = entry.GetFullUrl()};
+                    renewStatements.emplace_back(renewStatement);
+                } else if (!pllId.empty() && std::find_if(identifiers.cbegin(), identifiers.cend(), [&pllId] (const FhirIdentifier &identifier) -> bool {
+                    auto type = identifier.GetType().GetText();
+                    std::transform(type.cbegin(), type.cend(), type.begin(), [] (char ch) -> char { return static_cast<char>(std::tolower(ch)); });
+                    return (type == "pll" && identifier.GetValue() == pllId);
                 }) != identifiers.cend()) {
                     RenewStatement renewStatement{.renewStatement = medicationStatement, .renewUrl = entry.GetFullUrl()};
                     renewStatements.emplace_back(renewStatement);
@@ -824,7 +831,7 @@ void MedBundleData::Prescribe(const std::shared_ptr<FhirMedication> &medicament,
     FhirReference *renewReference{nullptr};
     std::shared_ptr<FhirMedicationStatement> renewMedicationStatement{};
     std::string renewFullUrl{};
-    if (!renewPrescriptionId.empty()) {
+    if (!renewPrescriptionId.empty() || !pllId.empty()) {
         for (auto &potRenewStatement: renewStatements) {
             bool found{false};
             for (auto &entry: entries) {
@@ -883,21 +890,59 @@ void MedBundleData::Prescribe(const std::shared_ptr<FhirMedication> &medicament,
         if (!renewReseptAmendment) {
             throw MedBundleDataException("No resept amendment for prescription to renew");
         }
-        for (const auto &extension : renewReseptAmendment->GetExtensions()) {
-            auto url = extension->GetUrl();
-            std::transform(url.cbegin(), url.cend(), url.begin(), [] (char ch) -> char { return std::tolower(ch); });
-            if (url == "recallinfo") {
-                throw MedBundleDataException("The prescription is already recalled");
+        std::string previousPrescriptionId{};
+        std::string previousPllId{};
+        std::vector<FhirIdentifier> oldIdentifiers;
+        {
+            // TODO - pllId from baseOn-chain
+            oldIdentifiers = renewMedicationStatement->GetIdentifiers();
+            auto iterator = oldIdentifiers.begin();
+            while (iterator != oldIdentifiers.end()) {
+                const auto &identifier = *iterator;
+                auto type = identifier.GetType().GetText();
+                std::transform(type.cbegin(), type.cend(), type.begin(), [](char ch) { return std::tolower(ch); });
+                if (type == "reseptid") {
+                    previousPrescriptionId = identifier.GetValue();
+                } else if (type == "pll") {
+                    previousPllId = identifier.GetValue();
+                    iterator = oldIdentifiers.erase(iterator);
+                    continue;
+                }
+                ++iterator;
+            }
+            if (previousPrescriptionId.empty() && !previousPllId.empty()) {
+                renewMedicationStatement->SetIdentifiers(oldIdentifiers);
+                auto identifiers = medicationStatement->GetIdentifiers();
+                identifiers.insert(identifiers.begin(), FhirIdentifier(FhirCodeableConcept("PLL"), "usual", previousPllId));
+                medicationStatement->SetIdentifiers(identifiers);
             }
         }
-        FhirCodeableConcept recallCode{"urn:oid:2.16.578.1.12.4.1.1.7500", "3", "Fornying med endring"};
-        auto recallInfoExt = std::make_shared<FhirExtension>("recallinfo");
-        recallInfoExt->AddExtension(
-                std::make_shared<FhirValueExtension>("recallId", std::make_shared<FhirString>(renewPrescriptionId)));
-        recallInfoExt->AddExtension(std::make_shared<FhirValueExtension>("recallcode", std::make_shared<FhirCodeableConceptValue>(recallCode)));
-        recallInfoExt->AddExtension(std::make_shared<FhirValueExtension>("text", std::make_shared<FhirString>("Forny med endring")));
-        recallInfoExt->AddExtension(std::make_shared<FhirValueExtension>("notsent", std::make_shared<FhirBooleanValue>(true)));
-        reseptAmendment->AddExtension(recallInfoExt);
+        bool recallPrevious{!previousPrescriptionId.empty()};
+        if (recallPrevious) {
+            for (const auto &extension: renewReseptAmendment->GetExtensions()) {
+                auto url = extension->GetUrl();
+                std::transform(url.cbegin(), url.cend(), url.begin(), [](char ch) -> char { return std::tolower(ch); });
+                if (url == "recallinfo") {
+                    recallPrevious = false;
+                    break;
+                }
+            }
+        }
+        if (recallPrevious) {
+            FhirCodeableConcept recallCode{"urn:oid:2.16.578.1.12.4.1.1.7500", "3", "Fornying med endring"};
+            auto recallInfoExt = std::make_shared<FhirExtension>("recallinfo");
+            recallInfoExt->AddExtension(
+                    std::make_shared<FhirValueExtension>("recallId",
+                                                         std::make_shared<FhirString>(previousPrescriptionId)));
+            recallInfoExt->AddExtension(std::make_shared<FhirValueExtension>("recallcode",
+                                                                             std::make_shared<FhirCodeableConceptValue>(
+                                                                                     recallCode)));
+            recallInfoExt->AddExtension(
+                    std::make_shared<FhirValueExtension>("text", std::make_shared<FhirString>("Forny med endring")));
+            recallInfoExt->AddExtension(
+                    std::make_shared<FhirValueExtension>("notsent", std::make_shared<FhirBooleanValue>(true)));
+            reseptAmendment->AddExtension(recallInfoExt);
+        }
     }
     medBundle->AddEntry(medicamentEntry);
     medBundle->AddEntry(medicationStatementEntry);

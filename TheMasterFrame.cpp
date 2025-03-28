@@ -2283,12 +2283,12 @@ void TheMasterFrame::SetPatient(MerchData &prescriptionData) const {
     prescriptionData.subjectDisplay = ref.GetDisplay();
 }
 
-void TheMasterFrame::PrescribeMedicament(const PrescriptionDialog &prescriptionDialog, const std::string &renewPrescriptionId) {
+void TheMasterFrame::PrescribeMedicament(const PrescriptionDialog &prescriptionDialog, const std::string &renewPrescriptionId, const std::string &pllId) {
     PrescriptionData prescriptionData = prescriptionDialog.GetPrescriptionData();
     std::shared_ptr<FhirMedication> medicament = prescriptionDialog.GetMedication();
     SetPrescriber(prescriptionData);
     SetPatient(prescriptionData);
-    medicationBundle->Prescribe(medicament, prescriptionData, renewPrescriptionId);
+    medicationBundle->Prescribe(medicament, prescriptionData, renewPrescriptionId, pllId);
     UpdateMedications();
 }
 
@@ -2979,6 +2979,7 @@ void TheMasterFrame::OnPrescriptionRenewWithChanges(const wxCommandEvent &e) {
     }
     auto medicationStatement = displayedMedicationStatements[selected][0];
     std::string reseptId{};
+    std::string pllId{};
     {
         auto identifiers = medicationStatement->GetIdentifiers();
         auto iterator = identifiers.begin();
@@ -2990,10 +2991,13 @@ void TheMasterFrame::OnPrescriptionRenewWithChanges(const wxCommandEvent &e) {
                 reseptId = identifier.GetValue();
                 break;
             }
+            if (key == "pll") {
+                pllId = identifier.GetValue();
+            }
             ++iterator;
         }
     }
-    if (reseptId.empty()) {
+    if (reseptId.empty() && pllId.empty()) {
         wxMessageBox(wxT("The entry does not contain a prescription to renew"), wxT("Renew failed"), wxICON_ERROR);
         return;
     }
@@ -3069,7 +3073,7 @@ void TheMasterFrame::OnPrescriptionRenewWithChanges(const wxCommandEvent &e) {
     if (res != wxID_OK) {
         return;
     }
-    PrescribeMedicament(prescriptionDialog, reseptId);
+    PrescribeMedicament(prescriptionDialog, reseptId, reseptId.empty() ? pllId : "");
 }
 
 void TheMasterFrame::OnConvertToWithoutPrescription(const wxCommandEvent &e) {

@@ -45,7 +45,7 @@ public:
     void InsertNonexistingMedicationsFrom(const std::shared_ptr<FhirBundle> &otherBundle);
     void InsertNonexistingMedicationPrescriptionsFrom(const std::shared_ptr<FhirBundle> &otherBundle, const std::string &helseidIdToken);
     void ReplayRenewals(const std::shared_ptr<FhirBundle> &otherBundle);
-    void Prescribe(const std::shared_ptr<FhirMedication> &, const PrescriptionData &, const std::string &renewPrescriptionId = "");
+    void Prescribe(const std::shared_ptr<FhirMedication> &, const PrescriptionData &, const std::string &renewPrescriptionId = "", const std::string &pllId = "");
     void Prescribe(const MerchData &, const std::string &renewPrescriptionId = "");
     void ConvertToWithoutPrescription(const std::string &prescriptionId, bool recallPrescription=true);
     void AddCave(const std::shared_ptr<FhirAllergyIntolerance> &allergy);
