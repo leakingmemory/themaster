@@ -50,6 +50,7 @@ private:
     std::unique_ptr<MedBundleData> medicationBundle{};
     std::vector<std::vector<std::shared_ptr<FhirMedicationStatement>>> displayedMedicationStatements{};
     std::vector<std::vector<std::shared_ptr<FhirBasic>>> displayedMerch{};
+    std::vector<std::shared_ptr<FhirMedicationDispense>> displayedDispenses{};
     std::vector<std::shared_ptr<FhirAllergyIntolerance>> displayedAllergies{};
     std::string lastGetmedRequest{};
     std::string lastGetmedResponse{};
@@ -75,12 +76,14 @@ private:
     wxNotebook *mainCategories;
     wxListView *prescriptions;
     wxListView *merchPrescriptions;
+    wxListView *dispensesList;
     wxListView *caveListView;
 public:
     TheMasterFrame();
     void UpdateHeader();
     void UpdateMedications();
     void UpdateMerch();
+    void UpdateDispenses();
     void UpdateCave();
     void OnKjConsent(wxCommandEvent &e);
     void OnKjLockedConsent(wxCommandEvent &e);

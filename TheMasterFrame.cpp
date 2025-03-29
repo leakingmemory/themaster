@@ -28,6 +28,7 @@
 #include <sfmbasisapi/fhir/operationoutcome.h>
 #include <sfmbasisapi/fhir/fhir.h>
 #include <sfmbasisapi/fhir/allergy.h>
+#include <sfmbasisapi/fhir/meddispense.h>
 #include <sfmbasisapi/nhnfhir/SfmBandaPrescription.h>
 #include <jjwtid/Jwt.h>
 #include <jjwtid/OidcTokenRequest.h>
@@ -202,6 +203,15 @@ TheMasterFrame::TheMasterFrame() : wxFrame(nullptr, wxID_ANY, "The Master"),
     merchPrescriptionsPageSizer->Add(merchPrescriptions, 1, wxEXPAND | wxALL, 5);
     merchPrescriptionsPage->SetSizerAndFit(merchPrescriptionsPageSizer);
     mainCategories->AddPage(merchPrescriptionsPage, wxT("Merch/Nour"));
+
+    auto *dispenseListPage = new wxPanel(mainCategories, wxID_ANY);
+    auto *dispenseListPageSizer = new wxBoxSizer(wxVERTICAL);
+    dispensesList = new wxListView(dispenseListPage, wxID_ANY);
+    dispensesList->AppendColumn(wxT("Name"));
+    dispensesList->SetColumnWidth(0, PrescriptionNameColumnWidth);
+    dispenseListPageSizer->Add(dispensesList, 1, wxEXPAND | wxALL, 5);
+    dispenseListPage->SetSizerAndFit(dispenseListPageSizer);
+    mainCategories->AddPage(dispenseListPage, wxT("Dispenses"));
 
     auto *cavePage = new wxPanel(mainCategories, wxID_ANY);
     auto *cavePageSizer = new wxBoxSizer(wxVERTICAL);
@@ -462,6 +472,46 @@ void TheMasterFrame::UpdateMerch() {
     this->displayedMerch = displayedMerch;
 }
 
+void TheMasterFrame::UpdateDispenses() {
+    dispensesList->ClearAll();
+    displayedDispenses.clear();
+    dispensesList->AppendColumn(wxT("Name"));
+    dispensesList->SetColumnWidth(0, PrescriptionNameColumnWidth);
+    if (!medicationBundle || !medicationBundle->medBundle) {
+        return;
+    }
+    std::map<std::string,std::shared_ptr<FhirMedicationDispense>> dispenses{};
+    FhirCompositionSection dispenseSection{};
+    {
+        std::shared_ptr<FhirComposition> composition{};
+        for (const auto &bundleEntry: medicationBundle->medBundle->GetEntries()) {
+            auto resource = bundleEntry.GetResource();
+            auto dispenseObj = std::dynamic_pointer_cast<FhirMedicationDispense>(resource);
+            if (dispenseObj) {
+                dispenses.insert_or_assign(bundleEntry.GetFullUrl(), dispenseObj);
+                continue;
+            }
+            auto composition = std::dynamic_pointer_cast<FhirComposition>(resource);
+            if (composition) {
+                for (const auto &section : composition->GetSections()) {
+                    auto codings = section.GetCode().GetCoding();
+                    if (codings.size() == 1 && codings[0].GetCode() == "sectionDispense") {
+                        dispenseSection = section;
+                    }
+                }
+            }
+        }
+    }
+    for (auto dispRef : dispenseSection.GetEntries()) {
+        auto iterator = dispenses.find(dispRef.GetReference());
+        if (iterator == dispenses.end()) {
+            continue;
+        }
+        displayedDispenses.emplace_back(iterator->second);
+        dispensesList->InsertItem(dispensesList->GetItemCount(), wxString::FromUTF8(iterator->second->GetMedicationReference().GetDisplay()));
+    }
+}
+
 void TheMasterFrame::UpdateCave() {
     caveListView->ClearAll();
     displayedAllergies.clear();
@@ -612,6 +662,7 @@ void TheMasterFrame::OnFindPatient(wxCommandEvent &e) {
         UpdateHeader();
         UpdateMedications();
         UpdateMerch();
+        UpdateDispenses();
         UpdateCave();
     }
 }
@@ -628,6 +679,7 @@ void TheMasterFrame::OnCreatePatient(wxCommandEvent &e) {
         refNumberListing->SetValue(wxT(""));
         UpdateHeader();
         UpdateMedications();
+        UpdateDispenses();
         UpdateMerch();
         UpdateCave();
     }
@@ -1035,6 +1087,7 @@ void TheMasterFrame::GetMedication(CallContext &ctx, const std::function<void(co
                 UpdateHeader();
                 UpdateMedications();
                 UpdateMerch();
+                UpdateDispenses();
                 UpdateCave();
             }
         }
@@ -1103,6 +1156,7 @@ void TheMasterFrame::OnResetMedication(wxCommandEvent &e) {
     UpdateHeader();
     UpdateMedications();
     UpdateMerch();
+    UpdateDispenses();
     UpdateCave();
 }
 
