@@ -73,6 +73,7 @@ private:
     ComboSearchControl *refundCodeSelection{nullptr};
     wxSpinCtrl *reitCtrl{};
     wxComboBox *applicationAreaCtrl{};
+    wxCheckBox *lockedPrescription{};
     wxComboBox *prescriptionValidityCtrl{};
     wxDatePickerCtrl *startDate{};
     wxDatePickerCtrl *expirationDate{};

@@ -146,6 +146,9 @@ PrescriptionDialog::PrescriptionDialog(TheMasterFrame *frame, const std::shared_
         }
         applicationAreaSizer->Add(applicationAreaLabel, 0, wxEXPAND | wxALL, 5);
         applicationAreaSizer->Add(applicationAreaCtrl, 1, wxEXPAND | wxALL, 5);
+        auto *lockedPrescriptionSizer = new wxBoxSizer(wxHORIZONTAL);
+        lockedPrescription = new wxCheckBox(this, wxID_ANY, wxT("Locked prescription."));
+        lockedPrescriptionSizer->Add(lockedPrescription, 0, wxEXPAND | wxALL, 5);
         sizer->Add(typeSelection, 0, wxEXPAND | wxALL, 5);
         sizer->Add(useSelection, 0, wxEXPAND | wxALL, 5);
         if (packageAmountNotebook != nullptr) {
@@ -163,6 +166,7 @@ PrescriptionDialog::PrescriptionDialog(TheMasterFrame *frame, const std::shared_
         sizer->Add(refundSizer, 0, wxEXPAND | wxALL, 5);
         sizer->Add(reitSizer, 0, wxEXPAND | wxALL, 5);
         sizer->Add(applicationAreaSizer, 0, wxEXPAND | wxALL, 5);
+        sizer->Add(lockedPrescriptionSizer, 0, wxEXPAND | wxALL, 5);
         hzSizer->Add(sizer, 0, wxEXPAND | wxALL, 5);
     }
     {
@@ -315,6 +319,7 @@ PrescriptionDialog::PrescriptionDialog(TheMasterFrame *frame, const std::shared_
     reitCtrl->Bind(wxEVT_SPINCTRL, &PrescriptionDialog::OnModified, this);
     applicationAreaCtrl->Bind(wxEVT_TEXT, &PrescriptionDialog::OnModified, this);
     applicationAreaCtrl->Bind(wxEVT_COMBOBOX, &PrescriptionDialog::OnModified, this);
+    lockedPrescription->Bind(wxEVT_CHECKBOX, &PrescriptionDialog::OnModified, this);
     cancelButton->Bind(wxEVT_BUTTON, &PrescriptionDialog::OnCancel, this);
     proceedButton->Bind(wxEVT_BUTTON, &PrescriptionDialog::OnProceed, this);
     prescriptionValidityCtrl->Bind(wxEVT_COMBOBOX, &PrescriptionDialog::OnModifiedPrescriptionValidity, this);
@@ -342,6 +347,7 @@ PrescriptionDialog &PrescriptionDialog::operator+=(const PrescriptionData &presc
     if (!prescriptionData.applicationArea.empty()) {
         applicationAreaCtrl->SetValue(wxString::FromUTF8(prescriptionData.applicationArea));
     }
+    lockedPrescription->SetValue(prescriptionData.lockedPrescription);
     if (prescriptionData.numberOfPackagesSet && numberOfPackagesCtrl != nullptr) {
         numberOfPackagesCtrl->SetValue(prescriptionData.numberOfPackages);
     }
@@ -462,6 +468,7 @@ struct PrescriptionDialogData {
     DateOnly expirationDate{};
     DateOnly ceaseDate{};
     int reit{0};
+    bool lockedPrescription{false};
     bool numberOfPackagesSet{false};
     bool amountIsSet{false};
     bool invalidField{false};
@@ -622,6 +629,7 @@ PrescriptionDialogData PrescriptionDialog::GetDialogData() const {
             }
         }
     }
+    dialogData.lockedPrescription = lockedPrescription->GetValue();
     return dialogData;
 }
 
@@ -860,6 +868,7 @@ static void SetPrescriptionData(PrescriptionData &prescriptionData, const Prescr
     prescriptionData.reit = dialogData.reit;
     prescriptionData.applicationAreaCoded = dialogData.applicationAreaCoded;
     prescriptionData.applicationArea = dialogData.applicationArea;
+    prescriptionData.lockedPrescription = dialogData.lockedPrescription;
     prescriptionData.itemGroup = {"urn:oid:2.16.578.1.12.4.1.1.7402", "L", "Legemiddel", "Legemiddel"};
     switch (dialogData.recordType) {
         case PrescriptionRecordType::EPRESCRIPTION:

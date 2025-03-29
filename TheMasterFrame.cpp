@@ -1342,6 +1342,7 @@ void TheMasterFrame::SendMedication(CallContext &ctx,
         int recallCount{0};
         int prescriptionCount{0};
         std::map<std::string,FhirCoding> pllResults{};
+        bool refnumsUpdated{false};
         for (const auto &param : sendMedResp->GetParameters()) {
             auto name = param.GetName();
             if (name == "recallCount") {
@@ -1389,6 +1390,21 @@ void TheMasterFrame::SendMedication(CallContext &ctx,
                             auto value = std::dynamic_pointer_cast<FhirCodingValue>(subparam->GetFhirValue());
                             if (value) {
                                 resultCode = *value;
+                            }
+                        } else if (name == "refnum") {
+                            auto value = std::dynamic_pointer_cast<FhirString>(subparam->GetFhirValue());
+                            if (value) {
+                                bool found{false};
+                                for (const auto &rfn : refNumbers) {
+                                    if (rfn == value->GetValue()) {
+                                        found = true;
+                                        break;
+                                    }
+                                }
+                                if (!found) {
+                                    refNumbers.push_back(value->GetValue());
+                                    refnumsUpdated = true;
+                                }
                             }
                         }
                     }
@@ -1483,6 +1499,16 @@ void TheMasterFrame::SendMedication(CallContext &ctx,
                     }
                 }
             }
+        }
+        if (refnumsUpdated) {
+            wxString refNumStr{};
+            for (const auto &refNumber : refNumbers) {
+                if (!refNumStr.empty()) {
+                    refNumStr.append(wxT(", "));
+                }
+                refNumStr.append(refNumber);
+            }
+            refNumberListing->SetValue(refNumStr);
         }
         pllResultsFunc(pllResults);
         UpdateMedications();

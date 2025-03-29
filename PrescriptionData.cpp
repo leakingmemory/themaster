@@ -432,6 +432,12 @@ FhirMedicationStatement PrescriptionData::ToFhir() const {
                     std::make_shared<FhirString>(reitStr)
             ));
         }
+        if (lockedPrescription) {
+            reseptAmendment->AddExtension(std::make_shared<FhirValueExtension>(
+                    "lockedresept",
+                    std::make_shared<FhirBooleanValue>(true)
+            ));
+        }
         reseptAmendment->AddExtension(std::make_shared<FhirValueExtension>(
                 "itemgroup",
                 std::make_shared<FhirCodeableConceptValue>(itemGroup.ToCodeableConcept())
