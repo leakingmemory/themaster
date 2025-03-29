@@ -28,6 +28,7 @@ public:
     void OnCharEventEdit(wxKeyEvent &e);
     void OnAddReferenceNumber(const wxCommandEvent &e);
     void OnContextMenu(const wxContextMenuEvent &e);
+    void OnCopyReferenceNumber(const wxCommandEvent &e);
     void OnRemoveReferenceNumber(const wxCommandEvent &e);
 };
 

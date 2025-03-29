@@ -4,6 +4,7 @@
 
 #include "EditReferenceNumbersDialog.h"
 #include "TheMasterIds.h"
+#include <wx/clipbrd.h>
 
 EditReferenceNumbersDialog::EditReferenceNumbersDialog(wxWindow *parent, std::vector<std::string> refNumbers) : wxDialog(parent, wxID_ANY, wxT("Edit reference numbers")){
     auto sizer = new wxBoxSizer(wxVERTICAL);
@@ -38,6 +39,7 @@ EditReferenceNumbersDialog::EditReferenceNumbersDialog(wxWindow *parent, std::ve
     buttonsSizer->Add(cancelButton, 0, wxALL, 5);
     sizer->Add(buttonsSizer, 0, wxEXPAND | wxALL, 5);
     SetSizerAndFit(sizer);
+    Bind(wxEVT_MENU, &EditReferenceNumbersDialog::OnCopyReferenceNumber, this, TheMaster_EditRefDialogCopyReferenceNumber_Id);
     Bind(wxEVT_MENU, &EditReferenceNumbersDialog::OnRemoveReferenceNumber, this, TheMaster_EditRefDialogRemoveReferenceNumber_Id);
 }
 
@@ -96,6 +98,7 @@ void EditReferenceNumbersDialog::OnCharListEvent(wxKeyEvent &e) {
 
 void EditReferenceNumbersDialog::OnAddReferenceNumber(const wxCommandEvent &e) {
     refNumbers->InsertItem(refNumbers->GetItemCount(), addRef->GetValue());
+    addRef->SetValue(wxT(""));
     addButton->Enable(false);
 }
 
@@ -104,8 +107,39 @@ void EditReferenceNumbersDialog::OnContextMenu(const wxContextMenuEvent &e) {
         return;
     }
     wxMenu menu{wxT("Reference numbers")};
+    menu.Append(TheMaster_EditRefDialogCopyReferenceNumber_Id, wxT("Copy"));
     menu.Append(TheMaster_EditRefDialogRemoveReferenceNumber_Id, wxT("Remove"));
     PopupMenu(&menu);
+}
+
+void EditReferenceNumbersDialog::OnCopyReferenceNumber(const wxCommandEvent &e) {
+    if (refNumbers->GetSelectedItemCount() <= 0) {
+        return;
+    }
+    auto numItems = refNumbers->GetItemCount();
+    std::vector<int> rowsToDelete{};
+    auto refNum = refNumbers->GetFirstSelected();
+    while (refNum >= 0 && refNum < numItems) {
+        rowsToDelete.emplace_back(refNum);
+        refNum = refNumbers->GetNextSelected(refNum);
+    }
+    std::sort(rowsToDelete.begin(), rowsToDelete.end());
+    auto iterator = rowsToDelete.end();
+    std::string text{};
+    while (iterator != rowsToDelete.begin()) {
+        iterator--;
+        auto itemText = refNumbers->GetItemText(*iterator);
+        if (!text.empty()) {
+            text.append(", ");
+        }
+        text.append(itemText.ToUTF8());
+    }
+    if (!text.empty()) {
+        if (wxTheClipboard->Open()) {
+            wxTheClipboard->SetData(new wxTextDataObject(text));
+            wxTheClipboard->Close();
+        }
+    }
 }
 
 void EditReferenceNumbersDialog::OnRemoveReferenceNumber(const wxCommandEvent &e) {
