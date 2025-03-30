@@ -209,6 +209,7 @@ TheMasterFrame::TheMasterFrame() : wxFrame(nullptr, wxID_ANY, "The Master"),
     dispensesList = new wxListView(dispenseListPage, wxID_ANY);
     dispensesList->AppendColumn(wxT("Name"));
     dispensesList->SetColumnWidth(0, PrescriptionNameColumnWidth);
+    dispensesList->Bind(wxEVT_CONTEXT_MENU, &TheMasterFrame::OnDispenseContextMenu, this, wxID_ANY);
     dispenseListPageSizer->Add(dispensesList, 1, wxEXPAND | wxALL, 5);
     dispenseListPage->SetSizerAndFit(dispenseListPageSizer);
     mainCategories->AddPage(dispenseListPage, wxT("Dispenses"));
@@ -262,6 +263,8 @@ TheMasterFrame::TheMasterFrame() : wxFrame(nullptr, wxID_ANY, "The Master"),
     Bind(wxEVT_MENU, &TheMasterFrame::OnMerchPrescriptionRecall, this, TheMaster_MerchPrescriptionRecall_Id);
     Bind(wxEVT_MENU, &TheMasterFrame::OnMerchPrescriptionRenew, this, TheMaster_MerchPrescriptionRenew_Id);
     Bind(wxEVT_MENU, &TheMasterFrame::OnMerchPrescriptionRenewWithChanges, this, TheMaster_MerchPrescriptionRenewWithChanges_Id);
+
+    Bind(wxEVT_MENU, &TheMasterFrame::OnDispenseDetails, this, TheMaster_DispenseDetails_Id);
 
     Bind(wxEVT_MENU, &TheMasterFrame::OnCaveDetails, this, TheMaster_CaveDetails_Id);
     Bind(wxEVT_MENU, &TheMasterFrame::OnAddCaveMedicament, this, TheMaster_AddCaveMedicament_Id);
@@ -2580,6 +2583,21 @@ void TheMasterFrame::OnMerchPrescriptionContextMenu(const wxContextMenuEvent &e)
     PopupMenu(&menu);
 }
 
+void TheMasterFrame::OnDispenseContextMenu(const wxContextMenuEvent &e) {
+    if (dispensesList->GetSelectedItemCount() != 1) {
+        return;
+    }
+    auto selected = dispensesList->GetFirstSelected();
+    if (selected < 0 || selected >= displayedDispenses.size()) {
+        return;
+    }
+    auto dispense = displayedDispenses[selected];
+    auto display = dispense->GetDisplay();
+    wxMenu menu(wxString::FromUTF8(display));
+    menu.Append(TheMaster_DispenseDetails_Id, wxT("Details"));
+    PopupMenu(&menu);
+}
+
 void TheMasterFrame::OnPrescriptionDetails(const wxCommandEvent &e) {
     if (prescriptions->GetSelectedItemCount() != 1) {
         return;
@@ -2603,6 +2621,19 @@ void TheMasterFrame::OnMerchPrescriptionDetails(const wxCommandEvent &e) {
     }
     auto fhirBasics = displayedMerch[selected];
     PrescriptionDetailsDialog dialog{this, fhirBasics};
+    dialog.ShowModal();
+}
+
+void TheMasterFrame::OnDispenseDetails(const wxCommandEvent &e) {
+    if (dispensesList->GetSelectedItemCount() != 1) {
+        return;
+    }
+    auto selected = dispensesList->GetFirstSelected();
+    if (selected < 0 || selected >= displayedDispenses.size()) {
+        return;
+    }
+    auto dispense = displayedDispenses[selected];
+    PrescriptionDetailsDialog dialog{this, {dispense}};
     dialog.ShowModal();
 }
 

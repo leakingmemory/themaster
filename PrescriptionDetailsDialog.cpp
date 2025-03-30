@@ -7,6 +7,7 @@
 #include <sfmbasisapi/fhir/medstatement.h>
 #include <sfmbasisapi/fhir/fhirbasic.h>
 #include <sfmbasisapi/fhir/extension.h>
+#include <sfmbasisapi/fhir/meddispense.h>
 #include "EreseptdosingDialog.h"
 #include <sstream>
 
@@ -105,6 +106,11 @@ PrescriptionDetailsDialog::PrescriptionDetailsDialog(wxWindow *parent,
 PrescriptionDetailsDialog::PrescriptionDetailsDialog(wxWindow *parent,
                                                      const std::vector<std::shared_ptr<FhirBasic>> &statements) :
         PrescriptionDetailsDialog(parent, GetInterface<FhirBasic>(statements)) {
+}
+
+PrescriptionDetailsDialog::PrescriptionDetailsDialog(wxWindow *parent,
+                                                     const std::vector<std::shared_ptr<FhirMedicationDispense>> &statements) :
+        PrescriptionDetailsDialog(parent, GetInterface<FhirMedicationDispense>(statements)) {
 }
 
 PrescriptionDetailsDialog::PrescriptionDetailsDialog(wxWindow *parent,

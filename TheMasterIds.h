@@ -47,7 +47,8 @@ enum {
     TheMaster_MerchPrescriptionRenewWithChanges_Id = 39,
     TheMaster_MerchPrescriptionRecall_Id = 40,
     TheMaster_EditRefDialogCopyReferenceNumber_Id = 41,
-    TheMaster_EditRefDialogRemoveReferenceNumber_Id = 42
+    TheMaster_EditRefDialogRemoveReferenceNumber_Id = 42,
+    TheMaster_DispenseDetails_Id = 43
 };
 
 #endif //DRWHATSNOT_THEMASTERIDS_H

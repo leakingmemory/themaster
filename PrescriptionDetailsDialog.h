@@ -11,6 +11,7 @@
 #include <vector>
 
 class FhirMedicationStatement;
+class FhirMedicationDispense;
 class FhirBasic;
 class FhirExtension;
 class FhirDosage;
@@ -37,6 +38,7 @@ public:
     PrescriptionDetailsDialog(wxWindow *parent, const std::vector<std::shared_ptr<PrescriptionDetailsDialogEntry>> &);
     PrescriptionDetailsDialog(wxWindow *parent, const std::vector<std::shared_ptr<FhirMedicationStatement>> &);
     PrescriptionDetailsDialog(wxWindow *parent, const std::vector<std::shared_ptr<FhirBasic>> &);
+    PrescriptionDetailsDialog(wxWindow *parent, const std::vector<std::shared_ptr<FhirMedicationDispense>> &);
 private:
     void AddVersion(int row, const std::shared_ptr<PrescriptionDetailsDialogEntry> &);
     void DisplayStatement(const std::shared_ptr<PrescriptionDetailsDialogEntry> &);

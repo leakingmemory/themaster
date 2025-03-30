@@ -132,8 +132,10 @@ public:
     void OnShowFestDbQuotas(wxCommandEvent &e);
     void OnPrescriptionContextMenu(const wxContextMenuEvent &e);
     void OnMerchPrescriptionContextMenu(const wxContextMenuEvent &e);
+    void OnDispenseContextMenu(const wxContextMenuEvent &e);
     void OnPrescriptionDetails(const wxCommandEvent &e);
     void OnMerchPrescriptionDetails(const wxCommandEvent &e);
+    void OnDispenseDetails(const wxCommandEvent &e);
     void OnPrescriptionRecall(const wxCommandEvent &e);
     void OnMerchPrescriptionRecall(const wxCommandEvent &e);
     void OnPrescriptionCease(const wxCommandEvent &e);
