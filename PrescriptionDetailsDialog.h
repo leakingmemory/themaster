@@ -16,6 +16,7 @@ class FhirBasic;
 class FhirExtension;
 class FhirDosage;
 class FhirIdentifier;
+class FhirQuantity;
 class wxListView;
 
 class PrescriptionDetailsDialogEntry {
@@ -25,6 +26,7 @@ public:
     [[nodiscard]] virtual std::vector<std::shared_ptr<FhirExtension>> GetExtensions() const = 0;
     [[nodiscard]] virtual std::vector<FhirIdentifier> GetIdentifiers() const = 0;
     [[nodiscard]] virtual std::string GetEffectiveDateTime() const = 0;
+    [[nodiscard]] virtual FhirQuantity GetQuantity() const = 0;
 };
 
 class PrescriptionDetailsDialog : public wxDialog {

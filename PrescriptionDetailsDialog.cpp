@@ -29,6 +29,10 @@ template <class T> concept PrescriptionDetailsDialogEntryHasGetEffectiveDateTime
     { entry.GetEffectiveDateTime() } -> std::convertible_to<std::string>;
 };
 
+template <class T> concept PrescriptionDetailsDialogEntryHasGetQuantity = requires (const T &entry) {
+    { entry.GetQuantity() } -> std::convertible_to<FhirQuantity>;
+};
+
 template <class T> struct GetDosageFromFhir {
     GetDosageFromFhir(const T &) {
     }
@@ -71,6 +75,23 @@ template <PrescriptionDetailsDialogEntryHasGetEffectiveDateTime T> struct GetEff
     }
 };
 
+template <class T> struct GetQuantityFromFhir {
+    GetQuantityFromFhir(const T &) {
+    }
+    operator FhirQuantity () const {
+        return {};
+    }
+};
+
+template <PrescriptionDetailsDialogEntryHasGetQuantity T> struct GetQuantityFromFhir<T> {
+    FhirQuantity result;
+    GetQuantityFromFhir(const T &obj) : result(obj.GetQuantity()) {
+    }
+    operator FhirQuantity () const {
+        return result;
+    }
+};
+
 template <PrescriptionDetailsDialogEntryRequirements T> class PrescriptionDetailsDialogEntryImpl : public PrescriptionDetailsDialogEntry {
 private:
     std::shared_ptr<const T> ref{};
@@ -91,6 +112,9 @@ public:
     }
     [[nodiscard]] std::string GetEffectiveDateTime() const override {
         return GetEffectiveDateTimeFromFhir(*ref);
+    }
+    [[nodiscard]] FhirQuantity GetQuantity() const override {
+        return GetQuantityFromFhir(*ref);
     }
 };
 
@@ -194,12 +218,19 @@ void PrescriptionDetailsDialog::DisplayStatement(const std::shared_ptr<Prescript
     FhirCodeableConcept ceaseReason{};
     double amount;
     double numberOfPackages{0.000};
+    bool amountIsSet{false};
     bool guardianTransparencyReservation{false};
     bool inDoctorsName{false};
     bool lockedPrescription{false};
     std::vector<std::shared_ptr<FhirExtension>> regInfos{};
     std::vector<std::shared_ptr<FhirExtension>> ereseptdosing{};
     if (statement) {
+        auto fhirQuantity = statement->GetQuantity();
+        if (fhirQuantity.IsSet()) {
+            amount = fhirQuantity.GetValue();
+            amountUnit = fhirQuantity.GetUnit();
+            amountIsSet = true;
+        }
         auto dosageItems = statement->GetDosage();
         if (!dosageItems.empty()) {
             auto &dosage = dosageItems[0];
@@ -560,6 +591,13 @@ void PrescriptionDetailsDialog::DisplayStatement(const std::shared_ptr<Prescript
     if (!amountUnit.empty()) {
         std::stringstream ss{};
         ss << amount << " " << amountUnit;
+        auto amountStr = wxString::FromUTF8(ss.str());
+        auto row = rowNum++;
+        listView->InsertItem(row, wxT("Amount: "));
+        listView->SetItem(row, 1, amountStr);
+    } else if (amountIsSet) {
+        std::stringstream ss{};
+        ss << amount;
         auto amountStr = wxString::FromUTF8(ss.str());
         auto row = rowNum++;
         listView->InsertItem(row, wxT("Amount: "));
