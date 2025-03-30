@@ -21,6 +21,10 @@ template <class T> concept PrescriptionDetailsDialogEntryHasDosage = requires (c
     { entry.GetDosage() } -> std::convertible_to<std::vector<FhirDosage>>;
 };
 
+template <class T> concept PrescriptionDetailsDialogEntryHasDosageInstruction = requires (const T &entry) {
+    { entry.GetDosageInstruction() } -> std::convertible_to<std::vector<FhirDosage>>;
+};
+
 template <class T> concept PrescriptionDetailsDialogEntryHasGetEffectiveDateTime = requires (const T &entry) {
     { entry.GetEffectiveDateTime() } -> std::convertible_to<std::string>;
 };
@@ -36,6 +40,15 @@ template <class T> struct GetDosageFromFhir {
 template <PrescriptionDetailsDialogEntryHasDosage T> struct GetDosageFromFhir<T> {
     std::vector<FhirDosage> result;
     GetDosageFromFhir(const T &obj) : result(obj.GetDosage()) {
+    }
+    operator std::vector<FhirDosage> () const {
+        return result;
+    }
+};
+
+template <PrescriptionDetailsDialogEntryHasDosageInstruction T> struct GetDosageFromFhir<T> {
+    std::vector<FhirDosage> result;
+    GetDosageFromFhir(const T &obj) : result(obj.GetDosageInstruction()) {
     }
     operator std::vector<FhirDosage> () const {
         return result;
