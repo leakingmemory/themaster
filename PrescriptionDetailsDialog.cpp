@@ -222,6 +222,11 @@ void PrescriptionDetailsDialog::DisplayStatement(const std::shared_ptr<Prescript
     bool guardianTransparencyReservation{false};
     bool inDoctorsName{false};
     bool lockedPrescription{false};
+    bool cancellation{false};
+    bool concluded{false};
+    bool substitutionReservationCustomer{false};
+    bool prescription{false};
+    bool dispense{false};
     std::vector<std::shared_ptr<FhirExtension>> regInfos{};
     std::vector<std::shared_ptr<FhirExtension>> ereseptdosing{};
     if (statement) {
@@ -284,21 +289,25 @@ void PrescriptionDetailsDialog::DisplayStatement(const std::shared_ptr<Prescript
             std::transform(url.cbegin(), url.cend(), url.begin(), [] (char ch) -> char { return static_cast<char>(std::tolower(ch)); });
             if (url == "http://ehelse.no/fhir/structuredefinition/sfm-reseptamendment") {
                 auto extensions = extension->GetExtensions();
-                for (const auto &extension : extensions) {
+                for (const auto &extension: extensions) {
                     auto url = extension->GetUrl();
                     if (url == "dssn") {
                         auto valueExtension = std::dynamic_pointer_cast<FhirValueExtension>(extension);
-                        auto value = valueExtension.operator bool() ? std::dynamic_pointer_cast<FhirString>(valueExtension->GetValue()) : std::shared_ptr<FhirString>();
+                        auto value = valueExtension.operator bool() ? std::dynamic_pointer_cast<FhirString>(
+                                valueExtension->GetValue()) : std::shared_ptr<FhirString>();
                         if (value) {
                             dssn = wxString::FromUTF8(value->GetValue());
                         }
                     } else if (url == "rfstatus") {
                         auto extensions = extension->GetExtensions();
-                        for (const auto &extension : extensions) {
+                        for (const auto &extension: extensions) {
                             auto url = extension->GetUrl();
                             if (url == "status") {
                                 auto valueExtension = std::dynamic_pointer_cast<FhirValueExtension>(extension);
-                                auto value = valueExtension.operator bool() ? std::dynamic_pointer_cast<FhirCodeableConceptValue>(valueExtension->GetValue()) : std::shared_ptr<FhirCodeableConceptValue>();
+                                auto value = valueExtension.operator bool()
+                                             ? std::dynamic_pointer_cast<FhirCodeableConceptValue>(
+                                                valueExtension->GetValue())
+                                             : std::shared_ptr<FhirCodeableConceptValue>();
                                 if (value) {
                                     rfstatus = *value;
                                 }
@@ -306,49 +315,57 @@ void PrescriptionDetailsDialog::DisplayStatement(const std::shared_ptr<Prescript
                         }
                     } else if (url == "reseptdate") {
                         auto valueExtension = std::dynamic_pointer_cast<FhirValueExtension>(extension);
-                        auto value = valueExtension.operator bool() ? std::dynamic_pointer_cast<FhirDateValue>(valueExtension->GetValue()) : std::shared_ptr<FhirDateValue>();
+                        auto value = valueExtension.operator bool() ? std::dynamic_pointer_cast<FhirDateValue>(
+                                valueExtension->GetValue()) : std::shared_ptr<FhirDateValue>();
                         if (value) {
                             prescriptionDate = wxString::FromUTF8(value->GetRawValue());
                         }
                     } else if (url == "expirationdate") {
                         auto valueExtension = std::dynamic_pointer_cast<FhirValueExtension>(extension);
-                        auto value = valueExtension.operator bool() ? std::dynamic_pointer_cast<FhirDateValue>(valueExtension->GetValue()) : std::shared_ptr<FhirDateValue>();
+                        auto value = valueExtension.operator bool() ? std::dynamic_pointer_cast<FhirDateValue>(
+                                valueExtension->GetValue()) : std::shared_ptr<FhirDateValue>();
                         if (value) {
                             expirationDate = wxString::FromUTF8(value->GetRawValue());
                         }
                     } else if (url == "festUpdate") {
                         auto valueExtension = std::dynamic_pointer_cast<FhirValueExtension>(extension);
-                        auto value = valueExtension.operator bool() ? std::dynamic_pointer_cast<FhirDateTimeValue>(valueExtension->GetValue()) : std::shared_ptr<FhirDateTimeValue>();
+                        auto value = valueExtension.operator bool() ? std::dynamic_pointer_cast<FhirDateTimeValue>(
+                                valueExtension->GetValue()) : std::shared_ptr<FhirDateTimeValue>();
                         if (value) {
                             festUpdate = wxString::FromUTF8(value->GetDateTime());
                         }
                     } else if (url == "guardiantransparencyreservation") {
                         auto valueExtension = std::dynamic_pointer_cast<FhirValueExtension>(extension);
-                        auto value = valueExtension.operator bool() ? std::dynamic_pointer_cast<FhirBooleanValue>(valueExtension->GetValue()) : std::shared_ptr<FhirBooleanValue>();
+                        auto value = valueExtension.operator bool() ? std::dynamic_pointer_cast<FhirBooleanValue>(
+                                valueExtension->GetValue()) : std::shared_ptr<FhirBooleanValue>();
                         if (value) {
                             guardianTransparencyReservation = value->IsTrue();
                         }
                     } else if (url == "indoctorsname") {
                         auto valueExtension = std::dynamic_pointer_cast<FhirValueExtension>(extension);
-                        auto value = valueExtension.operator bool() ? std::dynamic_pointer_cast<FhirBooleanValue>(valueExtension->GetValue()) : std::shared_ptr<FhirBooleanValue>();
+                        auto value = valueExtension.operator bool() ? std::dynamic_pointer_cast<FhirBooleanValue>(
+                                valueExtension->GetValue()) : std::shared_ptr<FhirBooleanValue>();
                         if (value) {
                             inDoctorsName = value->IsTrue();
                         }
                     } else if (url == "lockedresept") {
                         auto valueExtension = std::dynamic_pointer_cast<FhirValueExtension>(extension);
-                        auto value = valueExtension.operator bool() ? std::dynamic_pointer_cast<FhirBooleanValue>(valueExtension->GetValue()) : std::shared_ptr<FhirBooleanValue>();
+                        auto value = valueExtension.operator bool() ? std::dynamic_pointer_cast<FhirBooleanValue>(
+                                valueExtension->GetValue()) : std::shared_ptr<FhirBooleanValue>();
                         if (value) {
                             lockedPrescription = value->IsTrue();
                         }
                     } else if (url == "reit") {
                         auto valueExtension = std::dynamic_pointer_cast<FhirValueExtension>(extension);
-                        auto value = valueExtension.operator bool() ? std::dynamic_pointer_cast<FhirString>(valueExtension->GetValue()) : std::shared_ptr<FhirString>();
+                        auto value = valueExtension.operator bool() ? std::dynamic_pointer_cast<FhirString>(
+                                valueExtension->GetValue()) : std::shared_ptr<FhirString>();
                         if (value) {
                             reit = wxString::FromUTF8(value->GetValue());
                         }
                     } else if (url == "amount") {
                         auto valueExtension = std::dynamic_pointer_cast<FhirValueExtension>(extension);
-                        auto value = valueExtension.operator bool() ? std::dynamic_pointer_cast<FhirQuantityValue>(valueExtension->GetValue()) : std::shared_ptr<FhirQuantityValue>();
+                        auto value = valueExtension.operator bool() ? std::dynamic_pointer_cast<FhirQuantityValue>(
+                                valueExtension->GetValue()) : std::shared_ptr<FhirQuantityValue>();
                         if (value) {
                             amount = value->GetValue();
                             amountUnit = value->GetUnit();
@@ -362,27 +379,33 @@ void PrescriptionDetailsDialog::DisplayStatement(const std::shared_ptr<Prescript
                         }
                     } else if (url == "reimbursementcode") {
                         auto valueExtension = std::dynamic_pointer_cast<FhirValueExtension>(extension);
-                        auto value = valueExtension.operator bool() ? std::dynamic_pointer_cast<FhirCodeableConceptValue>(
-                                valueExtension->GetValue()) : std::shared_ptr<FhirCodeableConceptValue>();
+                        auto value = valueExtension.operator bool()
+                                     ? std::dynamic_pointer_cast<FhirCodeableConceptValue>(
+                                        valueExtension->GetValue()) : std::shared_ptr<FhirCodeableConceptValue>();
                         if (value) {
                             reimbursementCode = *value;
                         }
                     } else if (url == "reimbursementparagraph") {
                         auto valueExtension = std::dynamic_pointer_cast<FhirValueExtension>(extension);
-                        auto value = valueExtension.operator bool() ? std::dynamic_pointer_cast<FhirCodeableConceptValue>(
-                                valueExtension->GetValue()) : std::shared_ptr<FhirCodeableConceptValue>();
+                        auto value = valueExtension.operator bool()
+                                     ? std::dynamic_pointer_cast<FhirCodeableConceptValue>(
+                                        valueExtension->GetValue()) : std::shared_ptr<FhirCodeableConceptValue>();
                         if (value) {
                             reimbursementParagraph = *value;
                         }
                     } else if (url == "itemgroup") {
                         auto valueExtension = std::dynamic_pointer_cast<FhirValueExtension>(extension);
-                        auto value = valueExtension.operator bool() ? std::dynamic_pointer_cast<FhirCodeableConceptValue>(valueExtension->GetValue()) : std::shared_ptr<FhirCodeableConceptValue>();
+                        auto value = valueExtension.operator bool()
+                                     ? std::dynamic_pointer_cast<FhirCodeableConceptValue>(valueExtension->GetValue())
+                                     : std::shared_ptr<FhirCodeableConceptValue>();
                         if (value) {
                             itemGroup = *value;
                         }
                     } else if (url == "typeresept") {
                         auto valueExtension = std::dynamic_pointer_cast<FhirValueExtension>(extension);
-                        auto value = valueExtension.operator bool() ? std::dynamic_pointer_cast<FhirCodeableConceptValue>(valueExtension->GetValue()) : std::shared_ptr<FhirCodeableConceptValue>();
+                        auto value = valueExtension.operator bool()
+                                     ? std::dynamic_pointer_cast<FhirCodeableConceptValue>(valueExtension->GetValue())
+                                     : std::shared_ptr<FhirCodeableConceptValue>();
                         if (value) {
                             typeOfPrescription = *value;
                         }
@@ -390,6 +413,43 @@ void PrescriptionDetailsDialog::DisplayStatement(const std::shared_ptr<Prescript
                         ereseptdosing.emplace_back(extension);
                     }
                 }
+                prescription = true;
+            } else if (url == "http://ehelse.no/fhir/structuredefinition/sfm-dispenseinfo") {
+                auto extensions = extension->GetExtensions();
+                for (const auto &extension: extensions) {
+                    auto url = extension->GetUrl();
+                    std::transform(url.cbegin(), url.cend(), url.begin(), [] (char ch) { return std::tolower(ch); });
+                    if (url == "cancellation") {
+                        auto valueExtension = std::dynamic_pointer_cast<FhirValueExtension>(extension);
+                        auto value = valueExtension.operator bool() ? std::dynamic_pointer_cast<FhirBooleanValue>(
+                                valueExtension->GetValue()) : std::shared_ptr<FhirBooleanValue>();
+                        if (value) {
+                            cancellation = value->IsTrue();
+                        }
+                    } else if (url == "concluded") {
+                        auto valueExtension = std::dynamic_pointer_cast<FhirValueExtension>(extension);
+                        auto value = valueExtension.operator bool() ? std::dynamic_pointer_cast<FhirBooleanValue>(
+                                valueExtension->GetValue()) : std::shared_ptr<FhirBooleanValue>();
+                        if (value) {
+                            concluded = value->IsTrue();
+                        }
+                    } else if (url == "substitutionreservationcustomer") {
+                        auto valueExtension = std::dynamic_pointer_cast<FhirValueExtension>(extension);
+                        auto value = valueExtension.operator bool() ? std::dynamic_pointer_cast<FhirBooleanValue>(
+                                valueExtension->GetValue()) : std::shared_ptr<FhirBooleanValue>();
+                        if (value) {
+                            substitutionReservationCustomer = value->IsTrue();
+                        }
+                    } else if (url == "prescriptionid") {
+                        auto valueExtension = std::dynamic_pointer_cast<FhirValueExtension>(extension);
+                        auto value = valueExtension.operator bool() ? std::dynamic_pointer_cast<FhirString>(
+                                valueExtension->GetValue()) : std::shared_ptr<FhirString>();
+                        if (value) {
+                            ePrescriptionId = value->GetValue();
+                        }
+                    }
+                }
+                dispense = true;
             } else if (url == "http://ehelse.no/fhir/structuredefinition/sfm-reginfo") {
                 regInfos.emplace_back(extension);
             } else if (url == "http://ehelse.no/fhir/structuredefinition/sfm-discontinuation") {
@@ -446,36 +506,55 @@ void PrescriptionDetailsDialog::DisplayStatement(const std::shared_ptr<Prescript
         listView->InsertItem(row, wxT("PLL:"));
         listView->SetItem(row, 1, pllId);
     }
-    {
-        auto row = rowNum++;
-        listView->InsertItem(row, wxT("DSSN:"));
-        listView->SetItem(row, 1, dssn);
-    }
-    if (!reimbursementParagraph.GetCoding().empty()) {
-        auto row = rowNum++;
-        listView->InsertItem(row, wxT("Refund paragraph:"));
-        std::string paragraph{reimbursementParagraph.GetCoding()[0].GetCode()};
-        paragraph.append(" ");
-        paragraph.append(reimbursementParagraph.GetCoding()[0].GetDisplay());
-        listView->SetItem(row, 1, wxString::FromUTF8(paragraph));
-    }
-    if (!reimbursementCode.GetCoding().empty()) {
-        auto row = rowNum++;
-        listView->InsertItem(row, wxT("Refund code:"));
-        std::string code{reimbursementCode.GetCoding()[0].GetCode()};
-        code.append(" ");
-        code.append(reimbursementCode.GetCoding()[0].GetDisplay());
-        listView->SetItem(row, 1, wxString::FromUTF8(code));
-    }
-    {
-        wxString status{};
-        auto coding = rfstatus.GetCoding();
-        if (!coding.empty()) {
-            status = wxString::FromUTF8(coding[0].GetDisplay());
+    if (prescription) {
+        {
+            auto row = rowNum++;
+            listView->InsertItem(row, wxT("DSSN:"));
+            listView->SetItem(row, 1, dssn);
         }
-        auto row = rowNum++;
-        listView->InsertItem(row, wxT("RFStatus:"));
-        listView->SetItem(row, 1, status);
+        if (!reimbursementParagraph.GetCoding().empty()) {
+            auto row = rowNum++;
+            listView->InsertItem(row, wxT("Refund paragraph:"));
+            std::string paragraph{reimbursementParagraph.GetCoding()[0].GetCode()};
+            paragraph.append(" ");
+            paragraph.append(reimbursementParagraph.GetCoding()[0].GetDisplay());
+            listView->SetItem(row, 1, wxString::FromUTF8(paragraph));
+        }
+        if (!reimbursementCode.GetCoding().empty()) {
+            auto row = rowNum++;
+            listView->InsertItem(row, wxT("Refund code:"));
+            std::string code{reimbursementCode.GetCoding()[0].GetCode()};
+            code.append(" ");
+            code.append(reimbursementCode.GetCoding()[0].GetDisplay());
+            listView->SetItem(row, 1, wxString::FromUTF8(code));
+        }
+        {
+            wxString status{};
+            auto coding = rfstatus.GetCoding();
+            if (!coding.empty()) {
+                status = wxString::FromUTF8(coding[0].GetDisplay());
+            }
+            auto row = rowNum++;
+            listView->InsertItem(row, wxT("RFStatus:"));
+            listView->SetItem(row, 1, status);
+        }
+    }
+    if (dispense) {
+        {
+            auto row = rowNum++;
+            listView->InsertItem(row, wxT("Cancellation: "));
+            listView->SetItem(row, 1, cancellation ? wxT("Yes") : wxT("No"));
+        }
+        {
+            auto row = rowNum++;
+            listView->InsertItem(row, wxT("Concluded: "));
+            listView->SetItem(row, 1, concluded ? wxT("Yes") : wxT("No"));
+        }
+        {
+            auto row = rowNum++;
+            listView->InsertItem(row, wxT("Substitution reservation customer: "));
+            listView->SetItem(row, 1, substitutionReservationCustomer ? wxT("Yes") : wxT("No"));
+        }
     }
     if (ceaseReason.IsSet()) {
         FhirCoding coding{};
@@ -553,40 +632,42 @@ void PrescriptionDetailsDialog::DisplayStatement(const std::shared_ptr<Prescript
             listView->SetItem(row, 1, dosageText);
         }
     }
-    {
-        auto row = rowNum++;
-        listView->InsertItem(row, wxT("Prescription date: "));
-        listView->SetItem(row, 1, prescriptionDate);
-    }
-    {
-        auto row = rowNum++;
-        listView->InsertItem(row, wxT("Expiration date: "));
-        listView->SetItem(row, 1, expirationDate);
-    }
-    {
-        auto row = rowNum++;
-        listView->InsertItem(row, wxT("Fest update: "));
-        listView->SetItem(row, 1, festUpdate);
-    }
-    {
-        auto row = rowNum++;
-        listView->InsertItem(row, wxT("Guardian transparency reservation: "));
-        listView->SetItem(row, 1, guardianTransparencyReservation ? wxT("Yes") : wxT("No"));
-    }
-    {
-        auto row = rowNum++;
-        listView->InsertItem(row, wxT("Locked prescription: "));
-        listView->SetItem(row, 1, lockedPrescription ? wxT("Yes") : wxT("No"));
-    }
-    {
-        auto row = rowNum++;
-        listView->InsertItem(row, wxT("In doctors name: "));
-        listView->SetItem(row, 1, inDoctorsName ? wxT("Yes") : wxT("No"));
-    }
-    {
-        auto row = rowNum++;
-        listView->InsertItem(row, wxT("Reit: "));
-        listView->SetItem(row, 1, reit);
+    if (prescription) {
+        {
+            auto row = rowNum++;
+            listView->InsertItem(row, wxT("Prescription date: "));
+            listView->SetItem(row, 1, prescriptionDate);
+        }
+        {
+            auto row = rowNum++;
+            listView->InsertItem(row, wxT("Expiration date: "));
+            listView->SetItem(row, 1, expirationDate);
+        }
+        {
+            auto row = rowNum++;
+            listView->InsertItem(row, wxT("Fest update: "));
+            listView->SetItem(row, 1, festUpdate);
+        }
+        {
+            auto row = rowNum++;
+            listView->InsertItem(row, wxT("Guardian transparency reservation: "));
+            listView->SetItem(row, 1, guardianTransparencyReservation ? wxT("Yes") : wxT("No"));
+        }
+        {
+            auto row = rowNum++;
+            listView->InsertItem(row, wxT("Locked prescription: "));
+            listView->SetItem(row, 1, lockedPrescription ? wxT("Yes") : wxT("No"));
+        }
+        {
+            auto row = rowNum++;
+            listView->InsertItem(row, wxT("In doctors name: "));
+            listView->SetItem(row, 1, inDoctorsName ? wxT("Yes") : wxT("No"));
+        }
+        {
+            auto row = rowNum++;
+            listView->InsertItem(row, wxT("Reit: "));
+            listView->SetItem(row, 1, reit);
+        }
     }
     if (!amountUnit.empty()) {
         std::stringstream ss{};
@@ -603,28 +684,30 @@ void PrescriptionDetailsDialog::DisplayStatement(const std::shared_ptr<Prescript
         listView->InsertItem(row, wxT("Amount: "));
         listView->SetItem(row, 1, amountStr);
     }
-    if (numberOfPackages > 0.0001) {
-        std::stringstream ss{};
-        ss << numberOfPackages;
-        auto numStr = wxString::FromUTF8(ss.str());
-        auto row = rowNum++;
-        listView->InsertItem(row, wxT("Number of packages: "));
-        listView->SetItem(row, 1, numStr);
-    }
-    {
-        auto coding = itemGroup.GetCoding();
-        if (!coding.empty()) {
+    if (prescription) {
+        if (numberOfPackages > 0.0001) {
+            std::stringstream ss{};
+            ss << numberOfPackages;
+            auto numStr = wxString::FromUTF8(ss.str());
             auto row = rowNum++;
-            listView->InsertItem(row, wxT("Item group: "));
-            listView->SetItem(row, 1, wxString::FromUTF8(coding[0].GetDisplay()));
+            listView->InsertItem(row, wxT("Number of packages: "));
+            listView->SetItem(row, 1, numStr);
         }
-    }
-    {
-        auto coding = typeOfPrescription.GetCoding();
-        if (!coding.empty()) {
-            auto row = rowNum++;
-            listView->InsertItem(row, wxT("Type of prescription: "));
-            listView->SetItem(row, 1, wxString::FromUTF8(coding[0].GetDisplay()));
+        {
+            auto coding = itemGroup.GetCoding();
+            if (!coding.empty()) {
+                auto row = rowNum++;
+                listView->InsertItem(row, wxT("Item group: "));
+                listView->SetItem(row, 1, wxString::FromUTF8(coding[0].GetDisplay()));
+            }
+        }
+        {
+            auto coding = typeOfPrescription.GetCoding();
+            if (!coding.empty()) {
+                auto row = rowNum++;
+                listView->InsertItem(row, wxT("Type of prescription: "));
+                listView->SetItem(row, 1, wxString::FromUTF8(coding[0].GetDisplay()));
+            }
         }
     }
     if (!treatmentStartDate.empty()) {
