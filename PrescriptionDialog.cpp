@@ -19,6 +19,8 @@
 
 #include "DateTime.h"
 #include "WxDateConversions.h"
+#include "GetLegemiddelKortdoser.h"
+#include "GetMedicamentDosingUnit.h"
 
 struct NumPackagesSizers {
     wxBoxSizer *packageSelectorSizer;
@@ -64,7 +66,35 @@ wxBoxSizer *PrescriptionDialog::CreateAmount(wxWindow *parent) {
     return amountSizer;
 }
 
-PrescriptionDialog::PrescriptionDialog(TheMasterFrame *frame, const std::shared_ptr<FestDb> &festDb, const std::shared_ptr<FhirMedication> &medication, const std::vector<MedicalCodedValue> &amountUnit, const std::vector<MedicalCodedValue> &medicamentType, const std::vector<MedicalCodedValue> &listOfMedicamentUses, bool package, const std::vector<MedicamentPackage> &packages, const std::vector<MedicamentRefund> &refunds, const std::vector<MedicalCodedValue> &dosingUnit, const std::vector<MedicalCodedValue> &kortdoser, const std::vector<PrescriptionValidity> &prescriptionValidity) : wxDialog(frame, wxID_ANY, wxT("Prescription")), festDb(festDb), medication(medication), amountUnit(amountUnit), packages(packages), refunds(refunds), dosingUnit(dosingUnit), kortdoser(kortdoser), medicamentUses(listOfMedicamentUses), prescriptionValidity(prescriptionValidity) {
+template <class T> concept MedicamentMapperWithGetPackages = requires(const T &mapper) {
+    {mapper.GetPackages()} -> std::convertible_to<std::vector<SfmMedicamentMapper>>;
+};
+
+template <class MedicamentMapperType> struct GetPackages {
+    constexpr GetPackages(const MedicamentMapperType &medicamentMapper) {
+    }
+    constexpr operator std::vector<MedicamentPackage> () const {
+        return {};
+    }
+};
+
+template <MedicamentMapperWithGetPackages MedicamentMapperType> struct GetPackages<MedicamentMapperType> {
+    std::vector<MedicamentPackage> packages{};
+    constexpr GetPackages(const MedicamentMapperType &medicamentMapper) {
+        auto packageMappers = medicamentMapper.GetPackages();
+        packages.reserve(packageMappers.size());
+        for (const auto &packageMapper : packageMappers) {
+            auto description = packageMapper.GetPackageDescription();
+            auto &package = packages.emplace_back(std::make_shared<FhirMedication>(packageMapper.GetMedication()), description);
+            package.SetRefunds(packageMapper.GetMedicamentRefunds());
+        }
+    }
+    constexpr operator std::vector<MedicamentPackage> () const {
+        return packages;
+    }
+};
+
+template <MedicamentMapper Mapper> PrescriptionDialog::PrescriptionDialog(TheMasterFrame *frame, const std::shared_ptr<FestDb> &festDb, const LegemiddelCore &legemiddelCore, const std::vector<MedicalCodedValue> &dosingUnit, const std::vector<MedicalCodedValue> &kortdoser, const Mapper &medicamentMapper) : wxDialog(frame, wxID_ANY, wxT("Prescription")), festDb(festDb), medication(std::make_shared<FhirMedication>(medicamentMapper.GetMedication())), amountUnit(medicamentMapper.GetPrescriptionUnit()), packages(GetPackages(medicamentMapper).operator std::vector<MedicamentPackage>()), refunds(medicamentMapper.GetMedicamentRefunds()), dosingUnit(dosingUnit), kortdoser(kortdoser), medicamentUses(medicamentMapper.GetMedicamentUses()), prescriptionValidity(medicamentMapper.GetPrescriptionValidity()) {
     DateOnly startDate = DateOnly::Today();
     DateOnly endDate = startDate;
     endDate.AddYears(1);
@@ -85,6 +115,7 @@ PrescriptionDialog::PrescriptionDialog(TheMasterFrame *frame, const std::shared_
         useSelectionChoices.Add(wxT("Nutrition"));
         useSelection = new wxRadioBox(this, wxID_ANY, wxT("Use:"), wxDefaultPosition, wxDefaultSize,
                                       useSelectionChoices, useSelectionChoices.size(), wxRA_HORIZONTAL);
+        auto medicamentType = medicamentMapper.GetMedicamentType();
         if (!medicamentType.empty()) {
             auto mt = medicamentType[0];
             auto mtCode = mt.GetCode();
@@ -97,7 +128,7 @@ PrescriptionDialog::PrescriptionDialog(TheMasterFrame *frame, const std::shared_
         wxBoxSizer *packageSelectorSizer = nullptr;
         wxBoxSizer *numPackagesSizer = nullptr;
         wxBoxSizer *amountSizer = nullptr;
-        if (!package && !packages.empty()) {
+        if (!medicamentMapper.IsPackage() && !packages.empty()) {
             packageAmountNotebook = new wxNotebook(this, wxID_ANY, wxDefaultPosition, wxDefaultSize, wxNB_TOP);
             auto packagesPage = new wxPanel(packageAmountNotebook, wxID_ANY);
             {
@@ -114,7 +145,7 @@ PrescriptionDialog::PrescriptionDialog(TheMasterFrame *frame, const std::shared_
                 amountPage->SetSizerAndFit(sizer);
             }
             packageAmountNotebook->AddPage(amountPage, wxT("Amount"));
-        } else if (package || !packages.empty()) {
+        } else if (medicamentMapper.IsPackage() || !packages.empty()) {
             auto sizers = CreateNumPackages(this);
             packageSelectorSizer = sizers.packageSelectorSizer;
             numPackagesSizer = sizers.numPackagesSizer;
@@ -327,6 +358,44 @@ PrescriptionDialog::PrescriptionDialog(TheMasterFrame *frame, const std::shared_
     Bind(wxEVT_MENU, &PrescriptionDialog::OnMoveUp, this, TheMaster_PrescriptionDialog_MoveDosingPeriodUp);
     Bind(wxEVT_MENU, &PrescriptionDialog::OnMoveDown, this, TheMaster_PrescriptionDialog_MoveDosingPeriodDown);
     Bind(wxEVT_MENU, &PrescriptionDialog::OnDeleteDosingPeriod, this, TheMaster_PrescriptionDialog_DeleteDosingPeriod);
+}
+
+PrescriptionDialog::PrescriptionDialog(TheMasterFrame *frame, const std::shared_ptr<FestDb> &festDb, const std::shared_ptr<LegemiddelCore> &legemiddelCore) : PrescriptionDialog(frame, festDb, *legemiddelCore, GetMedicamentDosingUnit(festDb, *legemiddelCore).operator std::vector<MedicalCodedValue>(), GetLegemiddelKortdoser(festDb, *legemiddelCore).operator std::vector<MedicalCodedValue>(), SfmMedicamentMapper(festDb, legemiddelCore)) {
+
+}
+
+class MagistralMedicamentMapper {
+private:
+    std::shared_ptr<FhirMedication> medication;
+    std::vector<MedicamentRefund> refund;
+public:
+    constexpr MagistralMedicamentMapper(const std::shared_ptr<FhirMedication> &medication, const std::vector<MedicamentRefund> &refund) : medication(medication), refund(refund) {
+    }
+    constexpr std::vector<PrescriptionValidity> GetPrescriptionValidity() const {
+        return {};
+    }
+    constexpr std::vector<MedicalCodedValue> GetMedicamentUses() const {
+        return {};
+    }
+    constexpr std::vector<MedicamentRefund> GetMedicamentRefunds() const {
+        return refund;
+    }
+    constexpr std::vector<MedicalCodedValue> GetPrescriptionUnit() const {
+        return {};
+    }
+    constexpr FhirMedication GetMedication() const {
+        return *medication;
+    }
+    constexpr std::vector<MedicalCodedValue> GetMedicamentType() const {
+        return {};
+    }
+    constexpr bool IsPackage() const {
+        return true;
+    }
+};
+
+PrescriptionDialog::PrescriptionDialog(TheMasterFrame *frame, const std::shared_ptr<FhirMedication> &magistralMedication,
+                                       const std::vector<MedicamentRefund> &refund) : PrescriptionDialog(frame, {}, {}, {}, {}, MagistralMedicamentMapper(magistralMedication, refund)) {
 }
 
 PrescriptionDialog &PrescriptionDialog::operator+=(const PrescriptionData &prescriptionData) {

@@ -45,7 +45,7 @@ private:
     void Map(const LegemiddelVirkestoff &legemiddelVirkestoff);
     void Map(const Legemiddelpakning &legemiddelpakning);
 public:
-    [[nodiscard]] FhirMedication GetMedication() const {
+    [[nodiscard]] constexpr FhirMedication GetMedication() const {
         return medication;
     }
     [[nodiscard]] std::vector<MedicalCodedValue> GetPrescriptionUnit() const {
@@ -60,7 +60,7 @@ public:
     [[nodiscard]] std::vector<PrescriptionValidity> GetPrescriptionValidity() const {
         return prescriptionValidity;
     }
-    [[nodiscard]] std::vector<MedicamentRefund> GetMedicamentRefunds() const {
+    [[nodiscard]] constexpr std::vector<MedicamentRefund> GetMedicamentRefunds() const {
         auto refunds = medicamentRefunds;
         for (auto &refund : refunds) {
             if (refund.refund.GetCode() == "950") {
@@ -76,10 +76,10 @@ public:
     [[nodiscard]] bool IsPackage() const {
         return isPackage;
     }
-    [[nodiscard]] std::vector<SfmMedicamentMapper> GetPackages() const {
+    [[nodiscard]] constexpr std::vector<SfmMedicamentMapper> GetPackages() const {
         return packages;
     }
-    [[nodiscard]] std::string GetPackageDescription() const {
+    [[nodiscard]] constexpr std::string GetPackageDescription() const {
         return packageDescription;
     }
 };

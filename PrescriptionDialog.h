@@ -52,6 +52,16 @@ struct PrescriptionDialogData;
 class FestDb;
 class ComboSearchControl;
 
+template <class T> concept MedicamentMapper = requires (const T &obj) {
+    {obj.GetPrescriptionValidity()} -> std::convertible_to<std::vector<PrescriptionValidity>>;
+    {obj.GetMedicamentUses()} -> std::convertible_to<std::vector<MedicalCodedValue>>;
+    {obj.GetMedicamentRefunds()} -> std::convertible_to<std::vector<MedicamentRefund>>;
+    {obj.GetPrescriptionUnit()} -> std::convertible_to<std::vector<MedicalCodedValue>>;
+    {obj.GetMedication()} -> std::convertible_to<FhirMedication>;
+    {obj.GetMedicamentType()} -> std::convertible_to<std::vector<MedicalCodedValue>>;
+    {obj.IsPackage()} -> std::convertible_to<bool>;
+};
+
 class PrescriptionDialog : public wxDialog {
 private:
     PrescriptionData prescriptionData{};
@@ -97,8 +107,10 @@ private:
 private:
     NumPackagesSizers CreateNumPackages(wxWindow *parent);
     wxBoxSizer *CreateAmount(wxWindow *parent);
+    template <MedicamentMapper Mapper> PrescriptionDialog(TheMasterFrame *, const std::shared_ptr<FestDb> &festDb, const LegemiddelCore &, const std::vector<MedicalCodedValue> &dosingUnit, const std::vector<MedicalCodedValue> &kortdoser, const Mapper &);
 public:
-    PrescriptionDialog(TheMasterFrame *, const std::shared_ptr<FestDb> &festDb, const std::shared_ptr<FhirMedication> &, const std::vector<MedicalCodedValue> &amountUnit, const std::vector<MedicalCodedValue> &medicamentType, const std::vector<MedicalCodedValue> &listOfMedicamentUses, bool package = false, const std::vector<MedicamentPackage> &packages = {}, const std::vector<MedicamentRefund> &refunds = {}, const std::vector<MedicalCodedValue> &dosingUnit = {}, const std::vector<MedicalCodedValue> &kortdoser = {}, const std::vector<PrescriptionValidity> &prescriptionValidity = {});
+    PrescriptionDialog(TheMasterFrame *, const std::shared_ptr<FestDb> &festDb, const std::shared_ptr<LegemiddelCore> &);
+    PrescriptionDialog(TheMasterFrame *, const std::shared_ptr<FhirMedication> &magistralMedication, const std::vector<MedicamentRefund> &);
     PrescriptionDialog & operator += (const PrescriptionData &);
     void OnCancel(wxCommandEvent &e);
 private:

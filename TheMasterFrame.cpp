@@ -2404,12 +2404,17 @@ void TheMasterFrame::OnPrescribeMagistral(wxCommandEvent &e) {
         refunds.emplace_back(std::move(p3));
         refunds.emplace_back(std::move(y));
         refunds.emplace_back(std::move(hPres));
-        PrescriptionDialog prescriptionDialog{this, std::make_shared<FestDb>(), std::make_shared<FhirMedication>(magistralBuilderDialog.GetMagistralMedicament().ToFhir()), {}, {}, {}, true, {}, refunds};
-        auto res = prescriptionDialog.ShowModal();
-        if (res != wxID_OK) {
-            return;
+        try {
+            PrescriptionDialog prescriptionDialog{this, std::make_shared<FhirMedication>(
+                    magistralBuilderDialog.GetMagistralMedicament().ToFhir()), refunds};
+            auto res = prescriptionDialog.ShowModal();
+            if (res != wxID_OK) {
+                return;
+            }
+            PrescribeMedicament(prescriptionDialog);
+        } catch (const std::exception &e) {
+            wxMessageBox(wxString::FromUTF8(e.what()), wxT("Prescribe magistral error"), wxICON_ERROR);
         }
-        PrescribeMedicament(prescriptionDialog);
     }
 }
 
@@ -2431,21 +2436,7 @@ void TheMasterFrame::OnPrescribeMedicament(wxCommandEvent &e) {
     auto medicament = findMedicamentDialog.GetSelected();
     if (medicament) {
         wxTheApp->GetTopWindow()->GetEventHandler()->CallAfter([this, festDb, medicament]() {
-            SfmMedicamentMapper medicamentMapper{festDb, medicament};
-            std::vector<MedicamentPackage> packages{};
-            {
-                auto packageMappers = medicamentMapper.GetPackages();
-                packages.reserve(packageMappers.size());
-                for (const auto &packageMapper : packageMappers) {
-                    auto description = packageMapper.GetPackageDescription();
-                    auto &package = packages.emplace_back(std::make_shared<FhirMedication>(packageMapper.GetMedication()), description);
-                    package.SetRefunds(packageMapper.GetMedicamentRefunds());
-                }
-            }
-            std::vector<MedicalCodedValue> dosingUnits = GetMedicamentDosingUnit(festDb, *medicament).operator std::vector<MedicalCodedValue>();
-            std::vector<MedicalCodedValue> kortdoser = GetLegemiddelKortdoser(festDb, *medicament).operator std::vector<MedicalCodedValue>();
-            auto refunds = medicamentMapper.GetMedicamentRefunds();
-            PrescriptionDialog prescriptionDialog{this, festDb, std::make_shared<FhirMedication>(medicamentMapper.GetMedication()), medicamentMapper.GetPrescriptionUnit(), medicamentMapper.GetMedicamentType(), medicamentMapper.GetMedicamentUses(), medicamentMapper.IsPackage(), packages, refunds, dosingUnits, kortdoser, medicamentMapper.GetPrescriptionValidity()};
+            PrescriptionDialog prescriptionDialog{this, festDb, medicament};
             auto res = prescriptionDialog.ShowModal();
             if (res != wxID_OK) {
                 return;
@@ -3164,21 +3155,7 @@ void TheMasterFrame::OnPrescriptionRenewWithChanges(const wxCommandEvent &e) {
     }
     PrescriptionData prescriptionData{};
     prescriptionData.FromFhir(*medicationStatement);
-    SfmMedicamentMapper medicamentMapper{festDb, legemiddelCore};
-    std::vector<MedicamentPackage> packages{};
-    {
-        auto packageMappers = medicamentMapper.GetPackages();
-        packages.reserve(packageMappers.size());
-        for (const auto &packageMapper : packageMappers) {
-            auto description = packageMapper.GetPackageDescription();
-            auto &package = packages.emplace_back(std::make_shared<FhirMedication>(packageMapper.GetMedication()), description);
-            package.SetRefunds(packageMapper.GetMedicamentRefunds());
-        }
-    }
-    std::vector<MedicalCodedValue> dosingUnits = GetMedicamentDosingUnit(festDb, *legemiddelCore).operator std::vector<MedicalCodedValue>();
-    std::vector<MedicalCodedValue> kortdoser = GetLegemiddelKortdoser(festDb, *legemiddelCore).operator std::vector<MedicalCodedValue>();
-    std::vector<MedicamentRefund> refunds = medicamentMapper.GetMedicamentRefunds();
-    PrescriptionDialog prescriptionDialog{this, festDb, std::make_shared<FhirMedication>(medicamentMapper.GetMedication()), medicamentMapper.GetPrescriptionUnit(), medicamentMapper.GetMedicamentType(), medicamentMapper.GetMedicamentUses(), medicamentMapper.IsPackage(), packages, refunds, dosingUnits, kortdoser, medicamentMapper.GetPrescriptionValidity()};
+    PrescriptionDialog prescriptionDialog{this, festDb, legemiddelCore};
     prescriptionDialog += prescriptionData;
     auto res = prescriptionDialog.ShowModal();
     if (res != wxID_OK) {
