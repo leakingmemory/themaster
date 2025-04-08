@@ -730,38 +730,42 @@ pplx::task<std::string> TheMasterFrame::GetAccessToken() {
             tokenRequest.AddHelseIdConsumerChildOrgNo(childOrgNo);
         }
         auto requestData = tokenRequest.GetTokenRequest();
-        web::http::client::http_client client{as_wstring_on_win32(helseidUrl)};
+        auto reqUrl = helseidUrl;
+        web::http::client::http_client client{as_wstring_on_win32(reqUrl)};
         web::http::http_request req{web::http::methods::POST};
+        reqUrl.append("/connect/token");
+        auto dpop = dpopHost.Generate("POST", reqUrl, "", helseidDpopNonce);
+        std::cout << "DPoP: " << dpop << std::endl;
+        req.headers().add(as_wstring_on_win32("DPoP"), as_wstring_on_win32(dpop));
         req.set_request_uri(as_wstring_on_win32("/connect/token"));
+        std::string rqBody{};
         {
-            std::string rqBody{};
-            {
-                std::stringstream sstr{};
-                auto iterator = requestData.params.begin();
-                if (iterator != requestData.params.end()) {
-                    const auto &param = *iterator;
-                    sstr << from_wstring_on_win32(web::uri::encode_data_string(as_wstring_on_win32(param.first))) << "=";
-                    sstr << from_wstring_on_win32(web::uri::encode_data_string(as_wstring_on_win32(param.second)));
-                    ++iterator;
-                }
-                while (iterator != requestData.params.end()) {
-                    const auto &param = *iterator;
-                    sstr << "&" << from_wstring_on_win32(web::uri::encode_data_string(as_wstring_on_win32(param.first))) << "=";
-                    sstr << from_wstring_on_win32(web::uri::encode_data_string(as_wstring_on_win32(param.second)));
-                    ++iterator;
-                }
-                rqBody = sstr.str();
+            std::stringstream sstr{};
+            auto iterator = requestData.params.begin();
+            if (iterator != requestData.params.end()) {
+                const auto &param = *iterator;
+                sstr << from_wstring_on_win32(web::uri::encode_data_string(as_wstring_on_win32(param.first))) << "=";
+                sstr << from_wstring_on_win32(web::uri::encode_data_string(as_wstring_on_win32(param.second)));
+                ++iterator;
             }
-            std::cout << rqBody << "\n";
-            req.set_body(rqBody, "application/x-www-form-urlencoded; charset=utf-8");
+            while (iterator != requestData.params.end()) {
+                const auto &param = *iterator;
+                sstr << "&" << from_wstring_on_win32(web::uri::encode_data_string(as_wstring_on_win32(param.first))) << "=";
+                sstr << from_wstring_on_win32(web::uri::encode_data_string(as_wstring_on_win32(param.second)));
+                ++iterator;
+            }
+            rqBody = sstr.str();
         }
+        std::cout << rqBody << "\n";
+        req.set_body(rqBody, "application/x-www-form-urlencoded; charset=utf-8");
         auto respTask = client.request(req);
         std::shared_ptr<std::string> at = accessToken;
-        return respTask.then([at] (const web::http::http_response &response) {
+        return respTask.then([this, rqBody, at] (const web::http::http_response &response) {
             if ((response.status_code() / 100) == 2) {
                 return response.extract_json().then([at] (const web::json::value &json) {
                     if (json.has_string_field(as_wstring_on_win32("access_token"))) {
                         *at = from_wstring_on_win32(json.at(as_wstring_on_win32("access_token")).as_string());
+                        std::cout << "Access token: " << *at << "\n";
                         return *at;
                     } else {
                         std::cerr << "Missing access_token\n";
@@ -769,7 +773,55 @@ pplx::task<std::string> TheMasterFrame::GetAccessToken() {
                     }
                 });
             } else {
-                throw std::exception();
+                std::string dpopNonce{};
+                {
+                    auto headers = response.headers();
+                    for (const auto &header: headers) {
+                        auto name = header.first;
+                        std::transform(name.cbegin(), name.cend(), name.begin(),
+                                       [](char ch) { return std::tolower(ch); });
+                        if (name == "dpop-nonce") {
+                            dpopNonce = header.second;
+                        }
+                    }
+                }
+                if (!dpopNonce.empty()) {
+                    std::cout << "DPoP nonce: " << dpopNonce << "\n";
+                    wxTheApp->GetTopWindow()->GetEventHandler()->CallAfter([this,dpopNonce]() {
+                        helseidDpopNonce = dpopNonce;
+                    });
+                    auto reqUrl = helseidUrl;
+                    web::http::client::http_client client{as_wstring_on_win32(reqUrl)};
+                    web::http::http_request req{web::http::methods::POST};
+                    reqUrl.append("/connect/token");
+                    auto dpop = dpopHost.Generate("POST", reqUrl, "", dpopNonce);
+                    std::cout << "DPoP: " << dpop << std::endl;
+                    req.headers().add(as_wstring_on_win32("DPoP"), as_wstring_on_win32(dpop));
+                    req.set_request_uri(as_wstring_on_win32("/connect/token"));
+                    req.set_body(rqBody, "application/x-www-form-urlencoded; charset=utf-8");
+                    auto respTask = client.request(req);
+                    return respTask.then([this, rqBody, at] (const web::http::http_response &response) {
+                        if ((response.status_code() / 100) == 2) {
+                            return response.extract_json().then([at] (const web::json::value &json) {
+                                if (json.has_string_field(as_wstring_on_win32("access_token"))) {
+                                    *at = from_wstring_on_win32(
+                                            json.at(as_wstring_on_win32("access_token")).as_string());
+                                    std::cout << "Access token after dpop-nonce: " << *at << "\n";
+                                    return *at;
+                                } else {
+                                    std::cerr << "Missing access_token\n";
+                                    throw std::exception();
+                                }
+                            });
+                        } else {
+                            std::cerr << "DPoP-nonce retry failed\n";
+                            throw std::exception();
+                        }
+                    });
+                } else {
+                    std::cerr << "Access token req failed\n";
+                    throw std::exception();
+                }
             }
         });
     }
@@ -2495,7 +2547,8 @@ WeakRefUiDispatcherRef<TheMasterFrame> TheMasterFrame::GetWeakRefDispatcher() {
 void TheMasterFrame::SetHelseid(const std::string &url, const std::string &clientId, const std::string &secretJwk,
                                 const std::vector<std::string> &scopes, const std::string &refreshToken,
                                 long expiresIn, const std::string &idToken, const std::string &journalId,
-                                const std::string &orgNo, const std::string &childOrgNo) {
+                                const std::string &orgNo, const std::string &childOrgNo, const DpopHost &dpopHost,
+                                const std::string &helseidDpopNonce) {
     helseidUrl = url;
     helseidClientId = clientId;
     helseidSecretJwk = secretJwk;
@@ -2506,6 +2559,8 @@ void TheMasterFrame::SetHelseid(const std::string &url, const std::string &clien
     this->journalId = journalId;
     this->orgNo = orgNo;
     this->childOrgNo = childOrgNo;
+    this->dpopHost = dpopHost;
+    this->helseidDpopNonce = helseidDpopNonce;
 }
 
 void TheMasterFrame::Connect(const std::string &url) {

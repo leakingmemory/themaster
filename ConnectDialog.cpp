@@ -9,6 +9,7 @@
 #include <jjwtid/OidcTokenRequest.h>
 #include <cpprest/http_client.h>
 #include <nlohmann/json.hpp>
+#include <jjwtid/DpopHost.h>
 #include "DataDirectory.h"
 #include "Guard.h"
 #include "win32/w32strings.h"
@@ -261,90 +262,155 @@ void ConnectDialog::OnConnect(wxCommandEvent &) {
             if (findCode != queryMap.end()) {
                 try {
                     auto authorizationCode = findCode->second;
+                    DpopHost dpopHost{};
                     OidcTokenRequest tokenRequest{helseidUrl.ToStdString(), helseidClientId.ToStdString(),
                                                      helseidSecretJwk.ToStdString(),
                                                      helseidLoginDialog.GetRedirectUri(), authorizationCode,
                                                      helseidLoginDialog.GetScopes(),
                                                      helseidLoginDialog.GetVerification()};
                     auto firstTokenRequest = tokenRequest.GetTokenRequest();
-                    web::http::client::http_client client{as_wstring_on_win32(helseidUrl.ToStdString())};
+                    auto reqUrl = helseidUrl.ToStdString();
+                    web::http::client::http_client client{as_wstring_on_win32(reqUrl)};
                     web::http::http_request req{web::http::methods::POST};
+                    reqUrl.append("/connect/token");
+                    auto dpop = dpopHost.Generate("POST", reqUrl);
+                    std::cout << "DPoP: " << dpop << "\n";
+                    req.headers().add(as_wstring_on_win32("DPoP"), as_wstring_on_win32(dpop));
                     req.set_request_uri(as_wstring_on_win32("/connect/token"));
+                    std::string rqBody{};
                     {
-                        std::string rqBody{};
-                        {
-                            std::stringstream sstr{};
-                            auto iterator = firstTokenRequest.params.begin();
-                            if (iterator != firstTokenRequest.params.end()) {
-                                const auto &param = *iterator;
-                                sstr << from_wstring_on_win32(web::uri::encode_data_string(as_wstring_on_win32(param.first))) << "=";
-                                sstr << from_wstring_on_win32(web::uri::encode_data_string(as_wstring_on_win32(param.second)));
-                                ++iterator;
-                            }
-                            while (iterator != firstTokenRequest.params.end()) {
-                                const auto &param = *iterator;
-                                sstr << "&" << from_wstring_on_win32(web::uri::encode_data_string(as_wstring_on_win32(param.first))) << "=";
-                                sstr << from_wstring_on_win32(web::uri::encode_data_string(as_wstring_on_win32(param.second)));
-                                ++iterator;
-                            }
-                            rqBody = sstr.str();
+                        std::stringstream sstr{};
+                        auto iterator = firstTokenRequest.params.begin();
+                        if (iterator != firstTokenRequest.params.end()) {
+                            const auto &param = *iterator;
+                            sstr << from_wstring_on_win32(web::uri::encode_data_string(as_wstring_on_win32(param.first))) << "=";
+                            sstr << from_wstring_on_win32(web::uri::encode_data_string(as_wstring_on_win32(param.second)));
+                            ++iterator;
                         }
-                        std::cout << rqBody << "\n";
-                        req.set_body(rqBody, "application/x-www-form-urlencoded; charset=utf-8");
+                        while (iterator != firstTokenRequest.params.end()) {
+                            const auto &param = *iterator;
+                            sstr << "&" << from_wstring_on_win32(web::uri::encode_data_string(as_wstring_on_win32(param.first))) << "=";
+                            sstr << from_wstring_on_win32(web::uri::encode_data_string(as_wstring_on_win32(param.second)));
+                            ++iterator;
+                        }
+                        rqBody = sstr.str();
                     }
+                    std::cout << rqBody << "\n";
+                    req.set_body(rqBody, "application/x-www-form-urlencoded; charset=utf-8");
                     auto respTask = client.request(req);
                     auto frameWeakRefDispatcher = frame->GetWeakRefDispatcher();
                     auto helseidScopes = helseidLoginDialog.GetScopes();
-                    respTask.then([frameWeakRefDispatcher, helseidUrl, helseidClientId, helseidSecretJwk, helseidScopes, journalId, orgNo, childOrgNo](const pplx::task<web::http::http_response> &task) {
+                    respTask.then([frameWeakRefDispatcher, helseidUrl, helseidClientId, helseidSecretJwk, helseidScopes, journalId, orgNo, childOrgNo, dpopHost, rqBody](const pplx::task<web::http::http_response> &task) mutable {
                         try {
                             auto response = task.get();
-                            if ((response.status_code() / 100) == 2) {
-                                response.extract_json().then([frameWeakRefDispatcher, helseidUrl, helseidClientId, helseidSecretJwk, helseidScopes, journalId, orgNo, childOrgNo](const pplx::task<web::json::value> &jsonTask) {
-                                    try {
-                                        auto json = jsonTask.get();
-                                        if (json.has_string_field(as_wstring_on_win32("refresh_token")) && json.has_number_field(as_wstring_on_win32("rt_expires_in"))) {
-                                            std::string refresh_token = from_wstring_on_win32(json.at(as_wstring_on_win32("refresh_token")).as_string());
-                                            long rt_expires = json.at(as_wstring_on_win32("rt_expires_in")).as_number().to_int64();
-                                            std::string id_token = from_wstring_on_win32(json.at(as_wstring_on_win32("id_token")).as_string());
-                                            std::cout << "Refresh token: " << refresh_token << "\n";
-                                            std::cout << "Expires: " << rt_expires << "\n";
-                                            wxTheApp->GetTopWindow()->GetEventHandler()->CallAfter([frameWeakRefDispatcher, helseidUrl, helseidClientId, helseidSecretJwk, helseidScopes, refresh_token, rt_expires, id_token, journalId, orgNo, childOrgNo]() {
-                                                frameWeakRefDispatcher.Invoke([helseidUrl, helseidClientId, helseidSecretJwk, helseidScopes, refresh_token, rt_expires, id_token, journalId, orgNo, childOrgNo] (TheMasterFrame *frame) {
-                                                    frame->SetHelseid(helseidUrl.ToStdString(), helseidClientId.ToStdString(), helseidSecretJwk.ToStdString(), helseidScopes, refresh_token, rt_expires, id_token, journalId.ToStdString(), orgNo.ToStdString(), childOrgNo.ToStdString());
-                                                });
+                            auto tokenRecvFunc = [frameWeakRefDispatcher, helseidUrl, helseidClientId, helseidSecretJwk, helseidScopes, journalId, orgNo, childOrgNo, dpopHost](const pplx::task<web::json::value> &jsonTask, const std::string &dpopNonce) mutable {
+                                try {
+                                    auto json = jsonTask.get();
+                                    if (json.has_string_field(as_wstring_on_win32("refresh_token")) && json.has_number_field(as_wstring_on_win32("rt_expires_in"))) {
+                                        std::string refresh_token = from_wstring_on_win32(json.at(as_wstring_on_win32("refresh_token")).as_string());
+                                        long rt_expires = json.at(as_wstring_on_win32("rt_expires_in")).as_number().to_int64();
+                                        std::string id_token = from_wstring_on_win32(json.at(as_wstring_on_win32("id_token")).as_string());
+                                        std::cout << "Refresh token: " << refresh_token << "\n";
+                                        std::cout << "Expires: " << rt_expires << "\n";
+                                        wxTheApp->GetTopWindow()->GetEventHandler()->CallAfter([frameWeakRefDispatcher, helseidUrl, helseidClientId, helseidSecretJwk, helseidScopes, refresh_token, rt_expires, id_token, journalId, orgNo, childOrgNo, dpopHost, dpopNonce]() {
+                                            frameWeakRefDispatcher.Invoke([helseidUrl, helseidClientId, helseidSecretJwk, helseidScopes, refresh_token, rt_expires, id_token, journalId, orgNo, childOrgNo, dpopHost, dpopNonce] (TheMasterFrame *frame) {
+                                                frame->SetHelseid(helseidUrl.ToStdString(), helseidClientId.ToStdString(), helseidSecretJwk.ToStdString(), helseidScopes, refresh_token, rt_expires, id_token, journalId.ToStdString(), orgNo.ToStdString(), childOrgNo.ToStdString(), dpopHost, dpopNonce);
                                             });
-                                        } else {
-                                            std::cout << json.serialize() << "\n";
-                                            std::cerr << "Missing refresh_token and rt_expires\n";
-                                            wxTheApp->GetTopWindow()->GetEventHandler()->CallAfter([]() {
-                                                wxMessageBox(
-                                                        wxT("HelseID did not issue a refresh token"),
-                                                        wxT("HelseID failed"), wxOK | wxICON_ERROR);
-                                            });
-                                        }
-                                    } catch (...) {
+                                        });
+                                    } else {
+                                        std::cout << json.serialize() << "\n";
+                                        std::cerr << "Missing refresh_token and rt_expires\n";
                                         wxTheApp->GetTopWindow()->GetEventHandler()->CallAfter([]() {
                                             wxMessageBox(
-                                                    wxT("HelseID token request failed with json error, or no json response"),
+                                                    wxT("HelseID did not issue a refresh token"),
                                                     wxT("HelseID failed"), wxOK | wxICON_ERROR);
                                         });
                                     }
-                                });
+                                } catch (...) {
+                                    wxTheApp->GetTopWindow()->GetEventHandler()->CallAfter([]() {
+                                        wxMessageBox(
+                                                wxT("HelseID token request failed with json error, or no json response"),
+                                                wxT("HelseID failed"), wxOK | wxICON_ERROR);
+                                    });
+                                }
+                            };
+                            if ((response.status_code() / 100) == 2) {
+                                response.extract_json().then([tokenRecvFunc] (const pplx::task<web::json::value> &json) mutable { tokenRecvFunc(json, ""); });
                             } else {
-                                std::cerr << "HTTP error " << response.status_code() << "\n";
-                                typedef decltype(response.extract_string()) task_string_type;
-                                response.extract_string().then([] (const task_string_type &t) {
-                                    try {
-                                        auto str = from_wstring_on_win32(t.get());
-                                        std::cerr << str << "\n";
-                                    } catch (...) {
-                                        std::cerr << "Unable to retrieve error string\n";
+                                std::string dpopNonce{};
+                                {
+                                    auto headers = response.headers();
+                                    for (const auto &header: headers) {
+                                        auto name = header.first;
+                                        std::transform(name.cbegin(), name.cend(), name.begin(),
+                                                       [](char ch) { return std::tolower(ch); });
+                                        if (name == "dpop-nonce") {
+                                            dpopNonce = header.second;
+                                        }
                                     }
-                                });
-                                wxTheApp->GetTopWindow()->GetEventHandler()->CallAfter([]() {
-                                    wxMessageBox(wxT("HelseID token request failed with error code"),
-                                                 wxT("HelseID failed"), wxOK | wxICON_ERROR);
-                                });
+                                }
+                                if (!dpopNonce.empty()) {
+                                    std::cout << "DPoP nonce: " << dpopNonce << "\n";
+                                    auto reqUrl = helseidUrl.ToStdString();
+                                    web::http::client::http_client client{as_wstring_on_win32(reqUrl)};
+                                    web::http::http_request req{web::http::methods::POST};
+                                    reqUrl.append("/connect/token");
+                                    auto dpop = dpopHost.Generate("POST", reqUrl, "", dpopNonce);
+                                    std::cout << "DPoP: " << dpop << "\n";
+                                    req.headers().add(as_wstring_on_win32("DPoP"), as_wstring_on_win32(dpop));
+                                    req.set_request_uri(as_wstring_on_win32("/connect/token"));
+                                    req.set_body(rqBody, "application/x-www-form-urlencoded; charset=utf-8");
+                                    auto respTask = client.request(req);
+                                    respTask.then([frameWeakRefDispatcher, helseidUrl, helseidClientId, helseidSecretJwk, helseidScopes, journalId, orgNo, childOrgNo, dpopHost, dpopNonce, tokenRecvFunc](const pplx::task<web::http::http_response> &task) {
+                                        try {
+                                            auto response = task.get();
+                                            if ((response.status_code() / 100) == 2) {
+                                                response.extract_json().then([tokenRecvFunc, dpopNonce] (const pplx::task<web::json::value> &json) mutable { tokenRecvFunc(json, dpopNonce); });
+                                            } else {
+                                                std::cerr << "HTTP error " << response.status_code() << "\n";
+                                                typedef decltype(response.extract_string()) task_string_type;
+                                                response.extract_string().then([](const task_string_type &t) {
+                                                    try {
+                                                        auto str = from_wstring_on_win32(t.get());
+                                                        std::cerr << str << "\n";
+                                                    } catch (...) {
+                                                        std::cerr << "Unable to retrieve error string\n";
+                                                    }
+                                                });
+                                                wxTheApp->GetTopWindow()->GetEventHandler()->CallAfter([]() {
+                                                    wxMessageBox(wxT("HelseID token request failed with error code"),
+                                                                 wxT("HelseID failed"), wxOK | wxICON_ERROR);
+                                                });
+                                            }
+                                        } catch (std::exception &e) {
+                                            std::string error{e.what()};
+                                            wxTheApp->GetTopWindow()->GetEventHandler()->CallAfter([error]() {
+                                                wxMessageBox(error, wxT("HelseID request error exception"),
+                                                             wxOK | wxICON_ERROR);
+                                            });
+                                        } catch (...) {
+                                            wxTheApp->GetTopWindow()->GetEventHandler()->CallAfter([]() {
+                                                wxMessageBox(wxT("HelseID token request failed"), wxT("HelseID failed"),
+                                                             wxOK | wxICON_ERROR);
+                                            });
+                                        }
+                                    });
+                                } else {
+                                    std::cerr << "HTTP error " << response.status_code() << "\n";
+                                    typedef decltype(response.extract_string()) task_string_type;
+                                    response.extract_string().then([](const task_string_type &t) {
+                                        try {
+                                            auto str = from_wstring_on_win32(t.get());
+                                            std::cerr << str << "\n";
+                                        } catch (...) {
+                                            std::cerr << "Unable to retrieve error string\n";
+                                        }
+                                    });
+                                    wxTheApp->GetTopWindow()->GetEventHandler()->CallAfter([]() {
+                                        wxMessageBox(wxT("HelseID token request failed with error code"),
+                                                     wxT("HelseID failed"), wxOK | wxICON_ERROR);
+                                    });
+                                }
                             }
                         } catch (std::exception &e) {
                             std::string error{e.what()};

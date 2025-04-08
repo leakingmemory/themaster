@@ -9,6 +9,7 @@
 #include <memory>
 #include <ctime>
 #include <map>
+#include <jjwtid/DpopHost.h>
 #include "WeakRefUiDispatcher.h"
 #include "PrescriptionData.h"
 #include "MerchData.h"
@@ -68,6 +69,8 @@ private:
     std::string orgNo{};
     std::string childOrgNo{};
     std::shared_ptr<std::string> accessToken{};
+    DpopHost dpopHost;
+    std::string helseidDpopNonce{};
     wxComboBox *kjConsentSelect;
     wxComboBox *kjLockedConsentSelect;
     wxComboBox *kjBarredConsentSelect;
@@ -125,7 +128,7 @@ public:
     void OnPrescribeMerch(wxCommandEvent &e);
     void OnPrescribeNourishment(wxCommandEvent &e);
     WeakRefUiDispatcherRef<TheMasterFrame> GetWeakRefDispatcher();
-    void SetHelseid(const std::string &url, const std::string &clientId, const std::string &secretJwk, const std::vector<std::string> &scopes, const std::string &refreshToken, long expiresIn, const std::string &idToken, const std::string &journalId, const std::string &orgNo, const std::string &childOrgNo);
+    void SetHelseid(const std::string &url, const std::string &clientId, const std::string &secretJwk, const std::vector<std::string> &scopes, const std::string &refreshToken, long expiresIn, const std::string &idToken, const std::string &journalId, const std::string &orgNo, const std::string &childOrgNo, const DpopHost &dpopHost, const std::string &helseidDpopNonce);
     void Connect(const std::string &url);
     void OnUpdateFest(wxCommandEvent &e);
     void OnShowFestVersions(wxCommandEvent &e);
