@@ -486,6 +486,24 @@ FestUuid FestDb::GetLegemiddelpakningId(const PLegemiddelpakning &ppakning) cons
     return festDeserializer->Unpack(ppakning.GetId());
 }
 
+std::vector<FestUuid> FestDb::GetSortertVirkestoffMedStyrke(const PLegemiddel &pLegemiddel) const {
+    auto rawList = festDeserializer->GetSortertVirkestoffMedStyrke(pLegemiddel);
+    std::vector<FestUuid> ids{};
+    for (const auto &pId : rawList) {
+        ids.push_back(festDeserializer->Unpack(pId));
+    }
+    return ids;
+}
+
+std::vector<FestUuid> FestDb::GetSortertVirkestoffUtenStyrke(const PLegemiddelMerkevare &pLegemiddelMerkevare) const {
+    auto rawList = festDeserializer->GetSortertVirkestoffUtenStyrke(pLegemiddelMerkevare);
+    std::vector<FestUuid> ids{};
+    for (const auto &pId : rawList) {
+        ids.push_back(festDeserializer->Unpack(pId));
+    }
+    return ids;
+}
+
 std::vector<OppfRefusjon> FestDb::GetOppfRefusjon(const std::string &festVersion) const {
     std::vector<OppfRefusjon> oppfs{};
     {

@@ -11,6 +11,7 @@
 #include "AdvancedDosingPeriod.h"
 #include "SfmMedicamentMapper.h"
 #include "MedicamentRefund.h"
+#include <medfest/Struct/Decoded/LegemiddelCore.h>
 #include <memory>
 #include <functional>
 
@@ -62,9 +63,20 @@ template <class T> concept MedicamentMapper = requires (const T &obj) {
     {obj.IsPackage()} -> std::convertible_to<bool>;
 };
 
+struct MedicationAlternativeInfo {
+    std::unique_ptr<SfmMedicamentMapper> mapper;
+    std::shared_ptr<LegemiddelCore> legemiddelCore;
+    MedicationAlternativeInfo() = default;
+    MedicationAlternativeInfo(const std::shared_ptr<FestDb> &festDb, const std::shared_ptr<LegemiddelCore> &legemiddelCore) : mapper(std::make_unique<SfmMedicamentMapper>(festDb, legemiddelCore)), legemiddelCore(legemiddelCore) {}
+    MedicationAlternativeInfo(const std::shared_ptr<FestDb> &festDb, const LegemiddelCore &legemiddelCore) : MedicationAlternativeInfo(festDb, std::make_shared<LegemiddelCore>(legemiddelCore)) {}
+};
+
 class PrescriptionDialog : public wxDialog {
 private:
     PrescriptionData prescriptionData{};
+    wxStaticText *medicationDisplayName;
+    wxButton *changeMedication;
+    wxNotebook *mainNotebook;
     wxButton *proceedButton;
     wxRadioBox *typeSelection;
     wxRadioBox *useSelection;
@@ -75,6 +87,8 @@ private:
     wxComboBox *dosingPeriodsDosingUnitCtrl;
     wxListView *dosingPeriodsView;
     wxNotebook *packageAmountNotebook{nullptr};
+    bool hasPackage{false};
+    bool hasAmount{false};
     wxComboBox *selectPackage{nullptr};
     wxSpinCtrlDouble *numberOfPackagesCtrl{nullptr};
     wxSpinCtrlDouble *amountCtrl{nullptr};
@@ -89,8 +103,11 @@ private:
     wxDatePickerCtrl *expirationDate{};
     wxCheckBox *ceaseDateSet{};
     wxDatePickerCtrl *ceaseDate{};
+    wxListView *altMedListView;
+    wxButton *changeMedicationAccept{};
     std::shared_ptr<FestDb> festDb;
     std::shared_ptr<FhirMedication> medication;
+    std::vector<std::shared_ptr<MedicationAlternativeInfo>> medicationAlternatives{};
     std::vector<MedicamentPackage> packages;
     std::vector<MedicamentRefund> refunds;
     std::vector<MedicamentRefund> displayedRefunds{};
@@ -110,6 +127,7 @@ private:
     template <MedicamentMapper Mapper> PrescriptionDialog(TheMasterFrame *, const std::shared_ptr<FestDb> &festDb, const LegemiddelCore &, const std::vector<MedicalCodedValue> &dosingUnit, const std::vector<MedicalCodedValue> &kortdoser, const Mapper &);
 public:
     PrescriptionDialog(TheMasterFrame *, const std::shared_ptr<FestDb> &festDb, const std::shared_ptr<LegemiddelCore> &);
+    void SwitchMed(const LegemiddelCore &legemiddelCore, const SfmMedicamentMapper &mapper);
     PrescriptionDialog(TheMasterFrame *, const std::shared_ptr<FhirMedication> &magistralMedication, const std::vector<MedicamentRefund> &);
     PrescriptionDialog & operator += (const PrescriptionData &);
     void OnCancel(wxCommandEvent &e);
@@ -123,6 +141,7 @@ private:
     void OnPotentiallyModifiedPackageSelecion();
     void OnPotentiallyModifiedRefundSelection();
 public:
+    void OnChangeMedication(wxCommandEvent &e);
     void OnModified(wxCommandEvent &e);
     void OnModifiedPackageSelection(wxCommandEvent &e);
     void OnModifiedRefundSelection(wxCommandEvent &e);
@@ -137,6 +156,8 @@ public:
     void OnMoveUp(wxCommandEvent &e);
     void OnMoveDown(wxCommandEvent &e);
     void OnDeleteDosingPeriod(wxCommandEvent &e);
+    void OnAltMedSelectChange(wxCommandEvent &e);
+    void OnAltMed(wxCommandEvent &e);
     [[nodiscard]] PrescriptionData GetPrescriptionData() const {
         return prescriptionData;
     }

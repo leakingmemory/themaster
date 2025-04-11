@@ -10,6 +10,7 @@
 #include <medfest/Struct/Packed/FestUuid.h>
 #include <boost/uuid/uuid_generators.hpp> // for random_generator
 #include <boost/uuid/uuid_io.hpp> // for to_string
+#include <medfest/Struct/Decoded/VirkestoffMedStyrke.h>
 #include "DateOnly.h"
 #include "GetLegemiddelRefunds.h"
 
@@ -160,6 +161,16 @@ void SfmMedicamentMapper::Map(const LegemiddelMerkevare &legemiddelMerkevare) {
         medicationDetails->AddExtension(std::make_shared<FhirValueExtension>("name", std::make_shared<FhirString>(legemiddelMerkevare.GetNavnFormStyrke())));
         medication.AddExtension(medicationDetails);
     }
+    for (const auto &ref : legemiddelMerkevare.GetSortertVirkestoffUtenStyrke()) {
+        substances.emplace_back(ref);
+    }
+    for (const auto &refWS : legemiddelMerkevare.GetSortertVirkestoffMedStyrke()) {
+        auto substance = festDb->GetVirkestoffMedStyrke(FestUuid(refWS));
+        auto substanceId = substance.GetRefVirkestoff();
+        if (!substanceId.empty() && std::find(substances.cbegin(), substances.cend(), substanceId) == substances.cend()) {
+            substances.emplace_back(substanceId);
+        }
+    }
 }
 
 void SfmMedicamentMapper::Map(const LegemiddelVirkestoff &legemiddelVirkestoff) {
@@ -215,6 +226,12 @@ void SfmMedicamentMapper::Map(const LegemiddelVirkestoff &legemiddelVirkestoff) 
                     }
                 }
             }
+        }
+    }
+    for (const auto &refWS : legemiddelVirkestoff.GetSortertVirkestoffMedStyrke()) {
+        auto substance = festDb->GetVirkestoffMedStyrke(FestUuid(refWS));
+        if (!substance.GetRefVirkestoff().empty()) {
+            substances.emplace_back(substance.GetRefVirkestoff());
         }
     }
 }
@@ -283,6 +300,18 @@ void SfmMedicamentMapper::Map(const Legemiddelpakning &legemiddelpakning) {
                     if (std::find_if(medicamentUses.cbegin(), medicamentUses.cend(), [code] (const MedicalCodedValue &cv) { return cv.GetCode() == code; }) == medicamentUses.cend()) {
                         medicamentUses.emplace_back(use.GetCodeSet(), code, use.GetDistinguishedName(), use.GetDistinguishedName());
                     }
+                }
+            }
+            for (const auto &ref : merkevare.GetSortertVirkestoffUtenStyrke()) {
+                if (std::find(substances.cbegin(), substances.cend(), ref) == substances.cend()) {
+                    substances.emplace_back(ref);
+                }
+            }
+            for (const auto &refWS : merkevare.GetSortertVirkestoffMedStyrke()) {
+                auto substance = festDb->GetVirkestoffMedStyrke(FestUuid(refWS));
+                auto substanceId = substance.GetRefVirkestoff();
+                if (!substanceId.empty() && std::find(substances.cbegin(), substances.cend(), substanceId) == substances.cend()) {
+                    substances.emplace_back(substanceId);
                 }
             }
         }

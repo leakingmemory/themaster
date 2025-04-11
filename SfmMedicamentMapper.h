@@ -35,6 +35,7 @@ private:
     std::vector<MedicalCodedValue> medicamentUses{};
     std::vector<PrescriptionValidity> prescriptionValidity{};
     std::vector<MedicamentRefund> medicamentRefunds{};
+    std::vector<std::string> substances{};
     std::string packageDescription{};
     std::shared_ptr<FestDb> festDb;
     bool isPackage{false};
@@ -81,6 +82,9 @@ public:
     }
     [[nodiscard]] constexpr std::string GetPackageDescription() const {
         return packageDescription;
+    }
+    [[nodiscard]] constexpr std::vector<std::string> GetSubstanceIds() const {
+        return substances;
     }
 };
 

@@ -27,6 +27,7 @@ class POppfLegemiddelpakning;
 class PLegemiddelMerkevare;
 class PLegemiddelpakning;
 class PLegemiddelVirkestoff;
+class PLegemiddel;
 class PReseptgyldighet;
 class OppfRefusjon;
 class OppfLegemiddelMerkevare;
@@ -91,6 +92,8 @@ public:
     std::vector<FestUuid> GetRefMerkevare(const PLegemiddelVirkestoff &) const;
     std::vector<FestUuid> GetRefMerkevare(const PLegemiddelpakning &) const;
     FestUuid GetLegemiddelpakningId(const PLegemiddelpakning &) const;
+    std::vector<FestUuid> GetSortertVirkestoffMedStyrke(const PLegemiddel &) const;
+    std::vector<FestUuid> GetSortertVirkestoffUtenStyrke(const PLegemiddelMerkevare &) const;
     [[nodiscard]] std::vector<OppfRefusjon> GetOppfRefusjon(const std::string &festVersion) const;
     [[nodiscard]] std::vector<OppfLegemiddelMerkevare> GetOppfLegemiddelMerkevare(const std::string &festVersion) const;
     [[nodiscard]] std::vector<OppfLegemiddelVirkestoff> GetOppfLegemiddelVirkestoff(const std::string &festVersion) const;

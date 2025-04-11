@@ -15,6 +15,7 @@
 #include <iomanip>
 #include <sstream>
 #include <medfest/Struct/Decoded/OppfKodeverk.h>
+#include <medfest/Struct/Packed/POppfLegemiddelVirkestoff.h>
 #include <array>
 
 #include "DateTime.h"
@@ -39,12 +40,18 @@ NumPackagesSizers PrescriptionDialog::CreateNumPackages(wxWindow *parent) {
         }
         sizers.packageSelectorSizer->Add(packageSelectorLabel, 0, wxEXPAND | wxALL, 5);
         sizers.packageSelectorSizer->Add(selectPackage, 1, wxEXPAND | wxALL, 5);
+    } else {
+        selectPackage = nullptr;
     }
     sizers.numPackagesSizer = new wxBoxSizer(wxHORIZONTAL);
     auto *numPackagesLabel = new wxStaticText(parent, wxID_ANY, wxT("Num packages:"));
     numberOfPackagesCtrl = new wxSpinCtrlDouble(parent, wxID_ANY);
     sizers.numPackagesSizer->Add(numPackagesLabel, 0, wxEXPAND | wxALL, 5);
     sizers.numPackagesSizer->Add(numberOfPackagesCtrl, 1, wxEXPAND | wxALL, 5);
+    if (selectPackage != nullptr) {
+        selectPackage->Bind(wxEVT_COMBOBOX, &PrescriptionDialog::OnModifiedPackageSelection, this);
+    }
+    numberOfPackagesCtrl->Bind(wxEVT_SPINCTRLDOUBLE, &PrescriptionDialog::OnModified, this);
     return sizers;
 }
 
@@ -63,6 +70,8 @@ wxBoxSizer *PrescriptionDialog::CreateAmount(wxWindow *parent) {
     amountSizer->Add(amountLabel, 0, wxEXPAND | wxALL, 5);
     amountSizer->Add(amountCtrl, 1, wxEXPAND | wxALL, 5);
     amountSizer->Add(amountUnitCtrl, 1, wxEXPAND | wxALL, 5);
+    amountCtrl->Bind(wxEVT_SPINCTRLDOUBLE, &PrescriptionDialog::OnModified, this);
+    amountUnitCtrl->Bind(wxEVT_SPINCTRLDOUBLE, &PrescriptionDialog::OnModified, this);
     return amountSizer;
 }
 
@@ -94,18 +103,90 @@ template <MedicamentMapperWithGetPackages MedicamentMapperType> struct GetPackag
     }
 };
 
+template <class T> concept MedicamentMapperWithGetSubstanceIds = requires (const T &mapper) {
+    {mapper.GetSubstanceIds()} -> std::convertible_to<std::vector<std::string>>;
+};
+
+template <class MapperT> struct GetAlternativesFromFest {
+    constexpr GetAlternativesFromFest(const std::shared_ptr<FestDb> &festDb, const MapperT &) {
+    }
+    constexpr operator std::vector<std::shared_ptr<MedicationAlternativeInfo>> () const {
+        return {};
+    }
+};
+
+template <MedicamentMapperWithGetSubstanceIds SubstanceMapper> struct GetAlternativesFromFest<SubstanceMapper> {
+    std::vector<std::shared_ptr<MedicationAlternativeInfo>> medication;
+    constexpr GetAlternativesFromFest(const std::shared_ptr<FestDb> &festDb, const SubstanceMapper &mapper) {
+        std::vector<POppfLegemiddelVirkestoff> pLVirkestoff{};
+        for (const auto &substanceIdStr : mapper.GetSubstanceIds()) {
+            FestUuid substanceId{substanceIdStr};
+            for (const auto &pLegemiddelVirkestoff : festDb->GetAllPLegemiddelVirkestoff()) {
+                bool found{false};
+                for (const auto &pL : pLVirkestoff) {
+                    if (pL.GetId() == pLegemiddelVirkestoff.GetId()) {
+                        found = true;
+                        break;
+                    }
+                }
+                if (found) {
+                    continue;
+                }
+                auto pLVRefs = festDb->GetSortertVirkestoffMedStyrke(pLegemiddelVirkestoff);
+                std::transform(pLVRefs.cbegin(), pLVRefs.cend(), pLVRefs.begin(), [&festDb] (const FestUuid &medStyrke) {
+                    return festDb->GetVirkestoffForVirkestoffMedStyrkeId(medStyrke);
+                });
+                found = false;
+                for (const auto pRef : pLVRefs) {
+                    if (pRef == substanceId) {
+                        found = true;
+                        break;
+                    }
+                }
+                if (!found) {
+                    continue;
+                }
+                pLVirkestoff.emplace_back(pLegemiddelVirkestoff);
+            }
+        }
+        for (const auto &pLVirkestoff : pLVirkestoff) {
+            auto legemiddelVirkestoff = std::make_shared<LegemiddelVirkestoff>(festDb->GetLegemiddelVirkestoff(pLVirkestoff));
+            std::shared_ptr<MedicationAlternativeInfo> info = std::make_shared<MedicationAlternativeInfo>(festDb, legemiddelVirkestoff);
+            medication.emplace_back(std::move(info));
+        }
+    }
+    constexpr operator std::vector<std::shared_ptr<MedicationAlternativeInfo>> () const {
+        return medication;
+    }
+};
+
 template <MedicamentMapper Mapper> PrescriptionDialog::PrescriptionDialog(TheMasterFrame *frame, const std::shared_ptr<FestDb> &festDb, const LegemiddelCore &legemiddelCore, const std::vector<MedicalCodedValue> &dosingUnit, const std::vector<MedicalCodedValue> &kortdoser, const Mapper &medicamentMapper) : wxDialog(frame, wxID_ANY, wxT("Prescription")), festDb(festDb), medication(std::make_shared<FhirMedication>(medicamentMapper.GetMedication())), amountUnit(medicamentMapper.GetPrescriptionUnit()), packages(GetPackages(medicamentMapper).operator std::vector<MedicamentPackage>()), refunds(medicamentMapper.GetMedicamentRefunds()), dosingUnit(dosingUnit), kortdoser(kortdoser), medicamentUses(medicamentMapper.GetMedicamentUses()), prescriptionValidity(medicamentMapper.GetPrescriptionValidity()) {
+    {
+        for (const auto &medicament : GetAlternativesFromFest(festDb, medicamentMapper).operator std::vector<std::shared_ptr<MedicationAlternativeInfo>>()) {
+            medicationAlternatives.emplace_back(medicament);
+        }
+    }
     DateOnly startDate = DateOnly::Today();
     DateOnly endDate = startDate;
     endDate.AddYears(1);
-    auto *vSizer = new wxBoxSizer(wxVERTICAL);
+    auto *mvSizer = new wxBoxSizer(wxVERTICAL);
+    auto *medBarSizer = new wxBoxSizer(wxHORIZONTAL);
+    medBarSizer->Add(new wxStaticText(this, wxID_ANY, wxT("Medication: ")), 0, wxALL | wxEXPAND, 5);
+    medicationDisplayName = new wxStaticText(this, wxID_ANY, medication ? wxString::FromUTF8(medication->GetDisplay()) : wxT(""));
+    medBarSizer->Add(medicationDisplayName, 1, wxALL | wxEXPAND, 5);
+    changeMedication = new wxButton(this, wxID_ANY, wxT("Change medication"));
+    changeMedication->Enable(medicationAlternatives.size() > 1);
+    medBarSizer->Add(changeMedication, 0, wxALL | wxEXPAND, 5);
+    mvSizer->Add(medBarSizer, 0, wxEXPAND | wxALL, 5);
+    mainNotebook = new wxNotebook(this, wxID_ANY, wxDefaultPosition, wxDefaultSize, wxNB_TOP);
+    auto *mainPanel = new wxPanel(mainNotebook, wxID_ANY);
     auto *hzSizer = new wxBoxSizer(wxHORIZONTAL);
     {
         auto *sizer = new wxBoxSizer(wxVERTICAL);
         wxArrayString typeSelectionChoices{};
         typeSelectionChoices.Add(wxT("E-prescription"));
         typeSelectionChoices.Add(wxT("PLL-entry"));
-        typeSelection = new wxRadioBox(this, wxID_ANY, wxT("Record type:"), wxDefaultPosition, wxDefaultSize,
+        typeSelection = new wxRadioBox(mainPanel, wxID_ANY, wxT("Record type:"), wxDefaultPosition, wxDefaultSize,
                                        typeSelectionChoices, typeSelectionChoices.size(), wxRA_HORIZONTAL);
         wxArrayString useSelectionChoices{};
         useSelectionChoices.Add(wxT("Permanent"));
@@ -113,7 +194,7 @@ template <MedicamentMapper Mapper> PrescriptionDialog::PrescriptionDialog(TheMas
         useSelectionChoices.Add(wxT("Cure"));
         useSelectionChoices.Add(wxT("Vaccine"));
         useSelectionChoices.Add(wxT("Nutrition"));
-        useSelection = new wxRadioBox(this, wxID_ANY, wxT("Use:"), wxDefaultPosition, wxDefaultSize,
+        useSelection = new wxRadioBox(mainPanel, wxID_ANY, wxT("Use:"), wxDefaultPosition, wxDefaultSize,
                                       useSelectionChoices, useSelectionChoices.size(), wxRA_HORIZONTAL);
         auto medicamentType = medicamentMapper.GetMedicamentType();
         if (!medicamentType.empty()) {
@@ -128,49 +209,49 @@ template <MedicamentMapper Mapper> PrescriptionDialog::PrescriptionDialog(TheMas
         wxBoxSizer *packageSelectorSizer = nullptr;
         wxBoxSizer *numPackagesSizer = nullptr;
         wxBoxSizer *amountSizer = nullptr;
-        if (!medicamentMapper.IsPackage() && !packages.empty()) {
-            packageAmountNotebook = new wxNotebook(this, wxID_ANY, wxDefaultPosition, wxDefaultSize, wxNB_TOP);
+        packageAmountNotebook = new wxNotebook(mainPanel, wxID_ANY, wxDefaultPosition, wxDefaultSize, wxNB_TOP);
+        hasPackage = medicamentMapper.IsPackage() || !packages.empty();
+        if (hasPackage) {
             auto packagesPage = new wxPanel(packageAmountNotebook, wxID_ANY);
             {
                 auto sizers = CreateNumPackages(packagesPage);
                 auto *pageSizer = new wxBoxSizer(wxVERTICAL);
-                pageSizer->Add(sizers.packageSelectorSizer, 0, wxEXPAND | wxALL, 5);
+                if (sizers.packageSelectorSizer != nullptr) {
+                    pageSizer->Add(sizers.packageSelectorSizer, 0, wxEXPAND | wxALL, 5);
+                }
                 pageSizer->Add(sizers.numPackagesSizer, 0, wxEXPAND | wxALL, 5);
                 packagesPage->SetSizerAndFit(pageSizer);
             }
             packageAmountNotebook->AddPage(packagesPage, wxT("Package"));
+        }
+        hasAmount = !medicamentMapper.IsPackage();
+        if (hasAmount) {
             auto amountPage = new wxPanel(packageAmountNotebook, wxID_ANY);
             {
                 auto *sizer = CreateAmount(amountPage);
                 amountPage->SetSizerAndFit(sizer);
             }
             packageAmountNotebook->AddPage(amountPage, wxT("Amount"));
-        } else if (medicamentMapper.IsPackage() || !packages.empty()) {
-            auto sizers = CreateNumPackages(this);
-            packageSelectorSizer = sizers.packageSelectorSizer;
-            numPackagesSizer = sizers.numPackagesSizer;
-        } else {
-            amountSizer = CreateAmount(this);
         }
         auto *refundSizer = new wxBoxSizer(wxHORIZONTAL);
-        auto *refundLabel = new wxStaticText(this, wxID_ANY, wxT("Refund:"));
+        auto *refundLabel = new wxStaticText(mainPanel, wxID_ANY, wxT("Refund:"));
         refundSizer->Add(refundLabel, 0, wxEXPAND | wxALL, 5);
-        refundSelection = new wxComboBox(this, wxID_ANY);
+        refundSelection = new wxComboBox(mainPanel, wxID_ANY);
         refundSelection->SetEditable(false);
         refundSizer->Add(refundSelection);
-        auto *refundCodeLabel = new wxStaticText(this, wxID_ANY, wxT("Code:"));
+        auto *refundCodeLabel = new wxStaticText(mainPanel, wxID_ANY, wxT("Code:"));
         refundSizer->Add(refundCodeLabel, 1, wxEXPAND | wxALL, 5);
-        refundCodeSelection = new ComboSearchControl(this, wxID_ANY);
+        refundCodeSelection = new ComboSearchControl(mainPanel, wxID_ANY);
         refundCodeSelection->SetEditable(true);
         refundSizer->Add(refundCodeSelection, 1, wxEXPAND | wxALL, 5);
         auto *reitSizer = new wxBoxSizer(wxHORIZONTAL);
-        auto *reitLabel = new wxStaticText(this, wxID_ANY, wxT("Reit:"));
-        reitCtrl = new wxSpinCtrl(this, wxID_ANY);
+        auto *reitLabel = new wxStaticText(mainPanel, wxID_ANY, wxT("Reit:"));
+        reitCtrl = new wxSpinCtrl(mainPanel, wxID_ANY);
         reitSizer->Add(reitLabel, 0, wxEXPAND | wxALL, 5);
         reitSizer->Add(reitCtrl, 1, wxEXPAND | wxALL, 5);
         auto *applicationAreaSizer = new wxBoxSizer(wxHORIZONTAL);
-        auto *applicationAreaLabel = new wxStaticText(this, wxID_ANY, wxT("Application:"));
-        applicationAreaCtrl = new wxComboBox(this, wxID_ANY);
+        auto *applicationAreaLabel = new wxStaticText(mainPanel, wxID_ANY, wxT("Application:"));
+        applicationAreaCtrl = new wxComboBox(mainPanel, wxID_ANY);
         applicationAreaCtrl->SetEditable(true);
         for (const auto &use : medicamentUses) {
             applicationAreaCtrl->Append(wxString::FromUTF8(use.GetDisplay()));
@@ -178,7 +259,7 @@ template <MedicamentMapper Mapper> PrescriptionDialog::PrescriptionDialog(TheMas
         applicationAreaSizer->Add(applicationAreaLabel, 0, wxEXPAND | wxALL, 5);
         applicationAreaSizer->Add(applicationAreaCtrl, 1, wxEXPAND | wxALL, 5);
         auto *lockedPrescriptionSizer = new wxBoxSizer(wxHORIZONTAL);
-        lockedPrescription = new wxCheckBox(this, wxID_ANY, wxT("Locked prescription."));
+        lockedPrescription = new wxCheckBox(mainPanel, wxID_ANY, wxT("Locked prescription."));
         lockedPrescriptionSizer->Add(lockedPrescription, 0, wxEXPAND | wxALL, 5);
         sizer->Add(typeSelection, 0, wxEXPAND | wxALL, 5);
         sizer->Add(useSelection, 0, wxEXPAND | wxALL, 5);
@@ -202,7 +283,7 @@ template <MedicamentMapper Mapper> PrescriptionDialog::PrescriptionDialog(TheMas
     }
     {
         auto *sizer = new wxBoxSizer(wxVERTICAL);
-        dosingNotebook = new wxNotebook(this, wxID_ANY, wxDefaultPosition, wxDefaultSize, wxNB_TOP);
+        dosingNotebook = new wxNotebook(mainPanel, wxID_ANY, wxDefaultPosition, wxDefaultSize, wxNB_TOP);
         auto *dssnPage = new wxPanel(dosingNotebook, wxID_ANY);
         auto *dssnSizer = new wxBoxSizer(wxHORIZONTAL);
         auto *dssnLabel = new wxStaticText(dssnPage, wxID_ANY, wxT("DSSN:"));
@@ -274,8 +355,8 @@ template <MedicamentMapper Mapper> PrescriptionDialog::PrescriptionDialog(TheMas
         dosingNotebook->AddPage(advancedDosingPage, wxT("Avansert"));
         sizer->Add(dosingNotebook, 0, wxEXPAND | wxALL, 5);
         auto *prescriptionValiditySizer = new wxBoxSizer(wxHORIZONTAL);
-        prescriptionValiditySizer->Add(new wxStaticText(this, wxID_ANY, wxT("Validity: ")), 0, wxEXPAND | wxALL, 5);
-        prescriptionValidityCtrl = new wxComboBox(this, wxID_ANY);
+        prescriptionValiditySizer->Add(new wxStaticText(mainPanel, wxID_ANY, wxT("Validity: ")), 0, wxEXPAND | wxALL, 5);
+        prescriptionValidityCtrl = new wxComboBox(mainPanel, wxID_ANY);
         prescriptionValidityCtrl->SetEditable(false);
         prescriptionValidityCtrl->Append(wxT(""));
         for (const auto &pv : prescriptionValidity) {
@@ -296,33 +377,56 @@ template <MedicamentMapper Mapper> PrescriptionDialog::PrescriptionDialog(TheMas
         prescriptionValiditySizer->Add(prescriptionValidityCtrl, 0, wxEXPAND | wxALL, 5);
         sizer->Add(prescriptionValiditySizer, 0, wxEXPAND | wxALL, 5);
         auto *startSizer = new wxBoxSizer(wxHORIZONTAL);
-        startSizer->Add(new wxStaticText(this, wxID_ANY, wxT("Start: ")), 0, wxEXPAND | wxALL, 5);
-        this->startDate = new wxDatePickerCtrl(this, wxID_ANY, ToWxDateTime(startDate));
+        startSizer->Add(new wxStaticText(mainPanel, wxID_ANY, wxT("Start: ")), 0, wxEXPAND | wxALL, 5);
+        this->startDate = new wxDatePickerCtrl(mainPanel, wxID_ANY, ToWxDateTime(startDate));
         startSizer->Add(this->startDate, 0, wxEXPAND | wxALL, 5);
         sizer->Add(startSizer, 0, wxEXPAND | wxALL, 5);
         auto *expireSizer = new wxBoxSizer(wxHORIZONTAL);
-        expireSizer->Add(new wxStaticText(this, wxID_ANY, wxT("Expires: ")), 0, wxEXPAND | wxALL, 5);
-        expirationDate = new wxDatePickerCtrl(this, wxID_ANY, ToWxDateTime(endDate));
+        expireSizer->Add(new wxStaticText(mainPanel, wxID_ANY, wxT("Expires: ")), 0, wxEXPAND | wxALL, 5);
+        expirationDate = new wxDatePickerCtrl(mainPanel, wxID_ANY, ToWxDateTime(endDate));
         expireSizer->Add(expirationDate, 0, wxEXPAND | wxALL, 5);
         sizer->Add(expireSizer, 0, wxEXPAND | wxALL, 5);
         auto *ceaseSizer = new wxBoxSizer(wxHORIZONTAL);
-        ceaseDateSet = new wxCheckBox(this, wxID_ANY, wxT("Cease: "));
+        ceaseDateSet = new wxCheckBox(mainPanel, wxID_ANY, wxT("Cease: "));
         ceaseSizer->Add(ceaseDateSet, 0, wxEXPAND | wxALL, 5);
-        ceaseDate = new wxDatePickerCtrl(this, wxID_ANY);
+        ceaseDate = new wxDatePickerCtrl(mainPanel, wxID_ANY);
         ceaseDate->Enable(false);
         ceaseSizer->Add(ceaseDate, 0, wxEXPAND | wxALL, 5);
         sizer->Add(ceaseSizer, 0, wxEXPAND | wxALL, 5);
         hzSizer->Add(sizer, 0, wxEXPAND | wxALL, 5);
     }
-    vSizer->Add(hzSizer, 0, wxEXPAND | wxALL, 5);
+    mainPanel->SetSizerAndFit(hzSizer);
+    mainNotebook->AddPage(mainPanel, wxT("Medicament"));
+    if (medicationAlternatives.size() > 1) {
+        auto *switchMedPage = new wxPanel(mainNotebook, wxID_ANY);
+        auto *vSwitchMed = new wxBoxSizer(wxVERTICAL);
+        altMedListView = new wxListView(switchMedPage, wxID_ANY);
+        altMedListView->AppendColumn(wxT("Medicament"));
+        altMedListView->SetColumnWidth(0, 600);
+        auto row = 0;
+        for (const auto &med : medicationAlternatives) {
+            altMedListView->InsertItem(row++, wxString::FromUTF8(med->mapper->GetMedication().GetDisplay()));
+        }
+        vSwitchMed->Add(altMedListView, 1, wxEXPAND | wxALL, 5);
+        auto shitchMedButtons = new wxBoxSizer(wxHORIZONTAL);
+        changeMedicationAccept = new wxButton(switchMedPage, wxID_ANY, wxT("Change medicament"));
+        vSwitchMed->Add(changeMedicationAccept, 0, wxEXPAND | wxALL, 5);
+        switchMedPage->SetSizerAndFit(vSwitchMed);
+        mainNotebook->AddPage(switchMedPage, wxT("Switch product"));
+        altMedListView->Bind(wxEVT_LIST_ITEM_SELECTED, &PrescriptionDialog::OnAltMedSelectChange, this, wxID_ANY);
+        changeMedicationAccept->Bind(wxEVT_BUTTON, &PrescriptionDialog::OnAltMed, this, wxID_ANY);
+    } else {
+        changeMedicationAccept = nullptr;
+    }
+    mvSizer->Add(mainNotebook, 1, wxEXPAND | wxALL, 5);
     auto *buttonsSizer = new wxBoxSizer(wxHORIZONTAL);
     auto *cancelButton = new wxButton(this, wxID_ANY, wxT("Cancel"));
     proceedButton = new wxButton(this, wxID_ANY, wxT("Finish"));
     proceedButton->Enable(false);
     buttonsSizer->Add(cancelButton, 0, wxEXPAND | wxALL, 5);
     buttonsSizer->Add(proceedButton, 0, wxEXPAND | wxALL, 5);
-    vSizer->Add(buttonsSizer, 0, wxEXPAND | wxALL, 5);
-    SetSizerAndFit(vSizer);
+    mvSizer->Add(buttonsSizer, 0, wxEXPAND | wxALL, 5);
+    SetSizerAndFit(mvSizer);
     PopulateRefunds(refunds);
     dosingNotebook->Bind(wxEVT_NOTEBOOK_PAGE_CHANGED, &PrescriptionDialog::OnModified, this);
     dssnCtrl->Bind(wxEVT_TEXT, &PrescriptionDialog::OnModified, this);
@@ -332,19 +436,8 @@ template <MedicamentMapper Mapper> PrescriptionDialog::PrescriptionDialog(TheMas
     expirationDate->Bind(wxEVT_DATE_CHANGED, &PrescriptionDialog::OnModifiedExpiryDate, this);
     ceaseDateSet->Bind(wxEVT_CHECKBOX, &PrescriptionDialog::OnModifiedCeaseIsSet, this);
     ceaseDate->Bind(wxEVT_DATE_CHANGED, &PrescriptionDialog::OnModifiedDate, this);
-    if (packageAmountNotebook != nullptr) {
-        packageAmountNotebook->Bind(wxEVT_NOTEBOOK_PAGE_CHANGED, &PrescriptionDialog::OnModifiedPC, this);
-    }
-    if (selectPackage != nullptr) {
-        selectPackage->Bind(wxEVT_COMBOBOX, &PrescriptionDialog::OnModifiedPackageSelection, this);
-    }
-    if (numberOfPackagesCtrl != nullptr) {
-        numberOfPackagesCtrl->Bind(wxEVT_SPINCTRLDOUBLE, &PrescriptionDialog::OnModified, this);
-    }
-    if (amountCtrl != nullptr) {
-        amountCtrl->Bind(wxEVT_SPINCTRLDOUBLE, &PrescriptionDialog::OnModified, this);
-        amountUnitCtrl->Bind(wxEVT_SPINCTRLDOUBLE, &PrescriptionDialog::OnModified, this);
-    }
+    packageAmountNotebook->Bind(wxEVT_NOTEBOOK_PAGE_CHANGED, &PrescriptionDialog::OnModifiedPC, this);
+    changeMedication->Bind(wxEVT_BUTTON, &PrescriptionDialog::OnChangeMedication, this);
     refundSelection->Bind(wxEVT_COMBOBOX, &PrescriptionDialog::OnModifiedRefundSelection, this);
     refundCodeSelection->Bind(wxEVT_COMBOBOX, &PrescriptionDialog::OnModified, this);
     reitCtrl->Bind(wxEVT_SPINCTRL, &PrescriptionDialog::OnModified, this);
@@ -393,6 +486,97 @@ public:
         return true;
     }
 };
+
+void PrescriptionDialog::SwitchMed(const LegemiddelCore &legemiddelCore, const SfmMedicamentMapper &mapper) {
+    *medication = mapper.GetMedication();
+    amountUnit = mapper.GetPrescriptionUnit();
+    packages = GetPackages(mapper).operator std::vector<MedicamentPackage>();
+    refunds = mapper.GetMedicamentRefunds();
+    dosingUnit = GetMedicamentDosingUnit(festDb, legemiddelCore).operator std::vector<MedicalCodedValue>();
+    kortdoser = GetLegemiddelKortdoser(festDb, legemiddelCore).operator std::vector<MedicalCodedValue>();
+    medicamentUses = mapper.GetMedicamentUses();
+    prescriptionValidity = mapper.GetPrescriptionValidity();
+
+    DateOnly startDate = DateOnly::Today();
+    DateOnly endDate = startDate;
+    endDate.AddYears(1);
+    medicationDisplayName->SetLabel(medication ? wxString::FromUTF8(medication->GetDisplay()) : wxT(""));
+    packageAmountNotebook->DeleteAllPages();
+    hasPackage = mapper.IsPackage() || !packages.empty();
+    if (hasPackage) {
+        auto packagesPage = new wxPanel(packageAmountNotebook, wxID_ANY);
+        {
+            auto sizers = CreateNumPackages(packagesPage);
+            auto *pageSizer = new wxBoxSizer(wxVERTICAL);
+            if (sizers.packageSelectorSizer != nullptr) {
+                pageSizer->Add(sizers.packageSelectorSizer, 0, wxEXPAND | wxALL, 5);
+            }
+            pageSizer->Add(sizers.numPackagesSizer, 0, wxEXPAND | wxALL, 5);
+            packagesPage->SetSizerAndFit(pageSizer);
+        }
+        packageAmountNotebook->AddPage(packagesPage, wxT("Package"));
+    } else {
+        selectPackage = nullptr;
+        numberOfPackagesCtrl = nullptr;
+    }
+    hasAmount = !mapper.IsPackage();
+    if (hasAmount) {
+        auto amountPage = new wxPanel(packageAmountNotebook, wxID_ANY);
+        {
+            auto *sizer = CreateAmount(amountPage);
+            amountPage->SetSizerAndFit(sizer);
+        }
+        packageAmountNotebook->AddPage(amountPage, wxT("Amount"));
+    } else {
+        amountCtrl = nullptr;
+    }
+    kortdoseDosingUnitCtrl->Clear();
+    for (auto &unit: dosingUnit) {
+        auto display{unit.GetCode()};
+        display.append(" ");
+        display.append(unit.GetDisplay());
+        kortdoseDosingUnitCtrl->Append(display);
+    }
+    if (dosingUnit.size() == 1) {
+        kortdoseDosingUnitCtrl->SetSelection(0);
+    }
+    kortdoserCtrl->Clear();
+    for (const auto &kd: kortdoser) {
+        std::string label{kd.GetCode()};
+        label.append(" ");
+        label.append(kd.GetDisplay());
+        kortdoserCtrl->Append(label);
+    }
+    dosingPeriodsDosingUnitCtrl->Clear();
+    for (auto &unit: dosingUnit) {
+        auto display{unit.GetCode()};
+        display.append(" ");
+        display.append(unit.GetDisplay());
+        dosingPeriodsDosingUnitCtrl->Append(wxString::FromUTF8(display));
+    }
+    if (dosingUnit.size() == 1) {
+        dosingPeriodsDosingUnitCtrl->SetSelection(0);
+    }
+    prescriptionValidityCtrl->Clear();
+    prescriptionValidityCtrl->Append(wxT(""));
+    for (const auto &pv : prescriptionValidity) {
+        std::string str{pv.duration.ToString()};
+        if (!pv.gender.GetCode().empty() || !pv.gender.GetDisplay().empty()) {
+            str.append(" (");
+            str.append(pv.gender.GetCode());
+            str.append(" ");
+            str.append(pv.gender.GetDisplay());
+            str.append(")");
+        }
+        prescriptionValidityCtrl->Append(wxString::FromUTF8(str));
+    }
+    if (!prescriptionValidity.empty()) {
+        prescriptionValidityCtrl->SetSelection(1);
+        endDate = DateOnly::Today() + prescriptionValidity[0].duration;
+    }
+    this->startDate->SetValue(ToWxDateTime(startDate));
+    PopulateRefunds(refunds);
+}
 
 PrescriptionDialog::PrescriptionDialog(TheMasterFrame *frame, const std::shared_ptr<FhirMedication> &magistralMedication,
                                        const std::vector<MedicamentRefund> &refund) : PrescriptionDialog(frame, {}, {}, {}, {}, MagistralMedicamentMapper(magistralMedication, refund)) {
@@ -657,12 +841,21 @@ PrescriptionDialogData PrescriptionDialog::GetDialogData() const {
             dialogData.amountIsSet = true;
         }
     }
-    if (packageAmountNotebook != nullptr) {
-        int page = packageAmountNotebook->GetSelection();
-        if (page == 0) {
+    if (hasPackage) {
+        if (hasAmount) {
+            int page = packageAmountNotebook->GetSelection();
+            if (page == 0) {
+                dialogData.amountIsSet = false;
+            } else if (page == 1) {
+                dialogData.numberOfPackagesSet = false;
+            }
+        } else {
             dialogData.amountIsSet = false;
-        } else if (page == 1) {
-            dialogData.numberOfPackagesSet = false;
+        }
+    } else {
+        dialogData.numberOfPackagesSet = false;
+        if (!hasAmount) {
+            dialogData.amountIsSet = false;
         }
     }
     {
@@ -873,6 +1066,12 @@ void PrescriptionDialog::OnPotentiallyModifiedRefundSelection() {
             break;
         }
     }
+}
+
+void PrescriptionDialog::OnChangeMedication(wxCommandEvent &e) {
+    wxTheApp->GetTopWindow()->GetEventHandler()->CallAfter([this]() {
+        mainNotebook->SetSelection(1);
+    });
 }
 
 void PrescriptionDialog::OnModified(wxCommandEvent &e) {
@@ -1088,4 +1287,27 @@ void PrescriptionDialog::OnMoveDown(wxCommandEvent &e) {
 void PrescriptionDialog::OnDeleteDosingPeriod(wxCommandEvent &e) {
     deleteDosingPeriod();
     OnModified();
+}
+
+void PrescriptionDialog::OnAltMedSelectChange(wxCommandEvent &e) {
+    if (altMedListView->GetSelectedItemCount() != 1) {
+        changeMedicationAccept->Enable(false);
+        return;
+    }
+    auto index = altMedListView->GetFirstSelected();
+    changeMedicationAccept->Enable(index >= 0 && index < medicationAlternatives.size());
+}
+
+void PrescriptionDialog::OnAltMed(wxCommandEvent &e) {
+    if (altMedListView->GetSelectedItemCount() != 1) {
+        return;
+    }
+    auto index = altMedListView->GetFirstSelected();
+    if (index < 0 || index > medicationAlternatives.size()) {
+        return;
+    }
+    SwitchMed(*(medicationAlternatives[index]->legemiddelCore), *(medicationAlternatives[index]->mapper));
+    wxTheApp->GetTopWindow()->GetEventHandler()->CallAfter([this]() {
+        mainNotebook->SetSelection(0);
+    });
 }
