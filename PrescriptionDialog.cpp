@@ -17,6 +17,7 @@
 #include <medfest/Struct/Decoded/OppfKodeverk.h>
 #include <medfest/Struct/Packed/POppfLegemiddelVirkestoff.h>
 #include <medfest/Struct/Packed/POppfLegemiddelMerkevare.h>
+#include <medfest/Struct/Packed/POppfLegemiddelpakning.h>
 #include <array>
 
 #include "DateTime.h"
@@ -57,6 +58,7 @@ NumPackagesSizers PrescriptionDialog::CreateNumPackages(wxWindow *parent) {
 }
 
 wxBoxSizer *PrescriptionDialog::CreateAmount(wxWindow *parent) {
+    auto *vSizer = new wxBoxSizer(wxVERTICAL);
     auto *amountSizer = new wxBoxSizer(wxHORIZONTAL);
     auto amountLabel = new wxStaticText(parent, wxID_ANY, wxT("Amount:"));
     amountCtrl = new wxSpinCtrlDouble(parent, wxID_ANY);
@@ -73,7 +75,9 @@ wxBoxSizer *PrescriptionDialog::CreateAmount(wxWindow *parent) {
     amountSizer->Add(amountUnitCtrl, 1, wxEXPAND | wxALL, 5);
     amountCtrl->Bind(wxEVT_SPINCTRLDOUBLE, &PrescriptionDialog::OnModified, this);
     amountUnitCtrl->Bind(wxEVT_SPINCTRLDOUBLE, &PrescriptionDialog::OnModified, this);
-    return amountSizer;
+    vSizer->Add(amountSizer, 0, wxEXPAND | wxALL, 5);
+    vSizer->Add(new wxStaticText(parent, wxID_ANY, wxT("")), 0, wxEXPAND | wxALL, 5);
+    return vSizer;
 }
 
 template <class T> concept MedicamentMapperWithGetPackages = requires(const T &mapper) {
@@ -121,6 +125,7 @@ template <MedicamentMapperWithGetSubstanceIds SubstanceMapper> struct GetAlterna
     constexpr GetAlternativesFromFest(const std::shared_ptr<FestDb> &festDb, const SubstanceMapper &mapper) {
         std::vector<POppfLegemiddelVirkestoff> pLVirkestoff{};
         std::vector<POppfLegemiddelMerkevare> pLMerkevare{};
+        std::vector<POppfLegemiddelpakning> pLPakning{};
         for (const auto &substanceIdStr : mapper.GetSubstanceIds()) {
             FestUuid substanceId{substanceIdStr};
             for (const auto &pLegemiddelVirkestoff : festDb->GetAllPLegemiddelVirkestoff()) {
@@ -177,15 +182,46 @@ template <MedicamentMapperWithGetSubstanceIds SubstanceMapper> struct GetAlterna
                 }
                 pLMerkevare.emplace_back(pMerkevare);
             }
+            for (const auto &pLVirkestoff : pLVirkestoff) {
+                auto legemiddelVirkestoff = std::make_shared<LegemiddelVirkestoff>(festDb->GetLegemiddelVirkestoff(pLVirkestoff));
+                std::shared_ptr<MedicationAlternativeInfo> info = std::make_shared<MedicationAlternativeInfo>(festDb, legemiddelVirkestoff);
+                medication.emplace_back(std::move(info));
+            }
+            std::vector<FestUuid> merkevareIds{};
+            for (const auto &pLMerkevare : pLMerkevare) {
+                auto legemiddelMerkevare = std::make_shared<LegemiddelMerkevare>(festDb->GetLegemiddelMerkevare(pLMerkevare));
+                merkevareIds.emplace_back(legemiddelMerkevare->GetId());
+                std::shared_ptr<MedicationAlternativeInfo> info = std::make_shared<MedicationAlternativeInfo>(festDb, legemiddelMerkevare);
+                medication.emplace_back(std::move(info));
+            }
+            for (const auto &pPackage : festDb->GetAllPLegemiddelpakning()) {
+                bool found{false};
+                for (const auto &pL : pLPakning) {
+                    if (pL.GetId() == pPackage.GetId()) {
+                        found = true;
+                        break;
+                    }
+                }
+                if (found) {
+                    continue;
+                }
+                auto refMerkevare = festDb->GetRefMerkevare(pPackage);
+                found = false;
+                for (const auto &id : merkevareIds) {
+                    if (std::find(refMerkevare.cbegin(), refMerkevare.cend(), id) != refMerkevare.cend()) {
+                        found = true;
+                        break;
+                    }
+                }
+                if (!found) {
+                    continue;
+                }
+                pLPakning.emplace_back(pPackage);
+            }
         }
-        for (const auto &pLVirkestoff : pLVirkestoff) {
-            auto legemiddelVirkestoff = std::make_shared<LegemiddelVirkestoff>(festDb->GetLegemiddelVirkestoff(pLVirkestoff));
-            std::shared_ptr<MedicationAlternativeInfo> info = std::make_shared<MedicationAlternativeInfo>(festDb, legemiddelVirkestoff);
-            medication.emplace_back(std::move(info));
-        }
-        for (const auto &pLMerkevare : pLMerkevare) {
-            auto legemiddelMerkevare = std::make_shared<LegemiddelMerkevare>(festDb->GetLegemiddelMerkevare(pLMerkevare));
-            std::shared_ptr<MedicationAlternativeInfo> info = std::make_shared<MedicationAlternativeInfo>(festDb, legemiddelMerkevare);
+        for (const auto &pLPakning : pLPakning) {
+            auto legemiddelpakning = std::make_shared<Legemiddelpakning>(festDb->GetLegemiddelpakning(pLPakning));
+            std::shared_ptr<MedicationAlternativeInfo> info = std::make_shared<MedicationAlternativeInfo>(festDb, legemiddelpakning);
             medication.emplace_back(std::move(info));
         }
     }

@@ -74,6 +74,7 @@ public:
     [[nodiscard]] LegemiddelVirkestoff GetLegemiddelVirkestoffForMerkevare(FestUuid uuid) const;
     [[nodiscard]] LegemiddelMerkevare GetLegemiddelMerkevare(FestUuid) const;
     [[nodiscard]] LegemiddelMerkevare GetLegemiddelMerkevare(const PLegemiddelMerkevare &packed) const;
+    [[nodiscard]] Legemiddelpakning GetLegemiddelpakning(const PLegemiddelpakning &) const;
     [[nodiscard]] Legemiddelpakning GetLegemiddelpakning(FestUuid ) const;
     [[nodiscard]] Legemiddelpakning GetLegemiddelpakningByVarenr(const std::string &) const;
     [[nodiscard]] OppfKodeverk GetKodeverkById(const std::string &) const;
