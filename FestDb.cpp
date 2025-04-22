@@ -261,6 +261,10 @@ LegemiddelMerkevare FestDb::GetLegemiddelMerkevare(FestUuid id) const {
     return {};
 }
 
+LegemiddelMerkevare FestDb::GetLegemiddelMerkevare(const PLegemiddelMerkevare &packed) const {
+    return festDeserializer->Unpack(packed);
+}
+
 Legemiddelpakning FestDb::GetLegemiddelpakning(FestUuid id) const {
     FestDbContainer festDbContainer = GetActiveFestDb();
     if (!festDbContainer.festVectors) {

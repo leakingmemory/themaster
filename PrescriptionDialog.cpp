@@ -16,6 +16,7 @@
 #include <sstream>
 #include <medfest/Struct/Decoded/OppfKodeverk.h>
 #include <medfest/Struct/Packed/POppfLegemiddelVirkestoff.h>
+#include <medfest/Struct/Packed/POppfLegemiddelMerkevare.h>
 #include <array>
 
 #include "DateTime.h"
@@ -119,6 +120,7 @@ template <MedicamentMapperWithGetSubstanceIds SubstanceMapper> struct GetAlterna
     std::vector<std::shared_ptr<MedicationAlternativeInfo>> medication;
     constexpr GetAlternativesFromFest(const std::shared_ptr<FestDb> &festDb, const SubstanceMapper &mapper) {
         std::vector<POppfLegemiddelVirkestoff> pLVirkestoff{};
+        std::vector<POppfLegemiddelMerkevare> pLMerkevare{};
         for (const auto &substanceIdStr : mapper.GetSubstanceIds()) {
             FestUuid substanceId{substanceIdStr};
             for (const auto &pLegemiddelVirkestoff : festDb->GetAllPLegemiddelVirkestoff()) {
@@ -148,10 +150,42 @@ template <MedicamentMapperWithGetSubstanceIds SubstanceMapper> struct GetAlterna
                 }
                 pLVirkestoff.emplace_back(pLegemiddelVirkestoff);
             }
+            for (const auto &pMerkevare : festDb->GetAllPLegemiddelMerkevare()) {
+                bool found{false};
+                for (const auto &pL : pLMerkevare) {
+                    if (pL.GetId() == pMerkevare.GetId()) {
+                        found = true;
+                        break;
+                    }
+                }
+                if (found) {
+                    continue;
+                }
+                auto pLVRefs = festDb->GetSortertVirkestoffMedStyrke(pMerkevare);
+                std::transform(pLVRefs.cbegin(), pLVRefs.cend(), pLVRefs.begin(), [&festDb] (const FestUuid &medStyrke) {
+                    return festDb->GetVirkestoffForVirkestoffMedStyrkeId(medStyrke);
+                });
+                found = false;
+                for (const auto pRef : pLVRefs) {
+                    if (pRef == substanceId) {
+                        found = true;
+                        break;
+                    }
+                }
+                if (!found) {
+                    continue;
+                }
+                pLMerkevare.emplace_back(pMerkevare);
+            }
         }
         for (const auto &pLVirkestoff : pLVirkestoff) {
             auto legemiddelVirkestoff = std::make_shared<LegemiddelVirkestoff>(festDb->GetLegemiddelVirkestoff(pLVirkestoff));
             std::shared_ptr<MedicationAlternativeInfo> info = std::make_shared<MedicationAlternativeInfo>(festDb, legemiddelVirkestoff);
+            medication.emplace_back(std::move(info));
+        }
+        for (const auto &pLMerkevare : pLMerkevare) {
+            auto legemiddelMerkevare = std::make_shared<LegemiddelMerkevare>(festDb->GetLegemiddelMerkevare(pLMerkevare));
+            std::shared_ptr<MedicationAlternativeInfo> info = std::make_shared<MedicationAlternativeInfo>(festDb, legemiddelMerkevare);
             medication.emplace_back(std::move(info));
         }
     }
