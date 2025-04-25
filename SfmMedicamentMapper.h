@@ -26,9 +26,10 @@ struct PrescriptionValidity {
     }
 };
 
-class SfmMedicamentMapper {
+class SfmMedicamentMapper;
+
+class SfmMedicamentDetailsMapper {
 private:
-    FhirMedication medication{};
     std::vector<SfmMedicamentMapper> packages{};
     std::vector<MedicalCodedValue> prescriptionUnit{};
     std::vector<MedicalCodedValue> medicamentType{};
@@ -40,15 +41,12 @@ private:
     std::shared_ptr<FestDb> festDb;
     bool isPackage{false};
 public:
-    SfmMedicamentMapper(const std::shared_ptr<FestDb> &festDb, const std::shared_ptr<LegemiddelCore> &legemiddelCore);
+    SfmMedicamentDetailsMapper(const std::shared_ptr<FestDb> &festDb, const std::shared_ptr<LegemiddelCore> &legemiddelCore);
 private:
     void Map(const LegemiddelMerkevare &legemiddelMerkevare);
     void Map(const LegemiddelVirkestoff &legemiddelVirkestoff);
     void Map(const Legemiddelpakning &legemiddelpakning);
 public:
-    [[nodiscard]] constexpr FhirMedication GetMedication() const {
-        return medication;
-    }
     [[nodiscard]] std::vector<MedicalCodedValue> GetPrescriptionUnit() const {
         return prescriptionUnit;
     }
@@ -77,7 +75,7 @@ public:
     [[nodiscard]] bool IsPackage() const {
         return isPackage;
     }
-    [[nodiscard]] constexpr std::vector<SfmMedicamentMapper> GetPackages() const {
+    [[nodiscard]] std::vector<SfmMedicamentMapper> GetPackages() const {
         return packages;
     }
     [[nodiscard]] constexpr std::string GetPackageDescription() const {
@@ -88,5 +86,57 @@ public:
     }
 };
 
+class SfmMedicamentMapper {
+private:
+    std::shared_ptr<std::unique_ptr<SfmMedicamentDetailsMapper>> detailsMapper;
+    FhirMedication medication{};
+    std::shared_ptr<FestDb> festDb;
+    std::shared_ptr<LegemiddelCore> legemiddelCore;
+public:
+    SfmMedicamentMapper(const std::shared_ptr<FestDb> &festDb, const std::shared_ptr<LegemiddelCore> &legemiddelCore);
+private:
+    void Map(const LegemiddelMerkevare &legemiddelMerkevare);
+    void Map(const LegemiddelVirkestoff &legemiddelVirkestoff);
+    void Map(const Legemiddelpakning &legemiddelpakning);
+public:
+    [[nodiscard]] constexpr FhirMedication GetMedication() const {
+        return medication;
+    }
+private:
+    constexpr SfmMedicamentDetailsMapper &Up() const {
+        if (!*detailsMapper) {
+            *detailsMapper = std::make_unique<SfmMedicamentDetailsMapper>(festDb, legemiddelCore);
+        }
+        return **detailsMapper;
+    }
+public:
+    [[nodiscard]] std::vector<MedicalCodedValue> GetPrescriptionUnit() const {
+        return Up().GetPrescriptionUnit();
+    }
+    [[nodiscard]] std::vector<MedicalCodedValue> GetMedicamentType() const {
+        return Up().GetMedicamentType();
+    }
+    [[nodiscard]] std::vector<MedicalCodedValue> GetMedicamentUses() const {
+        return Up().GetMedicamentUses();
+    }
+    [[nodiscard]] std::vector<PrescriptionValidity> GetPrescriptionValidity() const {
+        return Up().GetPrescriptionValidity();
+    }
+    [[nodiscard]] constexpr std::vector<MedicamentRefund> GetMedicamentRefunds() const {
+        return Up().GetMedicamentRefunds();
+    }
+    [[nodiscard]] bool IsPackage() const {
+        return Up().IsPackage();
+    }
+    [[nodiscard]] constexpr std::vector<SfmMedicamentMapper> GetPackages() const {
+        return Up().GetPackages();
+    }
+    [[nodiscard]] constexpr std::string GetPackageDescription() const {
+        return Up().GetPackageDescription();
+    }
+    [[nodiscard]] constexpr std::vector<std::string> GetSubstanceIds() const {
+        return Up().GetSubstanceIds();
+    }
+};
 
 #endif //DRWHATSNOT_SFMMEDICAMENTMAPPER_H

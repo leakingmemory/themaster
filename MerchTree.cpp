@@ -49,11 +49,11 @@ private:
     std::vector<OppfRefusjon>::const_iterator iterator{};
     std::map<std::string,std::shared_ptr<OppfRefusjon>> refusjonMap{};
 public:
-    RidExplorer(const FestDb &festDb, const std::string &festVersion);
+    RidExplorer(FestDb &festDb, const std::string &festVersion);
     std::shared_ptr<OppfRefusjon> GetByRid(const std::string &rid);
 };
 
-RidExplorer::RidExplorer(const FestDb &festDb, const std::string &festVersion) {
+RidExplorer::RidExplorer(FestDb &festDb, const std::string &festVersion) {
     refusjonVec = festDb.GetOppfRefusjon(festVersion);
     iterator = refusjonVec.begin();
 }
@@ -91,7 +91,7 @@ std::shared_ptr<OppfRefusjon> RidExplorer::GetByRid(const std::string &rid) {
     return {};
 }
 
-template <CanGetHandelsvare T> void MerchTreeImpl::MapElements(const FestDb &festDb, const std::string &festVersion, const std::vector<T> &elements) {
+template <CanGetHandelsvare T> void MerchTreeImpl::MapElements(FestDb &festDb, const std::string &festVersion, const std::vector<T> &elements) {
     std::map<std::string,std::shared_ptr<ContainerElement>> refusjonToElement{};
     for (const auto &element : elements) {
         auto ridVec = GetRid(element);
@@ -220,15 +220,15 @@ template <CanGetHandelsvare T> void MerchTreeImpl::MapElements(const FestDb &fes
     }
 }
 
-MerchTreeImpl::MerchTreeImpl(const FestDb &festDb, const std::string &festVersion, const std::vector<OppfMedForbrMatr> &medForbrMatr) {
+MerchTreeImpl::MerchTreeImpl(FestDb &festDb, const std::string &festVersion, const std::vector<OppfMedForbrMatr> &medForbrMatr) {
     MapElements(festDb, festVersion, medForbrMatr);
 }
 
-MerchTreeImpl::MerchTreeImpl(const FestDb &festDb, const std::string &festVersion, const std::vector<OppfNaringsmiddel> &naringsmidler) {
+MerchTreeImpl::MerchTreeImpl(FestDb &festDb, const std::string &festVersion, const std::vector<OppfNaringsmiddel> &naringsmidler) {
     MapElements(festDb, festVersion, naringsmidler);
 }
 
-MerchTreeImpl::MerchTreeImpl(const FestDb &festDb, const std::string &festVersion, const std::vector<OppfBrystprotese> &brystproteser) {
+MerchTreeImpl::MerchTreeImpl(FestDb &festDb, const std::string &festVersion, const std::vector<OppfBrystprotese> &brystproteser) {
     MapElements(festDb, festVersion, brystproteser);
 }
 

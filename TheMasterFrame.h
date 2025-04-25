@@ -15,6 +15,7 @@
 #include "MerchData.h"
 #include "MedBundleData.h"
 #include "TheMasterIds.h"
+#include "FestDb.h"
 #ifdef WIN32
 #include <pplx/pplxtasks.h>
 #endif
@@ -43,6 +44,7 @@ private:
     std::shared_ptr<WeakRefUiDispatcher<TheMasterFrame>> weakRefDispatcher;
     std::shared_ptr<PatientStore> patientStore{};
     std::shared_ptr<PatientInformation> patientInformation;
+    std::shared_ptr<FestDb> festDb;
     std::string kjConsent{};
     std::string kjLockedConsent{};
     std::string kjBarredConsent{};

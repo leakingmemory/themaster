@@ -69,7 +69,7 @@ void GetLegemiddelRefunds::Visit(const LegemiddelVirkestoff &virkestoff) {
     }
 }
 
-std::vector<MedicamentRefund> GetLegemiddelRefunds::GetMedicamentRefunds(const FestDb &festDb, const std::vector<std::string> &refs) {
+std::vector<MedicamentRefund> GetLegemiddelRefunds::GetMedicamentRefunds(FestDb &festDb, const std::vector<std::string> &refs) {
     std::vector<MedicamentRefund> refunds{};
     auto activeVersion = festDb.GetFestVersions();
     if (activeVersion.empty()) {

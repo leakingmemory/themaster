@@ -30,7 +30,7 @@ public:
     operator std::vector<std::string> () const {
         return refunds;
     }
-    static std::vector<MedicamentRefund> GetMedicamentRefunds(const FestDb &festDb, const std::vector<std::string> &refs);
+    static std::vector<MedicamentRefund> GetMedicamentRefunds(FestDb &festDb, const std::vector<std::string> &refs);
 };
 
 

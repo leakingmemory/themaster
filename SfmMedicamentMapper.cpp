@@ -14,25 +14,7 @@
 #include "DateOnly.h"
 #include "GetLegemiddelRefunds.h"
 
-SfmMedicamentMapper::SfmMedicamentMapper(const std::shared_ptr<FestDb> &festDb, const std::shared_ptr<LegemiddelCore> &legemiddelCore) : festDb(festDb) {
-    {
-        boost::uuids::random_generator generator;
-        boost::uuids::uuid randomUUID = generator();
-        std::string uuidStr = boost::uuids::to_string(randomUUID);
-        medication.SetId(uuidStr);
-    }
-    {
-        auto reseptgruppe = legemiddelCore->GetReseptgruppe();
-        auto reseptgruppeCode = reseptgruppe.GetValue();
-        if (!reseptgruppeCode.empty()) {
-            auto ext = std::make_shared<FhirExtension>("http://hl7.no/fhir/StructureDefinition/no-basis-prescriptiongroup");
-            ext->AddExtension(std::make_shared<FhirValueExtension>(
-                    "prescriptiongroup",
-                    std::make_shared<FhirCodeableConceptValue>(FhirCodeableConcept("urn:oid:2.16.578.1.12.4.1.1.7421", reseptgruppeCode, reseptgruppe.GetDistinguishedName()))
-            ));
-            medication.AddExtension(ext);
-        }
-    }
+SfmMedicamentDetailsMapper::SfmMedicamentDetailsMapper(const std::shared_ptr<FestDb> &festDb, const std::shared_ptr<LegemiddelCore> &legemiddelCore) : festDb(festDb) {
     medicamentRefunds = GetLegemiddelRefunds::GetMedicamentRefunds(*festDb, GetLegemiddelRefunds(*legemiddelCore));
     {
         std::shared_ptr<LegemiddelMerkevare> merkevare = std::dynamic_pointer_cast<LegemiddelMerkevare>(legemiddelCore);
@@ -53,39 +35,9 @@ SfmMedicamentMapper::SfmMedicamentMapper(const std::shared_ptr<FestDb> &festDb, 
     std::sort(prescriptionValidity.begin(), prescriptionValidity.end(), [today] (auto pv1, auto pv2) {
         return (today + pv1.duration) < (today + pv2.duration);
     });
-    {
-        auto atc = legemiddelCore->GetAtc();
-        auto atcValue = atc.GetValue();
-        if (!atcValue.empty()) {
-            auto code = medication.GetCode();
-            auto coding= code.GetCoding();
-            auto text = code.GetText();
-            coding.emplace_back("http://www.whocc.no/atc", atcValue, atc.GetDistinguishedName());
-            FhirCodeableConcept newCode{std::move(coding), std::move(text)};
-            medication.SetCode(newCode);
-        }
-    }
-    {
-        auto form = legemiddelCore->GetLegemiddelformKort();
-        auto formCode = form.GetValue();
-        if (!formCode.empty()) {
-            auto formSystem = form.GetCodeSet();
-            if (!formSystem.empty()) {
-                std::string system{"urn:oid:"};
-                system.append(formSystem);
-                formSystem = system;
-            } else {
-                formSystem = "urn:oid:2.16.578.1.12.4.1.1.7448";
-            }
-            medication.SetForm(FhirCodeableConcept(formSystem, formCode, form.GetDistinguishedName()));
-        }
-        medication.SetProfile("http://ehelse.no/fhir/StructureDefinition/sfm-Medication");
-        medication.SetStatus(FhirStatus::ACTIVE);
-        medication.SetName(legemiddelCore->GetNavnFormStyrke());
-    }
 }
 
-void SfmMedicamentMapper::Map(const LegemiddelMerkevare &legemiddelMerkevare) {
+void SfmMedicamentDetailsMapper::Map(const LegemiddelMerkevare &legemiddelMerkevare) {
     {
         FestUuid merkevareId{legemiddelMerkevare.GetId()};
         auto pakninger = festDb->GetLegemiddelpakningForMerkevare(merkevareId);
@@ -147,20 +99,6 @@ void SfmMedicamentMapper::Map(const LegemiddelMerkevare &legemiddelMerkevare) {
             medicamentUses.emplace_back(use.GetCodeSet(), use.GetValue(), use.GetDistinguishedName(), use.GetDistinguishedName());
         }
     }
-    {
-        auto code = medication.GetCode();
-        auto coding = code.GetCoding();
-        coding.emplace_back("http://ehelse.no/fhir/CodeSystem/FEST", legemiddelMerkevare.GetId(),
-                            legemiddelMerkevare.GetNavnFormStyrke());
-        auto text = code.GetText();
-        medication.SetCode(FhirCodeableConcept(std::move(coding), std::move(text)));
-    }
-    {
-        auto medicationDetails = std::make_shared<FhirExtension>("http://ehelse.no/fhir/StructureDefinition/sfm-medicationdetails");
-        medicationDetails->AddExtension(std::make_shared<FhirValueExtension>("registreringstype", std::make_shared<FhirCodeableConceptValue>(FhirCodeableConcept("http://ehelse.no/fhir/CodeSystem/sfm-festregistrationtype", "2", "Legemiddelmerkevare"))));
-        medicationDetails->AddExtension(std::make_shared<FhirValueExtension>("name", std::make_shared<FhirString>(legemiddelMerkevare.GetNavnFormStyrke())));
-        medication.AddExtension(medicationDetails);
-    }
     for (const auto &ref : legemiddelMerkevare.GetSortertVirkestoffUtenStyrke()) {
         substances.emplace_back(ref);
     }
@@ -173,7 +111,7 @@ void SfmMedicamentMapper::Map(const LegemiddelMerkevare &legemiddelMerkevare) {
     }
 }
 
-void SfmMedicamentMapper::Map(const LegemiddelVirkestoff &legemiddelVirkestoff) {
+void SfmMedicamentDetailsMapper::Map(const LegemiddelVirkestoff &legemiddelVirkestoff) {
     {
         auto dosingUnit = legemiddelVirkestoff.GetForskrivningsenhetResept();
         auto dosingUnitSystem = dosingUnit.GetCodeSet();
@@ -191,19 +129,6 @@ void SfmMedicamentMapper::Map(const LegemiddelVirkestoff &legemiddelVirkestoff) 
         for (const auto &use : administreringLegemiddel.GetBruksomradeEtikett()) {
             medicamentUses.emplace_back(use.GetCodeSet(), use.GetValue(), use.GetDistinguishedName(), use.GetDistinguishedName());
         }
-    }
-    {
-        auto code = medication.GetCode();
-        auto coding = code.GetCoding();
-        coding.emplace_back("http://ehelse.no/fhir/CodeSystem/FEST", legemiddelVirkestoff.GetId(),
-                            legemiddelVirkestoff.GetNavnFormStyrke());
-        auto text = code.GetText();
-        medication.SetCode(FhirCodeableConcept(std::move(coding), std::move(text)));
-    }
-    {
-        auto medicationDetails = std::make_shared<FhirExtension>("http://ehelse.no/fhir/StructureDefinition/sfm-medicationdetails");
-        medicationDetails->AddExtension(std::make_shared<FhirValueExtension>("registreringstype", std::make_shared<FhirCodeableConceptValue>(FhirCodeableConcept("http://ehelse.no/fhir/CodeSystem/sfm-festregistrationtype", "1", "Legemiddelvirkestoff"))));
-        medication.AddExtension(medicationDetails);
     }
     {
         auto merkevareIds = legemiddelVirkestoff.GetRefLegemiddelMerkevare();
@@ -236,7 +161,7 @@ void SfmMedicamentMapper::Map(const LegemiddelVirkestoff &legemiddelVirkestoff) 
     }
 }
 
-void SfmMedicamentMapper::Map(const Legemiddelpakning &legemiddelpakning) {
+void SfmMedicamentDetailsMapper::Map(const Legemiddelpakning &legemiddelpakning) {
     auto pakningsinfoList = legemiddelpakning.GetPakningsinfo();
     for (const auto &pakningsinfo : pakningsinfoList) {
         auto packageUnit = pakningsinfo.GetEnhetPakning();
@@ -244,34 +169,9 @@ void SfmMedicamentMapper::Map(const Legemiddelpakning &legemiddelpakning) {
                                        packageUnit.GetDistinguishedName(), "");
     }
     {
-        auto code = medication.GetCode();
-        auto coding = code.GetCoding();
-        coding.emplace_back("http://ehelse.no/fhir/CodeSystem/FEST", legemiddelpakning.GetVarenr(),
-                            legemiddelpakning.GetNavnFormStyrke());
-        auto text = code.GetText();
-        medication.SetCode(FhirCodeableConcept(std::move(coding), std::move(text)));
-    }
-    {
-        auto medicationDetails = std::make_shared<FhirExtension>("http://ehelse.no/fhir/StructureDefinition/sfm-medicationdetails");
-        medicationDetails->AddExtension(std::make_shared<FhirValueExtension>("registreringstype", std::make_shared<FhirCodeableConceptValue>(FhirCodeableConcept("http://ehelse.no/fhir/CodeSystem/sfm-festregistrationtype", "3", "Legemiddelpakning"))));
         for (const auto &pi : pakningsinfoList) {
             FestUuid merkevareId{pi.GetMerkevareId()};
             auto merkevare = festDb->GetLegemiddelMerkevare(merkevareId);
-            auto packinginfo = std::make_shared<FhirExtension>("packinginfoprescription");
-            packinginfo->AddExtension(std::make_shared<FhirValueExtension>("name", std::make_shared<FhirString>(merkevare.GetVarenavn())));
-            packinginfo->AddExtension(std::make_shared<FhirValueExtension>("packingsize", std::make_shared<FhirString>(pi.GetPakningsstr())));
-            {
-                auto enhetPakning = pi.GetEnhetPakning();
-                std::string codeSystem{"urn:oid:"};
-                codeSystem.append(enhetPakning.GetCodeSet());
-                packinginfo->AddExtension(std::make_shared<FhirValueExtension>("packingunit",
-                                                                               std::make_shared<FhirCodeableConceptValue>(
-                                                                                       FhirCodeableConcept(
-                                                                                               codeSystem,
-                                                                                               enhetPakning.GetValue(),
-                                                                                               enhetPakning.GetDistinguishedName()))));
-            }
-            medicationDetails->AddExtension(packinginfo);
             if (!packageDescription.empty()) {
                 packageDescription.append(", ");
             }
@@ -315,7 +215,142 @@ void SfmMedicamentMapper::Map(const Legemiddelpakning &legemiddelpakning) {
                 }
             }
         }
-        medication.AddExtension(medicationDetails);
     }
     isPackage = true;
+}
+
+SfmMedicamentMapper::SfmMedicamentMapper(const std::shared_ptr<FestDb> &festDb,
+                                         const std::shared_ptr<LegemiddelCore> &legemiddelCore) : detailsMapper(std::make_shared<std::unique_ptr<SfmMedicamentDetailsMapper>>()), festDb(festDb), legemiddelCore(legemiddelCore) {
+    {
+        std::shared_ptr<LegemiddelMerkevare> merkevare = std::dynamic_pointer_cast<LegemiddelMerkevare>(legemiddelCore);
+        if (merkevare) {
+            Map(*merkevare);
+        }
+        std::shared_ptr<LegemiddelVirkestoff> virkestoff = std::dynamic_pointer_cast<LegemiddelVirkestoff>(
+                legemiddelCore);
+        if (virkestoff) {
+            Map(*virkestoff);
+        }
+        std::shared_ptr<Legemiddelpakning> pakning = std::dynamic_pointer_cast<Legemiddelpakning>(legemiddelCore);
+        if (pakning) {
+            Map(*pakning);
+        }
+    }
+    {
+        boost::uuids::random_generator generator;
+        boost::uuids::uuid randomUUID = generator();
+        std::string uuidStr = boost::uuids::to_string(randomUUID);
+        medication.SetId(uuidStr);
+    }
+    {
+        auto reseptgruppe = legemiddelCore->GetReseptgruppe();
+        auto reseptgruppeCode = reseptgruppe.GetValue();
+        if (!reseptgruppeCode.empty()) {
+            auto ext = std::make_shared<FhirExtension>("http://hl7.no/fhir/StructureDefinition/no-basis-prescriptiongroup");
+            ext->AddExtension(std::make_shared<FhirValueExtension>(
+                    "prescriptiongroup",
+                    std::make_shared<FhirCodeableConceptValue>(FhirCodeableConcept("urn:oid:2.16.578.1.12.4.1.1.7421", reseptgruppeCode, reseptgruppe.GetDistinguishedName()))
+            ));
+            medication.AddExtension(ext);
+        }
+    }
+    {
+        auto atc = legemiddelCore->GetAtc();
+        auto atcValue = atc.GetValue();
+        if (!atcValue.empty()) {
+            auto code = medication.GetCode();
+            auto coding= code.GetCoding();
+            auto text = code.GetText();
+            coding.emplace_back("http://www.whocc.no/atc", atcValue, atc.GetDistinguishedName());
+            FhirCodeableConcept newCode{std::move(coding), std::move(text)};
+            medication.SetCode(newCode);
+        }
+    }
+    {
+        auto form = legemiddelCore->GetLegemiddelformKort();
+        auto formCode = form.GetValue();
+        if (!formCode.empty()) {
+            auto formSystem = form.GetCodeSet();
+            if (!formSystem.empty()) {
+                std::string system{"urn:oid:"};
+                system.append(formSystem);
+                formSystem = system;
+            } else {
+                formSystem = "urn:oid:2.16.578.1.12.4.1.1.7448";
+            }
+            medication.SetForm(FhirCodeableConcept(formSystem, formCode, form.GetDistinguishedName()));
+        }
+        medication.SetProfile("http://ehelse.no/fhir/StructureDefinition/sfm-Medication");
+        medication.SetStatus(FhirStatus::ACTIVE);
+        medication.SetName(legemiddelCore->GetNavnFormStyrke());
+    }
+}
+
+void SfmMedicamentMapper::Map(const LegemiddelMerkevare &legemiddelMerkevare) {
+    {
+        auto code = medication.GetCode();
+        auto coding = code.GetCoding();
+        coding.emplace_back("http://ehelse.no/fhir/CodeSystem/FEST", legemiddelMerkevare.GetId(),
+                            legemiddelMerkevare.GetNavnFormStyrke());
+        auto text = code.GetText();
+        medication.SetCode(FhirCodeableConcept(std::move(coding), std::move(text)));
+    }
+    {
+        auto medicationDetails = std::make_shared<FhirExtension>("http://ehelse.no/fhir/StructureDefinition/sfm-medicationdetails");
+        medicationDetails->AddExtension(std::make_shared<FhirValueExtension>("registreringstype", std::make_shared<FhirCodeableConceptValue>(FhirCodeableConcept("http://ehelse.no/fhir/CodeSystem/sfm-festregistrationtype", "2", "Legemiddelmerkevare"))));
+        medicationDetails->AddExtension(std::make_shared<FhirValueExtension>("name", std::make_shared<FhirString>(legemiddelMerkevare.GetNavnFormStyrke())));
+        medication.AddExtension(medicationDetails);
+    }
+}
+
+void SfmMedicamentMapper::Map(const LegemiddelVirkestoff &legemiddelVirkestoff) {
+    {
+        auto code = medication.GetCode();
+        auto coding = code.GetCoding();
+        coding.emplace_back("http://ehelse.no/fhir/CodeSystem/FEST", legemiddelVirkestoff.GetId(),
+                            legemiddelVirkestoff.GetNavnFormStyrke());
+        auto text = code.GetText();
+        medication.SetCode(FhirCodeableConcept(std::move(coding), std::move(text)));
+    }
+    {
+        auto medicationDetails = std::make_shared<FhirExtension>("http://ehelse.no/fhir/StructureDefinition/sfm-medicationdetails");
+        medicationDetails->AddExtension(std::make_shared<FhirValueExtension>("registreringstype", std::make_shared<FhirCodeableConceptValue>(FhirCodeableConcept("http://ehelse.no/fhir/CodeSystem/sfm-festregistrationtype", "1", "Legemiddelvirkestoff"))));
+        medication.AddExtension(medicationDetails);
+    }
+}
+
+void SfmMedicamentMapper::Map(const Legemiddelpakning &legemiddelpakning) {
+    {
+        auto code = medication.GetCode();
+        auto coding = code.GetCoding();
+        coding.emplace_back("http://ehelse.no/fhir/CodeSystem/FEST", legemiddelpakning.GetVarenr(),
+                            legemiddelpakning.GetNavnFormStyrke());
+        auto text = code.GetText();
+        medication.SetCode(FhirCodeableConcept(std::move(coding), std::move(text)));
+    }
+    {
+        auto medicationDetails = std::make_shared<FhirExtension>("http://ehelse.no/fhir/StructureDefinition/sfm-medicationdetails");
+        medicationDetails->AddExtension(std::make_shared<FhirValueExtension>("registreringstype", std::make_shared<FhirCodeableConceptValue>(FhirCodeableConcept("http://ehelse.no/fhir/CodeSystem/sfm-festregistrationtype", "3", "Legemiddelpakning"))));
+        auto pakningsinfoList = legemiddelpakning.GetPakningsinfo();
+        for (const auto &pi : pakningsinfoList) {
+            FestUuid merkevareId{pi.GetMerkevareId()};
+            auto merkevare = festDb->GetLegemiddelMerkevare(merkevareId);
+            auto packinginfo = std::make_shared<FhirExtension>("packinginfoprescription");
+            packinginfo->AddExtension(std::make_shared<FhirValueExtension>("name", std::make_shared<FhirString>(merkevare.GetVarenavn())));
+            packinginfo->AddExtension(std::make_shared<FhirValueExtension>("packingsize", std::make_shared<FhirString>(pi.GetPakningsstr())));
+            {
+                auto enhetPakning = pi.GetEnhetPakning();
+                std::string codeSystem{"urn:oid:"};
+                codeSystem.append(enhetPakning.GetCodeSet());
+                packinginfo->AddExtension(std::make_shared<FhirValueExtension>("packingunit",
+                                                                               std::make_shared<FhirCodeableConceptValue>(
+                                                                                       FhirCodeableConcept(
+                                                                                               codeSystem,
+                                                                                               enhetPakning.GetValue(),
+                                                                                               enhetPakning.GetDistinguishedName()))));
+            }
+            medicationDetails->AddExtension(packinginfo);
+        }
+        medication.AddExtension(medicationDetails);
+    }
 }

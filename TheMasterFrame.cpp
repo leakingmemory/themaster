@@ -67,7 +67,8 @@ constexpr int PrescriptionRemoteColumnWidth = 75;
 
 TheMasterFrame::TheMasterFrame() : wxFrame(nullptr, wxID_ANY, "The Master"),
                                    weakRefDispatcher(std::make_shared<WeakRefUiDispatcher<TheMasterFrame>>(this)),
-                                   patientStore(std::make_shared<PatientStoreInMemoryWithPersistence>())
+                                   patientStore(std::make_shared<PatientStoreInMemoryWithPersistence>()),
+                                   festDb(std::make_shared<FestDb>())
 {
 #ifdef WIN32
     std::string iconPath{};
@@ -2471,7 +2472,7 @@ void TheMasterFrame::OnPrescribeMagistral(wxCommandEvent &e) {
 }
 
 void TheMasterFrame::OnPrescribeMedicament(wxCommandEvent &e) {
-    std::shared_ptr<FestDb> festDb = std::make_shared<FestDb>();
+    std::shared_ptr<FestDb> festDb = this->festDb;
     if (!festDb->IsOpen()) {
         return;
     }
@@ -2499,7 +2500,7 @@ void TheMasterFrame::OnPrescribeMedicament(wxCommandEvent &e) {
 }
 
 void TheMasterFrame::OnPrescribeMerch(wxCommandEvent &e) {
-    std::shared_ptr<FestDb> festDb = std::make_shared<FestDb>();
+    std::shared_ptr<FestDb> festDb = this->festDb;
     if (!festDb->IsOpen()) {
         return;
     }
@@ -2520,7 +2521,7 @@ void TheMasterFrame::OnPrescribeMerch(wxCommandEvent &e) {
 }
 
 void TheMasterFrame::OnPrescribeNourishment(wxCommandEvent &e) {
-    std::shared_ptr<FestDb> festDb = std::make_shared<FestDb>();
+    std::shared_ptr<FestDb> festDb = this->festDb;
     if (!festDb->IsOpen()) {
         return;
     }
@@ -2570,6 +2571,7 @@ void TheMasterFrame::Connect(const std::string &url) {
 void TheMasterFrame::OnUpdateFest(wxCommandEvent &e) {
     std::shared_ptr<FestDbUi> festDbUi = std::make_shared<FestDbUi>(this);
     festDbUi->Update();
+    festDb = std::make_shared<FestDb>();
 }
 
 void TheMasterFrame::OnShowFestVersions(wxCommandEvent &e) {
@@ -3177,7 +3179,7 @@ void TheMasterFrame::OnPrescriptionRenewWithChanges(const wxCommandEvent &e) {
         }
         festId = iterator->GetCode();
     }
-    std::shared_ptr<FestDb> festDb = std::make_shared<FestDb>();
+    std::shared_ptr<FestDb> festDb = this->festDb;
 
     std::shared_ptr<LegemiddelCore> legemiddelCore{};
     {
@@ -3284,7 +3286,7 @@ void TheMasterFrame::OnMerchPrescriptionRenewWithChanges(const wxCommandEvent &e
         wxMessageBox(wxT("The entry does not contain a prescription to renew"), wxT("Renew failed"), wxICON_ERROR);
         return;
     }
-    std::shared_ptr<FestDb> festDb = std::make_shared<FestDb>();
+    std::shared_ptr<FestDb> festDb = this->festDb;
 
     auto prescriptionData = MerchData::FromFhir(*medicationStatement);
     PrescribeMerchandiseDialog prescriptionDialog{this, prescriptionData};
@@ -3407,7 +3409,7 @@ void TheMasterFrame::OnCaveDetails(const wxCommandEvent &e) {
 
 void TheMasterFrame::OnAddCaveMedicament(const wxCommandEvent &e) {
     std::shared_ptr<LegemiddelCore> legemiddelCore{};
-    auto festDb = std::make_shared<FestDb>();
+    auto festDb = this->festDb;
     if (!festDb->IsOpen()) {
         return;
     }

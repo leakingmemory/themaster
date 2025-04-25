@@ -46,10 +46,10 @@ private:
     std::map<std::string,std::shared_ptr<ContainerElement>> refusjonToElement{};
     std::vector<MerchRefund> refunds{};
 public:
-    template <CanGetHandelsvare T> void MapElements(const FestDb &festDb, const std::string &festVersion, const std::vector<T> &elements);
-    MerchTreeImpl(const FestDb &festDb, const std::string &festVersion, const std::vector<OppfMedForbrMatr> &medForbrMatr);
-    MerchTreeImpl(const FestDb &festDb, const std::string &festVersion, const std::vector<OppfNaringsmiddel> &naringsmidler);
-    MerchTreeImpl(const FestDb &festDb, const std::string &festVersion, const std::vector<OppfBrystprotese> &brystproteser);
+    template <CanGetHandelsvare T> void MapElements(FestDb &festDb, const std::string &festVersion, const std::vector<T> &elements);
+    MerchTreeImpl(FestDb &festDb, const std::string &festVersion, const std::vector<OppfMedForbrMatr> &medForbrMatr);
+    MerchTreeImpl(FestDb &festDb, const std::string &festVersion, const std::vector<OppfNaringsmiddel> &naringsmidler);
+    MerchTreeImpl(FestDb &festDb, const std::string &festVersion, const std::vector<OppfBrystprotese> &brystproteser);
     std::shared_ptr<ContainerElement> GetContainerElement(const std::string &) const override;
     [[nodiscard]] std::vector<MerchRefund> GetRefunds() const override;
 };

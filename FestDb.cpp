@@ -3,7 +3,6 @@
 //
 
 #include "FestDb.h"
-#include <medfest/FestVectors.h>
 #include <medfest/FestDeserializer.h>
 #include <medfest/Struct/Decoded/OppfLegemiddelVirkestoff.h>
 #include <medfest/Struct/Decoded/OppfLegemiddelMerkevare.h>
@@ -17,11 +16,8 @@
 #include <medfest/Struct/Packed/PPakningsinfo.h>
 #include "DataDirectory.h"
 #include <filesystem>
+#include <map>
 #include <wx/wx.h>
-
-struct FestDbContainer {
-    std::unique_ptr<FestVectors> festVectors{};
-};
 
 FestDb::FestDb() {
     auto dbfile = DataDirectory::Data("themaster").Sub("FEST").GetPath("fest.db");
@@ -71,24 +67,45 @@ static std::vector<std::string> GetFestVersionsFromMap(const std::map<std::strin
     return versions;
 }
 
-FestDbContainer FestDb::GetActiveFestDb() const {
-    FestDbContainer container{};
+static FestDbContainer emptyDb{};
+
+FestDbContainer &FestDb::GetActiveFestDb() {
     std::map<std::string, std::unique_ptr<FestVectors>> festVersions = GetFestVersionMap();
     std::vector<std::string> versions = GetFestVersionsFromMap(festVersions);
     if (!versions.empty()) {
-        container.festVectors = std::move(festVersions[versions[0]]);
+        std::lock_guard lock{mtx};
+        auto cached = dbContainers.find(versions[0]);
+        if (cached != dbContainers.end()) {
+            return *(cached->second);
+        }
+        auto ref = dbContainers.emplace(std::make_pair(versions[0], std::make_unique<FestDbContainer>()));
+        ref.first->second->festVectors = std::move(festVersions[versions[0]]);
+        return *(ref.first->second);
     }
-    return container;
+    return emptyDb;
 }
 
-FestDbContainer FestDb::GetFestDb(const std::string &version) const {
-    FestDbContainer container{};
+FestDbContainer &FestDb::GetFestDb(const std::string &version) {
+    {
+        std::lock_guard lock{mtx};
+        auto cached = dbContainers.find(version);
+        if (cached != dbContainers.end()) {
+            return *(cached->second);
+        }
+    }
     std::map<std::string, std::unique_ptr<FestVectors>> festVersions = GetFestVersionMap();
     auto iterator = festVersions.find(version);
     if (iterator != festVersions.end()) {
-        container.festVectors = std::move(iterator->second);
+        std::lock_guard lock{mtx};
+        auto cached = dbContainers.find(version);
+        if (cached != dbContainers.end()) {
+            return *(cached->second);
+        }
+        auto ref = dbContainers.emplace(std::make_pair(version, std::make_unique<FestDbContainer>()));
+        ref.first->second->festVectors = std::move(iterator->second);
+        return *(ref.first->second);
     }
-    return container;
+    return emptyDb;
 }
 
 std::vector<std::string> FestDb::GetFestVersions() const {
@@ -120,8 +137,8 @@ std::vector<LegemiddelVirkestoff> FestDb::FindLegemiddelVirkestoff(const std::ve
     return results;
 }
 
-std::vector<LegemiddelVirkestoff> FestDb::FindLegemiddelVirkestoff(const std::string &term) const {
-    FestDbContainer festDbContainer = GetActiveFestDb();
+std::vector<LegemiddelVirkestoff> FestDb::FindLegemiddelVirkestoff(const std::string &term) {
+    FestDbContainer &festDbContainer = GetActiveFestDb();
     if (!festDbContainer.festVectors) {
         return {};
     }
@@ -145,8 +162,8 @@ std::vector<LegemiddelMerkevare> FestDb::FindLegemiddelMerkevare(const std::vect
     return results;
 }
 
-std::vector<LegemiddelMerkevare> FestDb::FindLegemiddelMerkevare(const std::string &i_term) const {
-    FestDbContainer festDbContainer = GetActiveFestDb();
+std::vector<LegemiddelMerkevare> FestDb::FindLegemiddelMerkevare(const std::string &i_term) {
+    FestDbContainer &festDbContainer = GetActiveFestDb();
     if (!festDbContainer.festVectors) {
         return {};
     }
@@ -154,10 +171,10 @@ std::vector<LegemiddelMerkevare> FestDb::FindLegemiddelMerkevare(const std::stri
     return FindLegemiddelMerkevare(oppfs, i_term);
 }
 
-std::vector<LegemiddelMerkevare> FestDb::FindLegemiddelMerkevare(const std::vector<FestUuid> &uuids) const {
+std::vector<LegemiddelMerkevare> FestDb::FindLegemiddelMerkevare(const std::vector<FestUuid> &uuids) {
     std::vector<LegemiddelMerkevare> results{};
     std::vector<FestUuid> remainingUuids = uuids;
-    FestDbContainer festDbContainer = GetActiveFestDb();
+    FestDbContainer &festDbContainer = GetActiveFestDb();
     if (!festDbContainer.festVectors) {
         return {};
     }
@@ -195,8 +212,8 @@ std::vector<Legemiddelpakning> FestDb::FindLegemiddelpakning(const std::vector<P
     return results;
 }
 
-std::vector<Legemiddelpakning> FestDb::FindLegemiddelpakning(const std::string &i_term) const {
-    FestDbContainer festDbContainer = GetActiveFestDb();
+std::vector<Legemiddelpakning> FestDb::FindLegemiddelpakning(const std::string &i_term) {
+    FestDbContainer &festDbContainer = GetActiveFestDb();
     if (!festDbContainer.festVectors) {
         return {};
     }
@@ -204,8 +221,8 @@ std::vector<Legemiddelpakning> FestDb::FindLegemiddelpakning(const std::string &
     return FindLegemiddelpakning(oppfs, i_term);
 }
 
-LegemiddelVirkestoff FestDb::GetLegemiddelVirkestoff(FestUuid id) const {
-    FestDbContainer festDbContainer = GetActiveFestDb();
+LegemiddelVirkestoff FestDb::GetLegemiddelVirkestoff(FestUuid id) {
+    FestDbContainer &festDbContainer = GetActiveFestDb();
     if (!festDbContainer.festVectors) {
         return {};
     }
@@ -225,8 +242,8 @@ LegemiddelVirkestoff FestDb::GetLegemiddelVirkestoff(const PLegemiddelVirkestoff
     return festDeserializer->Unpack(packed);
 }
 
-LegemiddelVirkestoff FestDb::GetLegemiddelVirkestoffForMerkevare(FestUuid uuid) const {
-    FestDbContainer festDbContainer = GetActiveFestDb();
+LegemiddelVirkestoff FestDb::GetLegemiddelVirkestoffForMerkevare(FestUuid uuid) {
+    FestDbContainer &festDbContainer = GetActiveFestDb();
     if (!festDbContainer.festVectors) {
         return {};
     }
@@ -244,8 +261,8 @@ LegemiddelVirkestoff FestDb::GetLegemiddelVirkestoffForMerkevare(FestUuid uuid) 
     return {};
 }
 
-LegemiddelMerkevare FestDb::GetLegemiddelMerkevare(FestUuid id) const {
-    FestDbContainer festDbContainer = GetActiveFestDb();
+LegemiddelMerkevare FestDb::GetLegemiddelMerkevare(FestUuid id) {
+    FestDbContainer &festDbContainer = GetActiveFestDb();
     if (!festDbContainer.festVectors) {
         return {};
     }
@@ -269,8 +286,8 @@ Legemiddelpakning FestDb::GetLegemiddelpakning(const PLegemiddelpakning &packed)
     return festDeserializer->Unpack(packed);
 }
 
-Legemiddelpakning FestDb::GetLegemiddelpakning(FestUuid id) const {
-    FestDbContainer festDbContainer = GetActiveFestDb();
+Legemiddelpakning FestDb::GetLegemiddelpakning(FestUuid id) {
+    FestDbContainer &festDbContainer = GetActiveFestDb();
     if (!festDbContainer.festVectors) {
         return {};
     }
@@ -286,8 +303,8 @@ Legemiddelpakning FestDb::GetLegemiddelpakning(FestUuid id) const {
     return {};
 }
 
-Legemiddelpakning FestDb::GetLegemiddelpakningByVarenr(const std::string &varenr) const {
-    FestDbContainer festDbContainer = GetActiveFestDb();
+Legemiddelpakning FestDb::GetLegemiddelpakningByVarenr(const std::string &varenr) {
+    FestDbContainer &festDbContainer = GetActiveFestDb();
     if (!festDbContainer.festVectors) {
         return {};
     }
@@ -302,8 +319,8 @@ Legemiddelpakning FestDb::GetLegemiddelpakningByVarenr(const std::string &varenr
     return {};
 }
 
-OppfKodeverk FestDb::GetKodeverkById(const std::string &id) const {
-    FestDbContainer festDbContainer = GetActiveFestDb();
+OppfKodeverk FestDb::GetKodeverkById(const std::string &id) {
+    FestDbContainer &festDbContainer = GetActiveFestDb();
     if (!festDbContainer.festVectors) {
         return {};
     }
@@ -317,8 +334,8 @@ OppfKodeverk FestDb::GetKodeverkById(const std::string &id) const {
     return {};
 }
 
-std::vector<Legemiddelpakning> FestDb::GetLegemiddelpakningForMerkevare(FestUuid merkevareId) const {
-    FestDbContainer festDbContainer = GetActiveFestDb();
+std::vector<Legemiddelpakning> FestDb::GetLegemiddelpakningForMerkevare(FestUuid merkevareId) {
+    FestDbContainer &festDbContainer = GetActiveFestDb();
     std::vector<Legemiddelpakning> list{};
     if (!festDbContainer.festVectors) {
         return list;
@@ -339,8 +356,8 @@ std::vector<Legemiddelpakning> FestDb::GetLegemiddelpakningForMerkevare(FestUuid
     return list;
 }
 
-VirkestoffMedStyrke FestDb::GetVirkestoffMedStyrke(FestUuid uuid) const {
-    FestDbContainer festDbContainer = GetActiveFestDb();
+VirkestoffMedStyrke FestDb::GetVirkestoffMedStyrke(FestUuid uuid) {
+    FestDbContainer &festDbContainer = GetActiveFestDb();
     if (!festDbContainer.festVectors) {
         return {};
     }
@@ -354,8 +371,8 @@ VirkestoffMedStyrke FestDb::GetVirkestoffMedStyrke(FestUuid uuid) const {
     return {};
 }
 
-Virkestoff FestDb::GetVirkestoff(FestUuid uuid) const {
-    FestDbContainer festDbContainer = GetActiveFestDb();
+Virkestoff FestDb::GetVirkestoff(FestUuid uuid) {
+    FestDbContainer &festDbContainer = GetActiveFestDb();
     if (!festDbContainer.festVectors) {
         return {};
     }
@@ -369,10 +386,17 @@ Virkestoff FestDb::GetVirkestoff(FestUuid uuid) const {
     return {};
 }
 
-FestUuid FestDb::GetVirkestoffForVirkestoffMedStyrkeId(FestUuid virkestoffMedStyrkeId) const {
-    FestDbContainer festDbContainer = GetActiveFestDb();
+FestUuid FestDb::GetVirkestoffForVirkestoffMedStyrkeId(FestUuid virkestoffMedStyrkeId) {
+    FestDbContainer &festDbContainer = GetActiveFestDb();
     if (!festDbContainer.festVectors) {
         return {};
+    }
+    {
+        std::lock_guard lock{festDbContainer.mtx};
+        auto cached = festDbContainer.virkestoffMedStyrkeToVirkestoff.find(virkestoffMedStyrkeId);
+        if (cached != festDbContainer.virkestoffMedStyrkeToVirkestoff.end()) {
+            return cached->second;
+        }
     }
     auto oppfs = festDbContainer.festVectors->GetVirkestoffMedStyrke(*festDeserializer);
     for (const auto &poppf: oppfs) {
@@ -380,15 +404,21 @@ FestUuid FestDb::GetVirkestoffForVirkestoffMedStyrkeId(FestUuid virkestoffMedSty
         FestUuid iteratingVirkestoffMedStyrkeId = festDeserializer->Unpack(pVMSId);
         if (iteratingVirkestoffMedStyrkeId == virkestoffMedStyrkeId) {
             auto pId = poppf.GetRefVirkestoff();
-            return festDeserializer->Unpack(pId);
+            auto virkestoffId = festDeserializer->Unpack(pId);
+            std::lock_guard lock{mtx};
+            festDbContainer.virkestoffMedStyrkeToVirkestoff.insert_or_assign(virkestoffMedStyrkeId, virkestoffId);
+            return virkestoffId;
         }
     }
-    return {};
+    FestUuid emptyId{};
+    std::lock_guard lock{festDbContainer.mtx};
+    festDbContainer.virkestoffMedStyrkeToVirkestoff.insert_or_assign(virkestoffMedStyrkeId, emptyId);
+    return emptyId;
 }
 
 std::vector<FestUuid> FestDb::GetVirkestoffMedStyrkeForVirkestoffId(FestUuid virkestoffId) {
     std::vector<FestUuid> virkestoffMedStyrkeId{};
-    FestDbContainer festDbContainer = GetActiveFestDb();
+    FestDbContainer &festDbContainer = GetActiveFestDb();
     if (!festDbContainer.festVectors) {
         return {};
     }
@@ -405,24 +435,24 @@ std::vector<FestUuid> FestDb::GetVirkestoffMedStyrkeForVirkestoffId(FestUuid vir
     return virkestoffMedStyrkeId;
 }
 
-std::vector<POppfLegemiddelMerkevare> FestDb::GetAllPLegemiddelMerkevare() const {
-    FestDbContainer festDbContainer = GetActiveFestDb();
+std::vector<POppfLegemiddelMerkevare> FestDb::GetAllPLegemiddelMerkevare() {
+    FestDbContainer &festDbContainer = GetActiveFestDb();
     if (!festDbContainer.festVectors) {
         return {};
     }
     return festDbContainer.festVectors->GetLegemiddelMerkevare(*festDeserializer);
 }
 
-std::vector<POppfLegemiddelVirkestoff> FestDb::GetAllPLegemiddelVirkestoff() const {
-    FestDbContainer festDbContainer = GetActiveFestDb();
+std::vector<POppfLegemiddelVirkestoff> FestDb::GetAllPLegemiddelVirkestoff() {
+    FestDbContainer &festDbContainer = GetActiveFestDb();
     if (!festDbContainer.festVectors) {
         return {};
     }
     return festDbContainer.festVectors->GetLegemiddelVirkestoff(*festDeserializer);
 }
 
-std::vector<POppfLegemiddelpakning> FestDb::GetAllPLegemiddelpakning() const {
-    FestDbContainer festDbContainer = GetActiveFestDb();
+std::vector<POppfLegemiddelpakning> FestDb::GetAllPLegemiddelpakning() {
+    FestDbContainer &festDbContainer = GetActiveFestDb();
     if (!festDbContainer.festVectors) {
         return {};
     }
@@ -431,7 +461,7 @@ std::vector<POppfLegemiddelpakning> FestDb::GetAllPLegemiddelpakning() const {
 
 bool FestDb::PLegemiddelVirkestoffHasOneOfMerkevare(const PLegemiddelVirkestoff &pLegemiddelVirkestoff,
                                                     const std::vector<FestUuid> &merkevareId) {
-    FestDbContainer festDbContainer = GetActiveFestDb();
+    FestDbContainer &festDbContainer = GetActiveFestDb();
     if (!festDbContainer.festVectors) {
         return false;
     }
@@ -447,7 +477,7 @@ bool FestDb::PLegemiddelVirkestoffHasOneOfMerkevare(const PLegemiddelVirkestoff 
 }
 
 bool FestDb::PLegemiddelVirkestoffHasOneOfPakning(const PLegemiddelVirkestoff &pLegemiddelVirkestoff, const std::vector<FestUuid> &pakningId) {
-    FestDbContainer festDbContainer = GetActiveFestDb();
+    FestDbContainer &festDbContainer = GetActiveFestDb();
     if (!festDbContainer.festVectors) {
         return false;
     }
@@ -512,10 +542,10 @@ std::vector<FestUuid> FestDb::GetSortertVirkestoffUtenStyrke(const PLegemiddelMe
     return ids;
 }
 
-std::vector<OppfRefusjon> FestDb::GetOppfRefusjon(const std::string &festVersion) const {
+std::vector<OppfRefusjon> FestDb::GetOppfRefusjon(const std::string &festVersion) {
     std::vector<OppfRefusjon> oppfs{};
     {
-        FestDbContainer festDbContainer = GetFestDb(festVersion);
+        FestDbContainer &festDbContainer = GetFestDb(festVersion);
         if (!festDbContainer.festVectors) {
             return {};
         }
@@ -527,10 +557,10 @@ std::vector<OppfRefusjon> FestDb::GetOppfRefusjon(const std::string &festVersion
     return oppfs;
 }
 
-std::vector<OppfLegemiddelMerkevare> FestDb::GetOppfLegemiddelMerkevare(const std::string &festVersion) const {
+std::vector<OppfLegemiddelMerkevare> FestDb::GetOppfLegemiddelMerkevare(const std::string &festVersion) {
     std::vector<OppfLegemiddelMerkevare> oppfs{};
     {
-        FestDbContainer festDbContainer = GetFestDb(festVersion);
+        FestDbContainer &festDbContainer = GetFestDb(festVersion);
         if (!festDbContainer.festVectors) {
             return {};
         }
@@ -542,10 +572,10 @@ std::vector<OppfLegemiddelMerkevare> FestDb::GetOppfLegemiddelMerkevare(const st
     return oppfs;
 }
 
-std::vector<OppfLegemiddelVirkestoff> FestDb::GetOppfLegemiddelVirkestoff(const std::string &festVersion) const {
+std::vector<OppfLegemiddelVirkestoff> FestDb::GetOppfLegemiddelVirkestoff(const std::string &festVersion) {
     std::vector<OppfLegemiddelVirkestoff> oppfs{};
     {
-        FestDbContainer festDbContainer = GetFestDb(festVersion);
+        FestDbContainer &festDbContainer = GetFestDb(festVersion);
         if (!festDbContainer.festVectors) {
             return {};
         }
@@ -557,10 +587,10 @@ std::vector<OppfLegemiddelVirkestoff> FestDb::GetOppfLegemiddelVirkestoff(const 
     return oppfs;
 }
 
-std::vector<OppfLegemiddelpakning> FestDb::GetOppfLegemiddelpakning(const std::string &festVersion) const {
+std::vector<OppfLegemiddelpakning> FestDb::GetOppfLegemiddelpakning(const std::string &festVersion) {
     std::vector<OppfLegemiddelpakning> oppfs{};
     {
-        FestDbContainer festDbContainer = GetFestDb(festVersion);
+        FestDbContainer &festDbContainer = GetFestDb(festVersion);
         if (!festDbContainer.festVectors) {
             return {};
         }
@@ -572,10 +602,10 @@ std::vector<OppfLegemiddelpakning> FestDb::GetOppfLegemiddelpakning(const std::s
     return oppfs;
 }
 
-std::vector<OppfLegemiddeldose> FestDb::GetOppfLegemiddeldose(const std::string &festVersion) const {
+std::vector<OppfLegemiddeldose> FestDb::GetOppfLegemiddeldose(const std::string &festVersion) {
     std::vector<OppfLegemiddeldose> oppfs{};
     {
-        FestDbContainer festDbContainer = GetFestDb(festVersion);
+        FestDbContainer &festDbContainer = GetFestDb(festVersion);
         if (!festDbContainer.festVectors) {
             return {};
         }
@@ -587,10 +617,10 @@ std::vector<OppfLegemiddeldose> FestDb::GetOppfLegemiddeldose(const std::string 
     return oppfs;
 }
 
-std::vector<OppfKodeverk> FestDb::GetOppfKodeverk(const std::string &festVersion) const {
+std::vector<OppfKodeverk> FestDb::GetOppfKodeverk(const std::string &festVersion) {
     std::vector<OppfKodeverk> oppfs{};
     {
-        FestDbContainer festDbContainer = GetFestDb(festVersion);
+        FestDbContainer &festDbContainer = GetFestDb(festVersion);
         if (!festDbContainer.festVectors) {
             return {};
         }
@@ -602,10 +632,10 @@ std::vector<OppfKodeverk> FestDb::GetOppfKodeverk(const std::string &festVersion
     return oppfs;
 }
 
-std::vector<Element> FestDb::GetKodeverkElements(const std::string &kodeverkId, const std::string &festVersion) const {
+std::vector<Element> FestDb::GetKodeverkElements(const std::string &kodeverkId, const std::string &festVersion) {
     std::vector<Element> oppfs{};
     {
-        FestDbContainer festDbContainer = GetFestDb(festVersion);
+        FestDbContainer &festDbContainer = GetFestDb(festVersion);
         if (!festDbContainer.festVectors) {
             return {};
         }
@@ -624,10 +654,10 @@ std::vector<Element> FestDb::GetKodeverkElements(const std::string &kodeverkId, 
     return oppfs;
 }
 
-std::vector<OppfMedForbrMatr> FestDb::GetOppfMedForbrMatr(const std::string &festVersion) const {
+std::vector<OppfMedForbrMatr> FestDb::GetOppfMedForbrMatr(const std::string &festVersion) {
     std::vector<OppfMedForbrMatr> oppfs{};
     {
-        FestDbContainer festDbContainer = GetFestDb(festVersion);
+        FestDbContainer &festDbContainer = GetFestDb(festVersion);
         if (!festDbContainer.festVectors) {
             return {};
         }
@@ -639,10 +669,10 @@ std::vector<OppfMedForbrMatr> FestDb::GetOppfMedForbrMatr(const std::string &fes
     return oppfs;
 }
 
-std::vector<OppfNaringsmiddel> FestDb::GetOppfNaringsmiddel(const std::string &festVersion) const {
+std::vector<OppfNaringsmiddel> FestDb::GetOppfNaringsmiddel(const std::string &festVersion) {
     std::vector<OppfNaringsmiddel> oppfs{};
     {
-        FestDbContainer festDbContainer = GetFestDb(festVersion);
+        FestDbContainer &festDbContainer = GetFestDb(festVersion);
         if (!festDbContainer.festVectors) {
             return {};
         }
@@ -654,11 +684,11 @@ std::vector<OppfNaringsmiddel> FestDb::GetOppfNaringsmiddel(const std::string &f
     return oppfs;
 }
 
-FestDiff<OppfRefusjon> FestDb::GetOppfRefusjonDiff(const std::function<void (int addsAndRemovesDone, int addsAndRemovesMax, int modificationsDone, int modificationsMax)> &progress, const std::string &firstVersion, const std::string &secondVersion) const {
+FestDiff<OppfRefusjon> FestDb::GetOppfRefusjonDiff(const std::function<void (int addsAndRemovesDone, int addsAndRemovesMax, int modificationsDone, int modificationsMax)> &progress, const std::string &firstVersion, const std::string &secondVersion) {
     FestDiff<OppfRefusjon> oppfs{};
     {
-        FestDbContainer firstDbContainer = GetFestDb(firstVersion);
-        FestDbContainer secondDbContainer = GetFestDb(secondVersion);
+        FestDbContainer &firstDbContainer = GetFestDb(firstVersion);
+        FestDbContainer &secondDbContainer = GetFestDb(secondVersion);
         if (!firstDbContainer.festVectors || !secondDbContainer.festVectors) {
             return {};
         }
@@ -726,11 +756,11 @@ FestDiff<OppfRefusjon> FestDb::GetOppfRefusjonDiff(const std::function<void (int
     return oppfs;
 }
 
-FestDiff<OppfLegemiddelMerkevare> FestDb::GetOppfLegemiddelMerkevareDiff(const std::function<void (int addsAndRemovesDone, int addsAndRemovesMax, int modificationsDone, int modificationsMax)> &progress, const std::string &firstVersion, const std::string &secondVersion) const {
+FestDiff<OppfLegemiddelMerkevare> FestDb::GetOppfLegemiddelMerkevareDiff(const std::function<void (int addsAndRemovesDone, int addsAndRemovesMax, int modificationsDone, int modificationsMax)> &progress, const std::string &firstVersion, const std::string &secondVersion) {
     FestDiff<OppfLegemiddelMerkevare> oppfs{};
     {
-        FestDbContainer firstDbContainer = GetFestDb(firstVersion);
-        FestDbContainer secondDbContainer = GetFestDb(secondVersion);
+        FestDbContainer &firstDbContainer = GetFestDb(firstVersion);
+        FestDbContainer &secondDbContainer = GetFestDb(secondVersion);
         if (!firstDbContainer.festVectors || !secondDbContainer.festVectors) {
             return {};
         }
@@ -797,11 +827,11 @@ FestDiff<OppfLegemiddelMerkevare> FestDb::GetOppfLegemiddelMerkevareDiff(const s
     return oppfs;
 }
 
-FestDiff<OppfLegemiddelVirkestoff> FestDb::GetOppfLegemiddelVirkestoffDiff(const std::function<void (int addsAndRemovesDone, int addsAndRemovesMax, int modificationsDone, int modificationsMax)> &progress, const std::string &firstVersion, const std::string &secondVersion) const {
+FestDiff<OppfLegemiddelVirkestoff> FestDb::GetOppfLegemiddelVirkestoffDiff(const std::function<void (int addsAndRemovesDone, int addsAndRemovesMax, int modificationsDone, int modificationsMax)> &progress, const std::string &firstVersion, const std::string &secondVersion) {
     FestDiff<OppfLegemiddelVirkestoff> oppfs{};
     {
-        FestDbContainer firstDbContainer = GetFestDb(firstVersion);
-        FestDbContainer secondDbContainer = GetFestDb(secondVersion);
+        FestDbContainer &firstDbContainer = GetFestDb(firstVersion);
+        FestDbContainer &secondDbContainer = GetFestDb(secondVersion);
         if (!firstDbContainer.festVectors || !secondDbContainer.festVectors) {
             return {};
         }
@@ -868,11 +898,11 @@ FestDiff<OppfLegemiddelVirkestoff> FestDb::GetOppfLegemiddelVirkestoffDiff(const
     return oppfs;
 }
 
-FestDiff<OppfLegemiddelpakning> FestDb::GetOppfLegemiddelpakningDiff(const std::function<void (int addsAndRemovesDone, int addsAndRemovesMax, int modificationsDone, int modificationsMax)> &progress, const std::string &firstVersion, const std::string &secondVersion) const {
+FestDiff<OppfLegemiddelpakning> FestDb::GetOppfLegemiddelpakningDiff(const std::function<void (int addsAndRemovesDone, int addsAndRemovesMax, int modificationsDone, int modificationsMax)> &progress, const std::string &firstVersion, const std::string &secondVersion) {
     FestDiff<OppfLegemiddelpakning> oppfs{};
     {
-        FestDbContainer firstDbContainer = GetFestDb(firstVersion);
-        FestDbContainer secondDbContainer = GetFestDb(secondVersion);
+        FestDbContainer &firstDbContainer = GetFestDb(firstVersion);
+        FestDbContainer &secondDbContainer = GetFestDb(secondVersion);
         if (!firstDbContainer.festVectors || !secondDbContainer.festVectors) {
             return {};
         }
@@ -939,11 +969,11 @@ FestDiff<OppfLegemiddelpakning> FestDb::GetOppfLegemiddelpakningDiff(const std::
     return oppfs;
 }
 
-FestDiff<OppfLegemiddeldose> FestDb::GetOppfLegemiddeldoseDiff(const std::function<void (int addsAndRemovesDone, int addsAndRemovesMax, int modificationsDone, int modificationsMax)> &progress, const std::string &firstVersion, const std::string &secondVersion) const {
+FestDiff<OppfLegemiddeldose> FestDb::GetOppfLegemiddeldoseDiff(const std::function<void (int addsAndRemovesDone, int addsAndRemovesMax, int modificationsDone, int modificationsMax)> &progress, const std::string &firstVersion, const std::string &secondVersion) {
     FestDiff<OppfLegemiddeldose> oppfs{};
     {
-        FestDbContainer firstDbContainer = GetFestDb(firstVersion);
-        FestDbContainer secondDbContainer = GetFestDb(secondVersion);
+        FestDbContainer &firstDbContainer = GetFestDb(firstVersion);
+        FestDbContainer &secondDbContainer = GetFestDb(secondVersion);
         if (!firstDbContainer.festVectors || !secondDbContainer.festVectors) {
             return {};
         }
@@ -1010,11 +1040,11 @@ FestDiff<OppfLegemiddeldose> FestDb::GetOppfLegemiddeldoseDiff(const std::functi
     return oppfs;
 }
 
-FestDiff<OppfKodeverk> FestDb::GetOppfKodeverkDiff(const std::function<void (int addsAndRemovesDone, int addsAndRemovesMax, int modificationsDone, int modificationsMax)> &progress, const std::string &firstVersion, const std::string &secondVersion) const {
+FestDiff<OppfKodeverk> FestDb::GetOppfKodeverkDiff(const std::function<void (int addsAndRemovesDone, int addsAndRemovesMax, int modificationsDone, int modificationsMax)> &progress, const std::string &firstVersion, const std::string &secondVersion) {
     FestDiff<OppfKodeverk> oppfs{};
     {
-        FestDbContainer firstDbContainer = GetFestDb(firstVersion);
-        FestDbContainer secondDbContainer = GetFestDb(secondVersion);
+        FestDbContainer &firstDbContainer = GetFestDb(firstVersion);
+        FestDbContainer &secondDbContainer = GetFestDb(secondVersion);
         if (!firstDbContainer.festVectors || !secondDbContainer.festVectors) {
             return {};
         }
@@ -1083,11 +1113,11 @@ FestDiff<OppfKodeverk> FestDb::GetOppfKodeverkDiff(const std::function<void (int
 
 FestDiff<Element>
 FestDb::GetKodeverkElementsDiff(const std::function<void(int, int, int, int)> &progress, const std::string &kodeverkId,
-                                const std::string &firstVersion, const std::string &secondVersion) const {
+                                const std::string &firstVersion, const std::string &secondVersion) {
     FestDiff<Element> oppfs{};
     {
-        FestDbContainer firstDbContainer = GetFestDb(firstVersion);
-        FestDbContainer secondDbContainer = GetFestDb(secondVersion);
+        FestDbContainer &firstDbContainer = GetFestDb(firstVersion);
+        FestDbContainer &secondDbContainer = GetFestDb(secondVersion);
         if (!firstDbContainer.festVectors || !secondDbContainer.festVectors) {
             return {};
         }
