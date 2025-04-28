@@ -93,6 +93,7 @@ private:
     std::shared_ptr<FestDb> festDb;
     std::shared_ptr<LegemiddelCore> legemiddelCore;
 public:
+    SfmMedicamentMapper() = default;
     SfmMedicamentMapper(const std::shared_ptr<FestDb> &festDb, const std::shared_ptr<LegemiddelCore> &legemiddelCore);
 private:
     void Map(const LegemiddelMerkevare &legemiddelMerkevare);
