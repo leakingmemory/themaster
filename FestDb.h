@@ -76,6 +76,7 @@ public:
     [[nodiscard]] std::vector<LegemiddelMerkevare> FindLegemiddelMerkevare(const std::vector<POppfLegemiddelMerkevare> &oppfs, const std::string &term) const;
     [[nodiscard]] std::vector<LegemiddelMerkevare> FindLegemiddelMerkevare(const std::string &term);
     [[nodiscard]] std::vector<LegemiddelMerkevare> FindLegemiddelMerkevare(const std::vector<FestUuid> &);
+    [[nodiscard]] std::vector<LegemiddelMerkevare> FindDilutionLegemiddelMerkevare();
     [[nodiscard]] std::vector<Legemiddelpakning> FindLegemiddelpakning(const std::vector<POppfLegemiddelpakning> &oppfs, const std::string &term) const;
     [[nodiscard]] std::vector<Legemiddelpakning> FindLegemiddelpakning(const std::string &term);
     [[nodiscard]] LegemiddelVirkestoff GetLegemiddelVirkestoff(FestUuid);

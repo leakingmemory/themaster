@@ -7,19 +7,22 @@
 
 #include <wx/wx.h>
 #include <map>
+#include <memory>
 #include "MedicalCodedValue.h"
 #include "MagistralMedicament.h"
 
 class TheMasterFrame;
 class wxListView;
 class wxSpinCtrlDouble;
+class ComboSearchControl;
+class FestDb;
 
 class MagistralBuilderDialog : public wxDialog {
 private:
     std::map<std::string,std::string> strengthUnits{};
     MagistralMedicament magistralMedicament{};
     wxListView *dilutionList;
-    wxComboBox *dilutionSearch;
+    ComboSearchControl *dilutionSearch;
     wxComboBox *adqsSelect;
     wxListView *substanceList;
     wxComboBox *substanceSearch;
@@ -30,7 +33,7 @@ private:
     wxComboBox *amountUnitCtrl;
     wxTextCtrl *instructionsCtrl;
 public:
-    MagistralBuilderDialog(TheMasterFrame *);
+    MagistralBuilderDialog(TheMasterFrame *, const std::shared_ptr<FestDb> &);
     void OnAddDilution(wxCommandEvent &e);
     void OnAddSubstance(wxCommandEvent &e);
     void OnCancel(wxCommandEvent &e);

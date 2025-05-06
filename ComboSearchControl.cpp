@@ -47,11 +47,12 @@ void ComboSearchControlPlainListProvider::Append(const wxString &str) {
 
 class ComboSearchControlPopup : public wxListView, public wxComboPopup {
 private:
+    wxString itemNameLabel;
     std::shared_ptr<ComboSearchControlListProvider> listProvider;
     std::vector<wxString> visibleList{};
     std::string autoComplete{};
 public:
-    ComboSearchControlPopup(const std::shared_ptr<ComboSearchControlListProvider> &listProvider) : listProvider(listProvider) {}
+    ComboSearchControlPopup(const std::shared_ptr<ComboSearchControlListProvider> &listProvider, const wxString &itemNameLabel) : itemNameLabel(itemNameLabel), listProvider(listProvider) {}
     bool Create(wxWindow* parent) override ;
     void OnPopup() override;
     virtual wxWindow *GetControl() override;
@@ -63,7 +64,7 @@ public:
 
 bool ComboSearchControlPopup::Create(wxWindow *parent) {
     auto success = wxListView::Create(parent,1,wxPoint(0,0),wxSize(150,100),wxLC_REPORT | wxWANTS_CHARS);
-    wxListView::InsertColumn(0, wxT("Refund code"));
+    wxListView::InsertColumn(0, itemNameLabel);
     if (success) {
         auto list = listProvider->GetVisibleList();
         int row = 0;
@@ -131,16 +132,55 @@ void ComboSearchControlPopup::OnComboCharEvent(wxKeyEvent &event) {
     if (wxIsprint(event.GetUnicodeKey())) {
         wxChar c = event.GetUnicodeKey();
         auto wxstr = wxString::FromUTF8(autoComplete);
-        wxstr.Append(c);
+        auto pos = GetComboCtrl()->GetInsertionPoint();
+        if (pos >= wxstr.Length() || wxIsEmpty(wxstr)) {
+            wxstr.Append(c);
+            pos = wxstr.Length();
+        } else {
+            if (pos < 0) {
+                pos = 0;
+            }
+            wxstr.insert(pos, c);
+            ++pos;
+        }
         GetComboCtrl()->GetTextCtrl()->SetValue(wxstr);
+        GetComboCtrl()->SetInsertionPoint(pos);
         autoComplete = wxstr.ToUTF8();
         std::cout << "OnComboCharEvent: " << autoComplete << "\n";
     } else if (event.GetKeyCode() == WXK_BACK) {
         auto wxstr = wxString::FromUTF8(autoComplete);
-        wxstr.RemoveLast();
+        auto pos = GetComboCtrl()->GetInsertionPoint();
+        if (pos >= wxstr.Length()) {
+            wxstr.RemoveLast();
+            pos = wxstr.Length();
+        } else  if (wxstr.Length() > 0){
+            if (pos < 0) {
+                pos = 0;
+            }
+            if (pos > 0) {
+                --pos;
+                wxstr.erase(pos, 1);
+            }
+        }
         GetComboCtrl()->GetTextCtrl()->SetValue(wxstr);
+        GetComboCtrl()->SetInsertionPoint(pos);
         autoComplete = wxstr.ToUTF8();
         std::cout << "OnComboCharEvent: " << autoComplete << "\n";
+    } else if (event.GetKeyCode() == WXK_LEFT) {
+        auto pos = GetComboCtrl()->GetInsertionPoint();
+        if (pos > 0) {
+            --pos;
+            GetComboCtrl()->SetInsertionPoint(pos);
+        }
+        return;
+    } else if (event.GetKeyCode() == WXK_RIGHT) {
+        auto wxstr = GetComboCtrl()->GetValue();
+        auto pos = GetComboCtrl()->GetInsertionPoint();
+        ++pos;
+        if (pos <= wxstr.Length()) {
+            GetComboCtrl()->SetInsertionPoint(pos);
+        }
+        return;
     }
     listProvider->SetAutoComplete(autoComplete);
     auto list = listProvider->GetVisibleList();
@@ -180,15 +220,15 @@ void ComboSearchControlPopup::OnSelectedItem(const wxCommandEvent & event) {
     }
 }
 
-ComboSearchControl::ComboSearchControl(wxWindow *parent, wxWindowID id) : wxComboCtrl(parent, id), listProvider(std::make_shared<ComboSearchControlPlainListProvider>()) {
-    Init();
+ComboSearchControl::ComboSearchControl(wxWindow *parent, wxWindowID id, const wxString &itemNameLabel) : wxComboCtrl(parent, id), listProvider(std::make_shared<ComboSearchControlPlainListProvider>()) {
+    Init(itemNameLabel);
 }
-ComboSearchControl::ComboSearchControl(wxWindow *parent, wxWindowID id, const std::shared_ptr<ComboSearchControlListProvider> &listProvider) : wxComboCtrl(parent, id), listProvider(listProvider) {
-        Init();
+ComboSearchControl::ComboSearchControl(wxWindow *parent, wxWindowID id, const wxString &itemNameLabel, const std::shared_ptr<ComboSearchControlListProvider> &listProvider) : wxComboCtrl(parent, id), listProvider(listProvider) {
+    Init(itemNameLabel);
 }
 
-void ComboSearchControl::Init() {
-    SetPopupControl(new ComboSearchControlPopup(listProvider));
+void ComboSearchControl::Init(const wxString &itemNameLabel) {
+    SetPopupControl(new ComboSearchControlPopup(listProvider, itemNameLabel));
 }
 
 void ComboSearchControl::Clear() {

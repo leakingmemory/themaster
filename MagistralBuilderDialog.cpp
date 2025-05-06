@@ -6,11 +6,77 @@
 #include "TheMasterFrame.h"
 #include "UnitsOfMeasure.h"
 #include "MedicalCodedValue.h"
+#include "ComboSearchControl.h"
+#include "SfmMedicamentMapper.h"
 #include <wx/listctrl.h>
 #include <wx/spinctrl.h>
 #include <sstream>
+#include <medfest/Struct/Decoded/LegemiddelMerkevare.h>
 
-MagistralBuilderDialog::MagistralBuilderDialog(TheMasterFrame *masterFrame) : wxDialog(masterFrame, wxID_ANY, "Magistral") {
+class DilutionSearchListProvider : public ComboSearchControlListProvider {
+private:
+    std::vector<std::shared_ptr<SfmMedicamentMapper>> dilutions{};
+    std::string autoComplete{};
+public:
+    DilutionSearchListProvider(const std::shared_ptr<FestDb> &);
+    std::vector<wxString> GetItems() const override;
+    size_t GetIndexOf(const wxString &) const override;
+    void Clear() override;
+    void Append(const wxString &) override;
+    std::vector<wxString> GetVisibleList() const override;
+    void SetAutoComplete(const std::string &str) override;
+};
+
+static std::vector<std::shared_ptr<SfmMedicamentMapper>> GetMappers(const std::shared_ptr<FestDb> &festDb, const std::vector<LegemiddelMerkevare> &merkevarer) {
+    std::vector<std::shared_ptr<SfmMedicamentMapper>> mappers{};
+    for (const auto &merkevare : merkevarer) {
+        std::shared_ptr<LegemiddelCore> shptr = std::make_shared<LegemiddelMerkevare>(merkevare);
+        mappers.emplace_back(std::make_shared<SfmMedicamentMapper>(festDb, shptr));
+    }
+    return mappers;
+}
+
+DilutionSearchListProvider::DilutionSearchListProvider(const std::shared_ptr<FestDb> &festDb) : dilutions(GetMappers(festDb, festDb->FindDilutionLegemiddelMerkevare())) {
+}
+
+std::vector<wxString> DilutionSearchListProvider::GetItems() const {
+    std::vector<wxString> strs{};
+    for (const auto &lm : dilutions) {
+        strs.emplace_back(wxString::FromUTF8(lm->GetMedication().GetDisplay()));
+    }
+    return strs;
+}
+
+size_t DilutionSearchListProvider::GetIndexOf(const wxString &searchFor) const {
+    for (decltype(dilutions.size()) i = 0; i < dilutions.size(); ++i) {
+        if (wxString::FromUTF8(dilutions[i]->GetMedication().GetDisplay()) == searchFor) {
+            return i;
+        }
+    }
+    return -1;
+}
+
+void DilutionSearchListProvider::Clear() {
+}
+
+void DilutionSearchListProvider::Append(const wxString &) {
+}
+
+std::vector<wxString> DilutionSearchListProvider::GetVisibleList() const {
+    std::vector<wxString> visibleList{};
+    for (const auto &item : GetItems()) {
+        if (item.Contains(autoComplete)) {
+            visibleList.emplace_back(item);
+        }
+    }
+    return visibleList;
+}
+
+void DilutionSearchListProvider::SetAutoComplete(const std::string &str) {
+    autoComplete = str;
+}
+
+MagistralBuilderDialog::MagistralBuilderDialog(TheMasterFrame *masterFrame, const std::shared_ptr<FestDb> &festDb) : wxDialog(masterFrame, wxID_ANY, "Magistral") {
     auto *sizer = new wxBoxSizer(wxVERTICAL);
     auto *dilutionListSizer = new wxBoxSizer(wxHORIZONTAL);
     dilutionList = new wxListView(this, wxID_ANY);
@@ -18,7 +84,8 @@ MagistralBuilderDialog::MagistralBuilderDialog(TheMasterFrame *masterFrame) : wx
     dilutionList->AppendColumn(wxT("AD/QS"));
     dilutionListSizer->Add(dilutionList, 1, wxEXPAND | wxALL, 5);
     auto *dilutionAddSizer = new wxBoxSizer(wxHORIZONTAL);
-    dilutionSearch = new wxComboBox(this, wxID_ANY);
+    dilutionSearch = new ComboSearchControl(this, wxID_ANY, wxT("Dilution"), std::make_shared<DilutionSearchListProvider>(festDb));
+    dilutionSearch->SetEditable(true);
     adqsSelect = new wxComboBox(this, wxID_ANY);
     adqsSelect->SetEditable(false);
     adqsSelect->Append(wxT("AD"));

@@ -35,9 +35,9 @@ class ComboSearchControl : public wxComboCtrl {
 private:
     std::shared_ptr<ComboSearchControlListProvider> listProvider;
 public:
-    ComboSearchControl(wxWindow *parent, wxWindowID id);
-    ComboSearchControl(wxWindow *parent, wxWindowID id, const std::shared_ptr<ComboSearchControlListProvider> &listProvider);
-    void Init();
+    ComboSearchControl(wxWindow *parent, wxWindowID id, const wxString &itemNameLabel);
+    ComboSearchControl(wxWindow *parent, wxWindowID id, const wxString &itemNameLabel, const std::shared_ptr<ComboSearchControlListProvider> &listProvider);
+    void Init(const wxString &itemNameLabel);
     void Clear() override;
     void Append(const wxString &);
     void SetSelection(int64_t selection);

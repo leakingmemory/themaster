@@ -2439,7 +2439,7 @@ void TheMasterFrame::PrescribeMerch(const PrescribeMerchandiseDialog &prescripti
 }
 
 void TheMasterFrame::OnPrescribeMagistral(wxCommandEvent &e) {
-    MagistralBuilderDialog magistralBuilderDialog{this};
+    MagistralBuilderDialog magistralBuilderDialog{this, festDb};
     if (!medicationBundle || !medicationBundle->medBundle) {
         wxMessageBox(wxT("Select patient and run 'get medication' to prescribe medication"), wxT("No open patient"), wxICON_ERROR);
         return;

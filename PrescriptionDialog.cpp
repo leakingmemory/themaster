@@ -358,7 +358,7 @@ template <MedicamentMapper Mapper> PrescriptionDialog::PrescriptionDialog(TheMas
         refundSizer->Add(refundSelection);
         auto *refundCodeLabel = new wxStaticText(mainPanel, wxID_ANY, wxT("Code:"));
         refundSizer->Add(refundCodeLabel, 1, wxEXPAND | wxALL, 5);
-        refundCodeSelection = new ComboSearchControl(mainPanel, wxID_ANY);
+        refundCodeSelection = new ComboSearchControl(mainPanel, wxID_ANY, wxT("Refund code"));
         refundCodeSelection->SetEditable(true);
         refundSizer->Add(refundCodeSelection, 1, wxEXPAND | wxALL, 5);
         auto *reitSizer = new wxBoxSizer(wxHORIZONTAL);

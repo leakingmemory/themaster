@@ -196,6 +196,21 @@ std::vector<LegemiddelMerkevare> FestDb::FindLegemiddelMerkevare(const std::vect
     return results;
 }
 
+std::vector<LegemiddelMerkevare> FestDb::FindDilutionLegemiddelMerkevare() {
+    std::vector<LegemiddelMerkevare> results{};
+    FestDbContainer &festDbContainer = GetActiveFestDb();
+    if (!festDbContainer.festVectors) {
+        return {};
+    }
+    auto oppfs = festDbContainer.festVectors->GetLegemiddelMerkevare(*festDeserializer);
+    for (const auto &poppf : oppfs) {
+        if (poppf.GetAdministreringLegemiddel().IsBlandingsveske() == MaybeBoolean::MTRUE) {
+            results.emplace_back(festDeserializer->Unpack(static_cast<const PLegemiddelMerkevare &>(poppf)));
+        }
+    }
+    return results;
+}
+
 std::vector<Legemiddelpakning> FestDb::FindLegemiddelpakning(const std::vector<POppfLegemiddelpakning> &oppfs, const std::string &i_term) const {
     std::vector<Legemiddelpakning> results{};
     std::string term{i_term};
