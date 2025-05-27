@@ -16,11 +16,13 @@ class wxListView;
 class wxSpinCtrlDouble;
 class ComboSearchControl;
 class FestDb;
+class DilutionSearchListProvider;
 
 class MagistralBuilderDialog : public wxDialog {
 private:
     std::map<std::string,std::string> strengthUnits{};
     MagistralMedicament magistralMedicament{};
+    std::shared_ptr<DilutionSearchListProvider> dilutionSearchListProvider;
     wxListView *dilutionList;
     ComboSearchControl *dilutionSearch;
     wxComboBox *adqsSelect;

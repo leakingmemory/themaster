@@ -11,8 +11,10 @@
 #include <boost/uuid/uuid_generators.hpp> // for random_generator
 #include <boost/uuid/uuid_io.hpp> // for to_string
 #include <medfest/Struct/Decoded/VirkestoffMedStyrke.h>
+#include <sfmbasisapi/fhir/bundleentry.h>
 #include "DateOnly.h"
 #include "GetLegemiddelRefunds.h"
+#include "Uuid.h"
 
 SfmMedicamentDetailsMapper::SfmMedicamentDetailsMapper(const std::shared_ptr<FestDb> &festDb, const std::shared_ptr<LegemiddelCore> &legemiddelCore) : festDb(festDb) {
     medicamentRefunds = GetLegemiddelRefunds::GetMedicamentRefunds(*festDb, GetLegemiddelRefunds(*legemiddelCore));
@@ -353,4 +355,11 @@ void SfmMedicamentMapper::Map(const Legemiddelpakning &legemiddelpakning) {
         }
         medication.AddExtension(medicationDetails);
     }
+}
+
+std::vector <FhirBundleEntry> SfmMedicamentMapper::GetMedications() const {
+    std::string fullUrl{"urn:uuid:"};
+    fullUrl.append(Uuid::RandomUuidString());
+    FhirBundleEntry bundleEntry{fullUrl, std::make_shared<FhirMedication>(medication)};
+    return {bundleEntry};
 }

@@ -20,7 +20,8 @@ private:
 public:
     DilutionSearchListProvider(const std::shared_ptr<FestDb> &);
     std::vector<wxString> GetItems() const override;
-    size_t GetIndexOf(const wxString &) const override;
+    std::shared_ptr<SfmMedicamentMapper> GetItem(ssize_t index);
+    ssize_t GetIndexOf(const wxString &) const override;
     void Clear() override;
     void Append(const wxString &) override;
     std::vector<wxString> GetVisibleList() const override;
@@ -42,14 +43,21 @@ DilutionSearchListProvider::DilutionSearchListProvider(const std::shared_ptr<Fes
 std::vector<wxString> DilutionSearchListProvider::GetItems() const {
     std::vector<wxString> strs{};
     for (const auto &lm : dilutions) {
-        strs.emplace_back(wxString::FromUTF8(lm->GetMedication().GetDisplay()));
+        strs.emplace_back(wxString::FromUTF8(lm->GetDisplay()));
     }
     return strs;
 }
 
-size_t DilutionSearchListProvider::GetIndexOf(const wxString &searchFor) const {
+std::shared_ptr<SfmMedicamentMapper> DilutionSearchListProvider::GetItem(ssize_t index) {
+    if (index >= 0 && index < dilutions.size()) {
+        return dilutions[index];
+    }
+    return {};
+}
+
+ssize_t DilutionSearchListProvider::GetIndexOf(const wxString &searchFor) const {
     for (decltype(dilutions.size()) i = 0; i < dilutions.size(); ++i) {
-        if (wxString::FromUTF8(dilutions[i]->GetMedication().GetDisplay()) == searchFor) {
+        if (wxString::FromUTF8(dilutions[i]->GetDisplay()) == searchFor) {
             return i;
         }
     }
@@ -84,7 +92,8 @@ MagistralBuilderDialog::MagistralBuilderDialog(TheMasterFrame *masterFrame, cons
     dilutionList->AppendColumn(wxT("AD/QS"));
     dilutionListSizer->Add(dilutionList, 1, wxEXPAND | wxALL, 5);
     auto *dilutionAddSizer = new wxBoxSizer(wxHORIZONTAL);
-    dilutionSearch = new ComboSearchControl(this, wxID_ANY, wxT("Dilution"), std::make_shared<DilutionSearchListProvider>(festDb));
+    dilutionSearchListProvider = std::make_shared<DilutionSearchListProvider>(festDb);
+    dilutionSearch = new ComboSearchControl(this, wxID_ANY, wxT("Dilution"), dilutionSearchListProvider);
     dilutionSearch->SetEditable(true);
     adqsSelect = new wxComboBox(this, wxID_ANY);
     adqsSelect->SetEditable(false);
@@ -163,8 +172,12 @@ MagistralBuilderDialog::MagistralBuilderDialog(TheMasterFrame *masterFrame, cons
 }
 
 void MagistralBuilderDialog::OnAddDilution(wxCommandEvent &e) {
+    auto dilutionName = dilutionSearch->GetValue();
+    auto dilutionIndex = dilutionSearchListProvider->GetIndexOf(dilutionName);
+    auto dilutionMapper = dilutionSearchListProvider->GetItem(dilutionIndex);
     Dilution dilution{
-        .name = dilutionSearch->GetValue().ToStdString(),
+        .medicamentMapper = dilutionMapper,
+        .name = dilutionName.ToStdString(),
         .dilution = adqsSelect->GetSelection() == 0 ? DilutionType::AD : DilutionType::QS
     };
     dilutionList->InsertItem((long) magistralMedicament.dilutions.size(), dilution.name);

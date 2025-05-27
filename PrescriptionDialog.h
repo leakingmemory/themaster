@@ -23,6 +23,7 @@ class wxBookCtrlEvent;
 class wxDatePickerCtrl;
 class wxDateEvent;
 class FhirMedication;
+class FhirBundleEntry;
 
 class MedicamentPackage {
 private:
@@ -58,7 +59,8 @@ template <class T> concept MedicamentMapper = requires (const T &obj) {
     {obj.GetMedicamentUses()} -> std::convertible_to<std::vector<MedicalCodedValue>>;
     {obj.GetMedicamentRefunds()} -> std::convertible_to<std::vector<MedicamentRefund>>;
     {obj.GetPrescriptionUnit()} -> std::convertible_to<std::vector<MedicalCodedValue>>;
-    {obj.GetMedication()} -> std::convertible_to<FhirMedication>;
+    {obj.GetMedications()} -> std::convertible_to<std::vector<FhirBundleEntry>>;
+    {obj.GetDisplay()} -> std::convertible_to<std::string>;
     {obj.GetMedicamentType()} -> std::convertible_to<std::vector<MedicalCodedValue>>;
     {obj.IsPackage()} -> std::convertible_to<bool>;
 };
@@ -106,7 +108,7 @@ private:
     wxListView *altMedListView;
     wxButton *changeMedicationAccept{};
     std::shared_ptr<FestDb> festDb;
-    std::shared_ptr<FhirMedication> medication;
+    std::vector<FhirBundleEntry> medication;
     std::vector<std::shared_ptr<MedicationAlternativeInfo>> medicationAlternatives{};
     std::vector<MedicamentPackage> packages;
     std::vector<MedicamentRefund> refunds;
@@ -128,7 +130,7 @@ private:
 public:
     PrescriptionDialog(TheMasterFrame *, const std::shared_ptr<FestDb> &festDb, const std::shared_ptr<LegemiddelCore> &);
     void SwitchMed(const LegemiddelCore &legemiddelCore, const SfmMedicamentMapper &mapper);
-    PrescriptionDialog(TheMasterFrame *, const std::shared_ptr<FhirMedication> &magistralMedication, const std::vector<MedicamentRefund> &);
+    PrescriptionDialog(TheMasterFrame *, const std::vector<FhirBundleEntry> &substances, const std::shared_ptr<FhirMedication> &magistralMedication, const std::vector<MedicamentRefund> &);
     PrescriptionDialog & operator += (const PrescriptionData &);
     void OnCancel(wxCommandEvent &e);
 private:
@@ -161,9 +163,7 @@ public:
     [[nodiscard]] PrescriptionData GetPrescriptionData() const {
         return prescriptionData;
     }
-    [[nodiscard]] std::shared_ptr<FhirMedication> GetMedication() const {
-        return medication;
-    }
+    [[nodiscard]] std::vector<FhirBundleEntry> GetMedications() const;
 };
 
 

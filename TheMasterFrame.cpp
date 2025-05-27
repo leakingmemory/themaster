@@ -60,6 +60,7 @@
 #include "MerchTree.h"
 #include "PrescribeMerchandiseDialog.h"
 #include "EditReferenceNumbersDialog.h"
+#include "Uuid.h"
 
 constexpr int PrescriptionNameColumnWidth = 250;
 constexpr int PllColumnWidth = 50;
@@ -2421,10 +2422,10 @@ void TheMasterFrame::SetPatient(MerchData &prescriptionData) const {
 
 void TheMasterFrame::PrescribeMedicament(const PrescriptionDialog &prescriptionDialog, const std::string &renewPrescriptionId, const std::string &pllId) {
     PrescriptionData prescriptionData = prescriptionDialog.GetPrescriptionData();
-    std::shared_ptr<FhirMedication> medicament = prescriptionDialog.GetMedication();
+    std::vector<FhirBundleEntry> medicaments = prescriptionDialog.GetMedications();
     SetPrescriber(prescriptionData);
     SetPatient(prescriptionData);
-    medicationBundle->Prescribe(medicament, prescriptionData, renewPrescriptionId, pllId);
+    medicationBundle->Prescribe(medicaments, prescriptionData, renewPrescriptionId, pllId);
     UpdateMedications();
 }
 
@@ -2457,9 +2458,9 @@ void TheMasterFrame::OnPrescribeMagistral(wxCommandEvent &e) {
         refunds.emplace_back(std::move(p3));
         refunds.emplace_back(std::move(y));
         refunds.emplace_back(std::move(hPres));
+        auto fhir = magistralBuilderDialog.GetMagistralMedicament().ToFhir();
         try {
-            PrescriptionDialog prescriptionDialog{this, std::make_shared<FhirMedication>(
-                    magistralBuilderDialog.GetMagistralMedicament().ToFhir()), refunds};
+            PrescriptionDialog prescriptionDialog{this, fhir.substances, fhir.medication, refunds};
             auto res = prescriptionDialog.ShowModal();
             if (res != wxID_OK) {
                 return;

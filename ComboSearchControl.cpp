@@ -28,7 +28,7 @@ std::vector<wxString> ComboSearchControlPlainListProvider::GetItems() const {
     return matching;
 }
 
-size_t ComboSearchControlPlainListProvider::GetIndexOf(const wxString &searchFor) const {
+ssize_t ComboSearchControlPlainListProvider::GetIndexOf(const wxString &searchFor) const {
     for (decltype(items.size()) i = 0; i < items.size(); ++i) {
         if (items[i] == searchFor) {
             return i;

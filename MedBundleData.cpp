@@ -780,7 +780,7 @@ public:
     }
 };
 
-void MedBundleData::Prescribe(const std::shared_ptr<FhirMedication> &medicament, const PrescriptionData &prescriptionData, const std::string &renewPrescriptionId, const std::string &pllId) {
+void MedBundleData::Prescribe(const std::vector<FhirBundleEntry> &medicament, const PrescriptionData &prescriptionData, const std::string &renewPrescriptionId, const std::string &pllId) {
     std::shared_ptr<FhirComposition> composition{};
     std::vector<RenewStatement> renewStatements{};
     for (const auto &entry : medBundle->GetEntries()) {
@@ -849,13 +849,11 @@ void MedBundleData::Prescribe(const std::shared_ptr<FhirMedication> &medicament,
             throw MedBundleDataException("Prescription to renew is not head of chain");
         }
     }
-    std::string medicamentFullUrl{"urn:uuid:"};
-    medicamentFullUrl.append(medicament->GetId());
-    FhirBundleEntry medicamentEntry{medicamentFullUrl, medicament};
     std::shared_ptr<FhirMedicationStatement> medicationStatement = std::make_shared<FhirMedicationStatement>(prescriptionData.ToFhir());
-    {
-        auto medicationProfile = medicament->GetProfile();
-        FhirReference medicationReference{medicamentFullUrl, medicationProfile.size() == 1 ? medicationProfile[0] : "", medicament->GetDisplay()};
+    if (!medicament.empty()) {
+        auto lastMedicament = medicament.back();
+        auto medicationProfile = lastMedicament.GetResource()->GetProfile();
+        FhirReference medicationReference{lastMedicament.GetFullUrl(), medicationProfile.size() == 1 ? medicationProfile[0] : "", lastMedicament.GetResource()->GetDisplay()};
         medicationStatement->SetMedicationReference(medicationReference);
     }
     std::string medicationStatementFullUrl{"urn:uuid:"};
@@ -944,7 +942,9 @@ void MedBundleData::Prescribe(const std::shared_ptr<FhirMedication> &medicament,
             reseptAmendment->AddExtension(recallInfoExt);
         }
     }
-    medBundle->AddEntry(medicamentEntry);
+    for (const auto &medicamentEntry : medicament) {
+        medBundle->AddEntry(medicamentEntry);
+    }
     medBundle->AddEntry(medicationStatementEntry);
     if (renewReference == nullptr) {
         if (entries.empty()) {

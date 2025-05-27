@@ -100,8 +100,9 @@ private:
     void Map(const LegemiddelVirkestoff &legemiddelVirkestoff);
     void Map(const Legemiddelpakning &legemiddelpakning);
 public:
-    [[nodiscard]] constexpr FhirMedication GetMedication() const {
-        return medication;
+    [[nodiscard]] std::vector<FhirBundleEntry> GetMedications() const;
+    [[nodiscard]] constexpr std::string GetDisplay() const {
+        return medication.GetDisplay();
     }
 private:
     constexpr SfmMedicamentDetailsMapper &Up() const {

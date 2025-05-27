@@ -21,6 +21,7 @@
 #include <array>
 #include <thread>
 #include <latch>
+#include "Uuid.h"
 
 #include "DateTime.h"
 #include "WxDateConversions.h"
@@ -101,7 +102,23 @@ template <MedicamentMapperWithGetPackages MedicamentMapperType> struct GetPackag
         packages.reserve(packageMappers.size());
         for (const auto &packageMapper : packageMappers) {
             auto description = packageMapper.GetPackageDescription();
-            auto &package = packages.emplace_back(std::make_shared<FhirMedication>(packageMapper.GetMedication()), description);
+            std::shared_ptr<FhirMedication> lastMedication{};
+            {
+                auto medications = packageMapper.GetMedications();
+                auto iterator = medications.end();
+                while (iterator != medications.begin()) {
+                    --iterator;
+                    auto medication = std::dynamic_pointer_cast<FhirMedication>(iterator->GetResource());
+                    if (medication) {
+                        lastMedication = medication;
+                        break;
+                    }
+                }
+            }
+            if (!lastMedication) {
+                continue;
+            }
+            auto &package = packages.emplace_back(lastMedication, description);
             package.SetRefunds(packageMapper.GetMedicamentRefunds());
         }
     }
@@ -277,7 +294,10 @@ template <MedicamentMapperWithGetSubstanceIds SubstanceMapper> struct GetAlterna
     }
 };
 
-template <MedicamentMapper Mapper> PrescriptionDialog::PrescriptionDialog(TheMasterFrame *frame, const std::shared_ptr<FestDb> &festDb, const LegemiddelCore &legemiddelCore, const std::vector<MedicalCodedValue> &dosingUnit, const std::vector<MedicalCodedValue> &kortdoser, const Mapper &medicamentMapper) : wxDialog(frame, wxID_ANY, wxT("Prescription")), festDb(festDb), medication(std::make_shared<FhirMedication>(medicamentMapper.GetMedication())), amountUnit(medicamentMapper.GetPrescriptionUnit()), packages(GetPackages(medicamentMapper).operator std::vector<MedicamentPackage>()), refunds(medicamentMapper.GetMedicamentRefunds()), dosingUnit(dosingUnit), kortdoser(kortdoser), medicamentUses(medicamentMapper.GetMedicamentUses()), prescriptionValidity(medicamentMapper.GetPrescriptionValidity()) {
+template <MedicamentMapper Mapper> PrescriptionDialog::PrescriptionDialog(TheMasterFrame *frame, const std::shared_ptr<FestDb> &festDb, const LegemiddelCore &legemiddelCore, const std::vector<MedicalCodedValue> &dosingUnit, const std::vector<MedicalCodedValue> &kortdoser, const Mapper &medicamentMapper) : wxDialog(frame, wxID_ANY, wxT("Prescription")), festDb(festDb), medication(), amountUnit(medicamentMapper.GetPrescriptionUnit()), packages(GetPackages(medicamentMapper).operator std::vector<MedicamentPackage>()), refunds(medicamentMapper.GetMedicamentRefunds()), dosingUnit(dosingUnit), kortdoser(kortdoser), medicamentUses(medicamentMapper.GetMedicamentUses()), prescriptionValidity(medicamentMapper.GetPrescriptionValidity()) {
+    for (const auto &medication : medicamentMapper.GetMedications()) {
+        this->medication.emplace_back(medication);
+    }
     {
         for (const auto &medicament : GetAlternativesFromFest(frame, festDb, medicamentMapper).operator std::vector<std::shared_ptr<MedicationAlternativeInfo>>()) {
             medicationAlternatives.emplace_back(medicament);
@@ -289,7 +309,19 @@ template <MedicamentMapper Mapper> PrescriptionDialog::PrescriptionDialog(TheMas
     auto *mvSizer = new wxBoxSizer(wxVERTICAL);
     auto *medBarSizer = new wxBoxSizer(wxHORIZONTAL);
     medBarSizer->Add(new wxStaticText(this, wxID_ANY, wxT("Medication: ")), 0, wxALL | wxEXPAND, 5);
-    medicationDisplayName = new wxStaticText(this, wxID_ANY, medication ? wxString::FromUTF8(medication->GetDisplay()) : wxT(""));
+    std::shared_ptr<FhirMedication> lastMedication{};
+    {
+        auto iterator = medication.end();
+        while (iterator != medication.begin()) {
+            --iterator;
+            auto medication = std::dynamic_pointer_cast<FhirMedication>(iterator->GetResource());
+            if (medication) {
+                lastMedication = medication;
+                break;
+            }
+        }
+    }
+    medicationDisplayName = new wxStaticText(this, wxID_ANY, lastMedication ? wxString::FromUTF8(lastMedication->GetDisplay()) : wxT(""));
     medBarSizer->Add(medicationDisplayName, 1, wxALL | wxEXPAND, 5);
     changeMedication = new wxButton(this, wxID_ANY, wxT("Change medication"));
     changeMedication->Enable(medicationAlternatives.size() > 1);
@@ -522,7 +554,7 @@ template <MedicamentMapper Mapper> PrescriptionDialog::PrescriptionDialog(TheMas
         altMedListView->SetColumnWidth(0, 600);
         auto row = 0;
         for (const auto &med : medicationAlternatives) {
-            altMedListView->InsertItem(row++, wxString::FromUTF8(med->mapper->GetMedication().GetDisplay()));
+            altMedListView->InsertItem(row++, wxString::FromUTF8(med->mapper->GetDisplay()));
         }
         vSwitchMed->Add(altMedListView, 1, wxEXPAND | wxALL, 5);
         auto shitchMedButtons = new wxBoxSizer(wxHORIZONTAL);
@@ -576,10 +608,11 @@ PrescriptionDialog::PrescriptionDialog(TheMasterFrame *frame, const std::shared_
 
 class MagistralMedicamentMapper {
 private:
+    std::vector<FhirBundleEntry> substances;
     std::shared_ptr<FhirMedication> medication;
     std::vector<MedicamentRefund> refund;
 public:
-    constexpr MagistralMedicamentMapper(const std::shared_ptr<FhirMedication> &medication, const std::vector<MedicamentRefund> &refund) : medication(medication), refund(refund) {
+    constexpr MagistralMedicamentMapper(const std::vector<FhirBundleEntry> &substances, const std::shared_ptr<FhirMedication> &medication, const std::vector<MedicamentRefund> &refund) : substances(substances), medication(medication), refund(refund) {
     }
     constexpr std::vector<PrescriptionValidity> GetPrescriptionValidity() const {
         return {};
@@ -593,8 +626,18 @@ public:
     constexpr std::vector<MedicalCodedValue> GetPrescriptionUnit() const {
         return {};
     }
-    constexpr FhirMedication GetMedication() const {
-        return *medication;
+    constexpr std::vector<FhirBundleEntry> GetMedications() const {
+        std::vector<FhirBundleEntry> medications{};
+        for (const auto &substance : substances) {
+            medications.emplace_back(substance);
+        }
+        std::string fullUrl{"urn:uuid:"};
+        fullUrl.append(Uuid::RandomUuidString());
+        medications.emplace_back(fullUrl, medication);
+        return medications;
+    }
+    constexpr std::string GetDisplay() const {
+        return medication ? medication->GetDisplay() : std::string();
     }
     constexpr std::vector<MedicalCodedValue> GetMedicamentType() const {
         return {};
@@ -605,7 +648,13 @@ public:
 };
 
 void PrescriptionDialog::SwitchMed(const LegemiddelCore &legemiddelCore, const SfmMedicamentMapper &mapper) {
-    *medication = mapper.GetMedication();
+    {
+        std::vector<FhirBundleEntry> medications{};
+        for (const auto medication: mapper.GetMedications()) {
+            medications.emplace_back(medication);
+        }
+        medication = std::move(medications);
+    }
     amountUnit = mapper.GetPrescriptionUnit();
     packages = GetPackages(mapper).operator std::vector<MedicamentPackage>();
     refunds = mapper.GetMedicamentRefunds();
@@ -617,7 +666,19 @@ void PrescriptionDialog::SwitchMed(const LegemiddelCore &legemiddelCore, const S
     DateOnly startDate = DateOnly::Today();
     DateOnly endDate = startDate;
     endDate.AddYears(1);
-    medicationDisplayName->SetLabel(medication ? wxString::FromUTF8(medication->GetDisplay()) : wxT(""));
+    std::shared_ptr<FhirMedication> lastMedication{};
+    {
+        auto iterator = medication.end();
+        while (iterator != medication.begin()) {
+            --iterator;
+            auto medication = std::dynamic_pointer_cast<FhirMedication>(iterator->GetResource());
+            if (medication) {
+                lastMedication = medication;
+                break;
+            }
+        }
+    }
+    medicationDisplayName->SetLabel(lastMedication ? wxString::FromUTF8(lastMedication->GetDisplay()) : wxT(""));
     packageAmountNotebook->DeleteAllPages();
     hasPackage = mapper.IsPackage() || !packages.empty();
     if (hasPackage) {
@@ -695,8 +756,8 @@ void PrescriptionDialog::SwitchMed(const LegemiddelCore &legemiddelCore, const S
     PopulateRefunds(refunds);
 }
 
-PrescriptionDialog::PrescriptionDialog(TheMasterFrame *frame, const std::shared_ptr<FhirMedication> &magistralMedication,
-                                       const std::vector<MedicamentRefund> &refund) : PrescriptionDialog(frame, {}, {}, {}, {}, MagistralMedicamentMapper(magistralMedication, refund)) {
+PrescriptionDialog::PrescriptionDialog(TheMasterFrame *frame, const std::vector<FhirBundleEntry> &substances, const std::shared_ptr<FhirMedication> &magistralMedication,
+                                       const std::vector<MedicamentRefund> &refund) : PrescriptionDialog(frame, {}, {}, {}, {}, MagistralMedicamentMapper(substances, magistralMedication, refund)) {
 }
 
 PrescriptionDialog &PrescriptionDialog::operator+=(const PrescriptionData &prescriptionData) {
@@ -1308,7 +1369,9 @@ void PrescriptionDialog::OnProceed(wxCommandEvent &e) {
     ProcessDialogData(dialogData);
     SetPrescriptionData(prescriptionData, dialogData);
     if (dialogData.package) {
-        medication = dialogData.package;
+        std::string fullUrl{"urn:uuid:"};
+        fullUrl.append(Uuid::RandomUuidString());
+        medication = { {fullUrl, dialogData.package} };
     }
     EndDialog(wxID_OK);
 }
@@ -1427,4 +1490,8 @@ void PrescriptionDialog::OnAltMed(wxCommandEvent &e) {
     wxTheApp->GetTopWindow()->GetEventHandler()->CallAfter([this]() {
         mainNotebook->SetSelection(0);
     });
+}
+
+std::vector<FhirBundleEntry> PrescriptionDialog::GetMedications() const {
+    return medication;
 }
