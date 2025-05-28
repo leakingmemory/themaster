@@ -7,15 +7,13 @@
 #include "MedicalCodedValue.h"
 #include "FestDb.h"
 #include "DateTime.h"
+#include "Uuid.h"
 #include <sfmbasisapi/fhir/value.h>
 #include <sfmbasisapi/fhir/allergy.h>
 #include <medfest/Struct/Packed/FestUuid.h>
 #include <medfest/Struct/Decoded/VirkestoffMedStyrke.h>
 #include <medfest/Struct/Decoded/Virkestoff.h>
 #include <wx/listctrl.h>
-#include <boost/uuid/uuid.hpp>
-#include <boost/uuid/uuid_generators.hpp>
-#include <boost/uuid/uuid_io.hpp>
 
 class GetCaveCodings : public MedicamentVisitorBase {
 private:
@@ -158,14 +156,8 @@ RegisterCaveDialog::RegisterCaveDialog(wxWindow *parent, const std::vector<CaveC
                                        const FhirReference &recorder, const FhirReference &patient)
                                        : wxDialog(parent, wxID_ANY, wxT("Register CAVE")) {
     this->availableCodings = availableCodings;
-    {
-        boost::uuids::random_generator generator;
-        boost::uuids::uuid randomUUID = generator();
-        id = boost::uuids::to_string(randomUUID);
-    }
-    {
-        recordedDate = DateTimeOffset::Now().to_iso8601();
-    }
+    id = Uuid::RandomUuidString();
+    recordedDate = DateTimeOffset::Now().to_iso8601();
     this->recorder = recorder;
     this->patient = patient;
 #ifndef WIN32

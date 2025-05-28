@@ -12,9 +12,6 @@
 #include "PrescriptionDialog.h"
 #include "GetLegemiddelKortdoser.h"
 #include "GetMedicamentDosingUnit.h"
-#include <boost/uuid/uuid.hpp>
-#include <boost/uuid/uuid_generators.hpp>
-#include <boost/uuid/uuid_io.hpp>
 #include <cstdio>
 #include <ctime>
 #include <filesystem>
@@ -954,11 +951,7 @@ void TheMasterFrame::GetMedication(CallContext &ctx, const std::function<void(co
     auto callback = std::make_shared<CallGuard>(callbackF);
     auto patient = std::make_shared<FhirPatient>();
     {
-        {
-            boost::uuids::uuid uuid = boost::uuids::random_generator()();
-            std::string uuid_string = to_string(uuid);
-            patient->SetId(uuid_string);
-        }
+        patient->SetId(Uuid::RandomUuidString());
         patient->SetProfile("http://ehelse.no/fhir/StructureDefinition/sfm-Patient");
         {
             std::vector <FhirIdentifier> identifiers{};
@@ -1393,10 +1386,7 @@ void TheMasterFrame::SendMedication(CallContext &ctx,
                         if (!relatesTo.IsSet()) {
                             relatesTo = composition->GetIdentifier();
                             if (relatesTo.IsSet()) {
-                                boost::uuids::random_generator generator;
-                                boost::uuids::uuid randomUUID = generator();
-                                std::string uuidStr = boost::uuids::to_string(randomUUID);
-                                FhirIdentifier identifier{"official", uuidStr};
+                                FhirIdentifier identifier{"official", Uuid::RandomUuidString()};
                                 composition->SetIdentifier(identifier);
                                 composition->SetRelatesToCode("replaces");
                                 composition->SetRelatesTo(relatesTo);
@@ -1881,8 +1871,7 @@ void TheMasterFrame::OnSendPll(wxCommandEvent &e) {
                             }
                         }
                         if (pllId.empty()) {
-                            boost::uuids::uuid uuid = boost::uuids::random_generator()();
-                            pllId = to_string(uuid);
+                            pllId = Uuid::RandomUuidString();
                             std::vector<FhirIdentifier> newIdentifiers{};
                             {
                                 FhirIdentifier pllIdentifier{FhirCodeableConcept("PLL"), "usual", pllId};
@@ -2069,9 +2058,7 @@ void TheMasterFrame::OnSendPll(wxCommandEvent &e) {
                                     std::string url{"urn:uuid:"};
                                     m251Message = std::make_shared<FhirBasic>();
                                     {
-                                        boost::uuids::random_generator generator;
-                                        boost::uuids::uuid randomUUID = generator();
-                                        std::string uuidStr = boost::uuids::to_string(randomUUID);
+                                        std::string uuidStr = Uuid::RandomUuidString();
                                         m251Message->SetId(uuidStr);
                                         url.append(uuidStr);
                                     }

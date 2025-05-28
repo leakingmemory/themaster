@@ -7,11 +7,8 @@
 #include <sstream>
 #include <vector>
 #include <cpprest/uri.h>
-#include <boost/uuid/uuid.hpp>
-#include <boost/uuid/uuid_generators.hpp>
-#include <boost/uuid/uuid_io.hpp>
-
 #include "win32/w32strings.h"
+#include "Uuid.h"
 
 std::string HelseidAuthorization::GetAuthorizeUrl() {
     std::stringstream strurl{};
@@ -24,8 +21,7 @@ std::string HelseidAuthorization::GetAuthorizeUrl() {
     strurl << from_wstring_on_win32(web::uri::encode_data_string(as_wstring_on_win32(clientId)));
     strurl << "&nonce=";
     {
-        boost::uuids::uuid uuid = boost::uuids::random_generator()();
-        strurl << from_wstring_on_win32(web::uri::encode_data_string(as_wstring_on_win32(to_string(uuid))));
+        strurl << from_wstring_on_win32(web::uri::encode_data_string(as_wstring_on_win32(Uuid::RandomUuidString())));
     }
     strurl << "&redirect_uri=";
     strurl << from_wstring_on_win32(web::uri::encode_data_string(as_wstring_on_win32(redirectUri)));
@@ -52,8 +48,7 @@ std::string HelseidAuthorization::GetAuthorizeUrl() {
     strurl << "&code_challenge_method=S256";
     strurl << "&state=";
     {
-        boost::uuids::uuid uuid = boost::uuids::random_generator()();
-        state = to_string(uuid);
+        state = Uuid::RandomUuidString();
         strurl << from_wstring_on_win32(web::uri::encode_data_string(as_wstring_on_win32(state)));
     }
     return strurl.str();

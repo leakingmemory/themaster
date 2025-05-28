@@ -6,9 +6,8 @@
 #include "AdvancedDosingPeriod.h"
 #include "DateTime.h"
 #include "Lazy.h"
+#include "Uuid.h"
 #include <sfmbasisapi/fhir/medstatement.h>
-#include <boost/uuid/uuid_generators.hpp> // for random_generator
-#include <boost/uuid/uuid_io.hpp> // for to_string
 #include <functional>
 #include <sstream>
 
@@ -322,12 +321,7 @@ FhirMedicationStatement PrescriptionData::ToFhir() const {
     FhirMedicationStatement fhir{};
     fhir.SetStatus(FhirStatus::ACTIVE);
     fhir.SetProfile("http://ehelse.no/fhir/StructureDefinition/sfm-MedicationStatement");
-    {
-        boost::uuids::random_generator generator;
-        boost::uuids::uuid randomUUID = generator();
-        std::string uuidStr = boost::uuids::to_string(randomUUID);
-        fhir.SetId(uuidStr);
-    }
+    fhir.SetId(Uuid::RandomUuidString());
     {
         FhirDosage dosage{dosingText.empty() ? dssn : dosingText, 1};
         if (!kortdose.GetCode().empty()) {
@@ -566,10 +560,7 @@ FhirMedicationStatement PrescriptionData::ToFhir() const {
     }
     if (this->typeresept.GetCode() != "U") {
         FhirCodeableConcept identifierType{"ReseptId"};
-        boost::uuids::random_generator generator;
-        boost::uuids::uuid randomUUID = generator();
-        std::string uuidStr = boost::uuids::to_string(randomUUID);
-        FhirIdentifier identifier{identifierType, "usual", uuidStr};
+        FhirIdentifier identifier{identifierType, "usual", Uuid::RandomUuidString()};
         fhir.AddIdentifier(identifier);
     }
     return fhir;

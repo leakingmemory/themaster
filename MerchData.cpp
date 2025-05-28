@@ -3,9 +3,8 @@
 //
 
 #include "MerchData.h"
+#include "Uuid.h"
 #include <sfmbasisapi/nhnfhir/SfmBandaPrescription.h>
-#include <boost/uuid/uuid_generators.hpp> // for random_generator
-#include <boost/uuid/uuid_io.hpp> // for to_string
 #include <functional>
 
 void MerchData::SetDefaults() {
@@ -194,12 +193,7 @@ MerchData MerchData::FromFhir(const FhirBasic &fhir) {
 
 FhirBasic MerchData::ToFhir() const {
     SfmBandaPrescription basic{};
-    {
-        boost::uuids::random_generator generator;
-        boost::uuids::uuid randomUUID = generator();
-        std::string uuidStr = boost::uuids::to_string(randomUUID);
-        basic.SetId(uuidStr);
-    }
+    basic.SetId(Uuid::RandomUuidString());
     if (!prescribedByReference.empty()) {
         basic.SetAuthor({prescribedByReference, "http://ehelse.no/fhir/StructureDefinition/sfm-PractitionerRole", prescribedByDisplay});
     }
@@ -265,10 +259,7 @@ FhirBasic MerchData::ToFhir() const {
     }
     {
         FhirCodeableConcept identifierType{"ReseptId"};
-        boost::uuids::random_generator generator;
-        boost::uuids::uuid randomUUID = generator();
-        std::string uuidStr = boost::uuids::to_string(randomUUID);
-        FhirIdentifier identifier{identifierType, "usual", uuidStr};
+        FhirIdentifier identifier{identifierType, "usual", Uuid::RandomUuidString()};
         basic.SetIdentifiers({identifier});
     }
     return basic;

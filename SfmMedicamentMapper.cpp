@@ -8,8 +8,6 @@
 #include <medfest/Struct/Decoded/LegemiddelVirkestoff.h>
 #include <medfest/Struct/Decoded/Legemiddelpakning.h>
 #include <medfest/Struct/Packed/FestUuid.h>
-#include <boost/uuid/uuid_generators.hpp> // for random_generator
-#include <boost/uuid/uuid_io.hpp> // for to_string
 #include <medfest/Struct/Decoded/VirkestoffMedStyrke.h>
 #include <sfmbasisapi/fhir/bundleentry.h>
 #include "DateOnly.h"
@@ -238,12 +236,7 @@ SfmMedicamentMapper::SfmMedicamentMapper(const std::shared_ptr<FestDb> &festDb,
             Map(*pakning);
         }
     }
-    {
-        boost::uuids::random_generator generator;
-        boost::uuids::uuid randomUUID = generator();
-        std::string uuidStr = boost::uuids::to_string(randomUUID);
-        medication.SetId(uuidStr);
-    }
+    medication.SetId(Uuid::RandomUuidString());
     {
         auto reseptgruppe = legemiddelCore->GetReseptgruppe();
         auto reseptgruppeCode = reseptgruppe.GetValue();

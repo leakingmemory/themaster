@@ -6,11 +6,9 @@
 #include "FestDb.h"
 #include <sfmbasisapi/fhir/medstatement.h>
 #include <sfmbasisapi/fhir/fhirbasic.h>
-#include <boost/uuid/uuid.hpp>
-#include <boost/uuid/uuid_generators.hpp>
-#include <boost/uuid/uuid_io.hpp>
 
 #include "DateOnly.h"
+#include "Uuid.h"
 
 const char *RenewalFailureException::what() const noexcept {
     return error.c_str();
@@ -39,10 +37,7 @@ template<RenewableFhirObject T> void PrescriptionChangesService::GenericRenew(T 
         std::transform(key.cbegin(), key.cend(), key.begin(), [] (char ch) -> char { return std::tolower(ch); });
         if (key == "reseptid") {
             reseptId = identifier.GetValue();
-            boost::uuids::random_generator generator;
-            boost::uuids::uuid randomUUID = generator();
-            std::string uuidStr = boost::uuids::to_string(randomUUID);
-            FhirIdentifier replacement{identifier.GetType(), identifier.GetUse(), identifier.GetSystem(), uuidStr};
+            FhirIdentifier replacement{identifier.GetType(), identifier.GetUse(), identifier.GetSystem(), Uuid::RandomUuidString()};
             *iterator = replacement;
             ++iterator;
         } else {
@@ -250,10 +245,8 @@ void PrescriptionChangesService::RenewRevokedOrExpiredPll(FhirMedicationStatemen
         festUpdateExt = std::make_shared<FhirValueExtension>("festupdate", std::make_shared<FhirString>("2023-12-20T11:54:48.9287539+00:00")); // TODO
         reseptAmendment->AddExtension(festUpdateExt);
     }
-    boost::uuids::random_generator generator;
-    boost::uuids::uuid randomUUID = generator();
     std::string originalReseptId{};
-    std::string reseptId = boost::uuids::to_string(randomUUID);
+    std::string reseptId = Uuid::RandomUuidString();
     std::vector<FhirIdentifier> identifiers{};
     {
         bool hasReseptId{false};

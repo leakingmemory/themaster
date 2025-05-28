@@ -8,15 +8,13 @@
 #include <sfmbasisapi/fhir/person.h>
 #include <sfmbasisapi/fhir/allergy.h>
 #include <sfmbasisapi/nhnfhir/SfmBandaPrescription.h>
-#include <boost/uuid/uuid.hpp>
-#include <boost/uuid/uuid_generators.hpp>
-#include <boost/uuid/uuid_io.hpp>
 #include <jjwtid/Jwt.h>
 #include <jjwtid/JwtPart.h>
 #include "MedBundleData.h"
 #include "PrescriptionChangesService.h"
 #include "PrescriptionData.h"
 #include "MerchData.h"
+#include "Uuid.h"
 #include <sstream>
 
 class MedBundleDataException : public std::exception {
@@ -177,12 +175,7 @@ PrescriberRef MedBundleData::GetPrescriber(const std::shared_ptr<FhirBundle> &bu
     }
     std::shared_ptr<FhirPractitioner> practitioner = std::make_shared<FhirPractitioner>();
     practitioner->SetProfile("http://ehelse.no/fhir/StructureDefinition/sfm-Practitioner");
-    {
-        boost::uuids::random_generator generator;
-        boost::uuids::uuid randomUUID = generator();
-        std::string uuidStr = boost::uuids::to_string(randomUUID);
-        practitioner->SetId(uuidStr);
-    }
+    practitioner->SetId(Uuid::RandomUuidString());
     practitioner->SetStatus(FhirStatus::ACTIVE);
     {
         std::vector<FhirIdentifier> identifiers{};
@@ -257,12 +250,7 @@ FhirReference MedBundleData::GetSubjectRef() const {
     }
     std::shared_ptr<FhirPatient> patient = std::make_shared<FhirPatient>();
     patient->SetProfile("http://ehelse.no/fhir/StructureDefinition/sfm-Patient");
-    {
-        boost::uuids::random_generator generator;
-        boost::uuids::uuid randomUUID = generator();
-        std::string uuidStr = boost::uuids::to_string(randomUUID);
-        patient->SetId(uuidStr);
-    }
+    patient->SetId(Uuid::RandomUuidString());
     patient->SetStatus(FhirStatus::NOT_SET);
     {
         std::vector<FhirIdentifier> identifiers{};
@@ -1188,10 +1176,7 @@ void MedBundleData::ConvertToWithoutPrescription(const std::string &prescription
             }
         }
         if (newIdentifiers.empty()) {
-            boost::uuids::random_generator generator;
-            boost::uuids::uuid randomUUID = generator();
-            std::string uuidStr = boost::uuids::to_string(randomUUID);
-            newIdentifiers.emplace_back(FhirIdentifier(FhirCodeableConcept("PLL"), "usual", uuidStr));
+            newIdentifiers.emplace_back(FhirIdentifier(FhirCodeableConcept("PLL"), "usual", Uuid::RandomUuidString()));
         }
     }
     {
@@ -1300,12 +1285,7 @@ void MedBundleData::ConvertToWithoutPrescription(const std::string &prescription
     if (!replacing) {
         renewMedicationStatement->SetIdentifiers(recallIdentifiers);
         medicationStatement->SetIdentifiers(newIdentifiers);
-        {
-            boost::uuids::random_generator generator;
-            boost::uuids::uuid randomUUID = generator();
-            std::string uuidStr = boost::uuids::to_string(randomUUID);
-            medicationStatement->SetId(uuidStr);
-        }
+        medicationStatement->SetId(Uuid::RandomUuidString());
         std::string medicationStatementFullUrl{"urn:uuid:"};
         medicationStatementFullUrl.append(medicationStatement->GetId());
         FhirBundleEntry medicationStatementEntry{medicationStatementFullUrl, medicationStatement};
