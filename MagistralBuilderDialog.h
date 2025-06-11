@@ -17,17 +17,19 @@ class wxSpinCtrlDouble;
 class ComboSearchControl;
 class FestDb;
 class DilutionSearchListProvider;
+class SubstanceSearchListProvider;
 
 class MagistralBuilderDialog : public wxDialog {
 private:
     std::map<std::string,std::string> strengthUnits{};
     MagistralMedicament magistralMedicament{};
     std::shared_ptr<DilutionSearchListProvider> dilutionSearchListProvider;
+    std::shared_ptr<SubstanceSearchListProvider> substanceSearchListProvider;
     wxListView *dilutionList;
     ComboSearchControl *dilutionSearch;
     wxComboBox *adqsSelect;
     wxListView *substanceList;
-    wxComboBox *substanceSearch;
+    ComboSearchControl *substanceSearch;
     wxSpinCtrlDouble *substanceStrength;
     wxComboBox *substanceStrengthUnit;
     wxComboBox *medicamentFormCtrl;

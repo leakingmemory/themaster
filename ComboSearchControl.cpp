@@ -104,6 +104,7 @@ void ComboSearchControlPopup::OnPopup() {
         wxListView::InsertItem(row++, str);
     }
     wxListView::SetSize(wxListView::GetBestSize());
+    wxListView::SetPosition(wxPoint(0, 0));
     visibleList = list;
 }
 

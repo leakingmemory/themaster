@@ -12,6 +12,7 @@
 #include <wx/spinctrl.h>
 #include <sstream>
 #include <medfest/Struct/Decoded/LegemiddelMerkevare.h>
+#include "MedicamentSearch.h"
 
 class DilutionSearchListProvider : public ComboSearchControlListProvider {
 private:
@@ -19,6 +20,23 @@ private:
     std::string autoComplete{};
 public:
     DilutionSearchListProvider(const std::shared_ptr<FestDb> &);
+    std::vector<wxString> GetItems() const override;
+    std::shared_ptr<SfmMedicamentMapper> GetItem(ssize_t index);
+    ssize_t GetIndexOf(const wxString &) const override;
+    void Clear() override;
+    void Append(const wxString &) override;
+    std::vector<wxString> GetVisibleList() const override;
+    void SetAutoComplete(const std::string &str) override;
+};
+
+class SubstanceSearchListProvider : public ComboSearchControlListProvider {
+private:
+    MedicamentSearch medicamentSearch;
+    std::shared_ptr<FestDb> festDb;
+    std::vector<std::shared_ptr<SfmMedicamentMapper>> substances{};
+    std::string autoComplete{};
+public:
+    SubstanceSearchListProvider(const std::shared_ptr<FestDb> &);
     std::vector<wxString> GetItems() const override;
     std::shared_ptr<SfmMedicamentMapper> GetItem(ssize_t index);
     ssize_t GetIndexOf(const wxString &) const override;
@@ -40,6 +58,8 @@ static std::vector<std::shared_ptr<SfmMedicamentMapper>> GetMappers(const std::s
 DilutionSearchListProvider::DilutionSearchListProvider(const std::shared_ptr<FestDb> &festDb) : dilutions(GetMappers(festDb, festDb->FindDilutionLegemiddelMerkevare())) {
 }
 
+SubstanceSearchListProvider::SubstanceSearchListProvider(const std::shared_ptr<FestDb> &festDb) : medicamentSearch(festDb), festDb(festDb) {}
+
 std::vector<wxString> DilutionSearchListProvider::GetItems() const {
     std::vector<wxString> strs{};
     for (const auto &lm : dilutions) {
@@ -48,9 +68,24 @@ std::vector<wxString> DilutionSearchListProvider::GetItems() const {
     return strs;
 }
 
+std::vector<wxString> SubstanceSearchListProvider::GetItems() const {
+    std::vector<wxString> strs{};
+    for (const auto &lm : substances) {
+        strs.emplace_back(wxString::FromUTF8(lm->GetDisplay()));
+    }
+    return strs;
+}
+
 std::shared_ptr<SfmMedicamentMapper> DilutionSearchListProvider::GetItem(ssize_t index) {
     if (index >= 0 && index < dilutions.size()) {
         return dilutions[index];
+    }
+    return {};
+}
+
+std::shared_ptr<SfmMedicamentMapper> SubstanceSearchListProvider::GetItem(ssize_t index) {
+    if (index >= 0 && index < substances.size()) {
+        return substances[index];
     }
     return {};
 }
@@ -64,10 +99,25 @@ ssize_t DilutionSearchListProvider::GetIndexOf(const wxString &searchFor) const 
     return -1;
 }
 
+ssize_t SubstanceSearchListProvider::GetIndexOf(const wxString &searchFor) const {
+    for (decltype(substances.size()) i = 0; i < substances.size(); ++i) {
+        if (wxString::FromUTF8(substances[i]->GetDisplay()) == searchFor) {
+            return i;
+        }
+    }
+    return -1;
+}
+
 void DilutionSearchListProvider::Clear() {
 }
 
+void SubstanceSearchListProvider::Clear() {
+}
+
 void DilutionSearchListProvider::Append(const wxString &) {
+}
+
+void SubstanceSearchListProvider::Append(const wxString &) {
 }
 
 std::vector<wxString> DilutionSearchListProvider::GetVisibleList() const {
@@ -80,8 +130,33 @@ std::vector<wxString> DilutionSearchListProvider::GetVisibleList() const {
     return visibleList;
 }
 
+std::vector<wxString> SubstanceSearchListProvider::GetVisibleList() const {
+    return GetItems();
+}
+
 void DilutionSearchListProvider::SetAutoComplete(const std::string &str) {
     autoComplete = str;
+}
+
+void SubstanceSearchListProvider::SetAutoComplete(const std::string &str) {
+    autoComplete = str;
+    if (str.size() < 4) {
+        substances.clear();
+        return;
+    }
+    auto result = medicamentSearch.PerformSearch(str, FindMedicamentSelections::ALL);
+    substances.clear();
+    if (result) {
+        for (const auto &lv : result->legemiddelVirkestoffList) {
+            substances.emplace_back(std::make_shared<SfmMedicamentMapper>(festDb, std::make_shared<LegemiddelVirkestoff>(lv)));
+        }
+        for (const auto &m : result->legemiddelMerkevareList) {
+            substances.emplace_back(std::make_shared<SfmMedicamentMapper>(festDb, std::make_shared<LegemiddelMerkevare>(m)));
+        }
+        for (const auto &p : result->legemiddelpakningList) {
+            substances.emplace_back(std::make_shared<SfmMedicamentMapper>(festDb, std::make_shared<Legemiddelpakning>(p)));
+        }
+    }
 }
 
 MagistralBuilderDialog::MagistralBuilderDialog(TheMasterFrame *masterFrame, const std::shared_ptr<FestDb> &festDb) : wxDialog(masterFrame, wxID_ANY, "Magistral") {
@@ -112,7 +187,9 @@ MagistralBuilderDialog::MagistralBuilderDialog(TheMasterFrame *masterFrame, cons
     substanceList->AppendColumn(wxT("Unit"));
     substanceListSizer->Add(substanceList, 1, wxEXPAND | wxALL, 5);
     auto *substanceAddSizer = new wxBoxSizer(wxHORIZONTAL);
-    substanceSearch = new wxComboBox(this, wxID_ANY);
+    substanceSearchListProvider = std::make_shared<SubstanceSearchListProvider>(festDb);
+    substanceSearch = new ComboSearchControl(this, wxID_ANY, wxT("Dilution"), substanceSearchListProvider);
+    substanceSearch->SetEditable(true);
     substanceStrength = new wxSpinCtrlDouble(this, wxID_ANY);
     substanceStrengthUnit = new wxComboBox(this, wxID_ANY);
     substanceStrengthUnit->SetEditable(false);
