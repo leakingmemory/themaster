@@ -98,7 +98,7 @@ void ComboSearchControlPopup::OnPopup() {
     }
     int row = 0;
     wxListView::ClearAll();
-    wxListView::InsertColumn(0, wxT("Refund code"));
+    wxListView::InsertColumn(0, wxT("Search result"));
     for (const auto &str : list) {
         std::cout << "Popup insert " << str << "\n";
         wxListView::InsertItem(row++, str);
@@ -199,7 +199,7 @@ void ComboSearchControlPopup::OnComboCharEvent(wxKeyEvent &event) {
     }
     int row = 0;
     wxListView::ClearAll();
-    wxListView::InsertColumn(0, wxT("Refund code"));
+    wxListView::InsertColumn(0, wxT("Search result"));
     for (const auto &str : list) {
         std::cout << "Popup insert " << str << "\n";
         wxListView::InsertItem(row++, str);

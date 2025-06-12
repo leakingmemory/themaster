@@ -254,10 +254,10 @@ void MagistralBuilderDialog::OnAddDilution(wxCommandEvent &e) {
     auto dilutionMapper = dilutionSearchListProvider->GetItem(dilutionIndex);
     Dilution dilution{
         .medicamentMapper = dilutionMapper,
-        .name = dilutionName.ToStdString(),
+        .name = dilutionName.utf8_string(),
         .dilution = adqsSelect->GetSelection() == 0 ? DilutionType::AD : DilutionType::QS
     };
-    dilutionList->InsertItem((long) magistralMedicament.dilutions.size(), dilution.name);
+    dilutionList->InsertItem((long) magistralMedicament.dilutions.size(), wxString::FromUTF8(dilution.name));
     dilutionList->SetItem((long) magistralMedicament.dilutions.size(), 1, dilution.dilution == DilutionType::AD ? wxT("AD") : wxT("QS"));
     magistralMedicament.dilutions.emplace_back(dilution);
 }
@@ -267,18 +267,22 @@ void MagistralBuilderDialog::OnAddSubstance(wxCommandEvent &e) {
     for (const auto &kv : strengthUnits) {
         units.emplace_back(kv.first);
     }
+    auto substanceName = substanceSearch->GetValue();
+    auto substanceIndex = substanceSearchListProvider->GetIndexOf(substanceName);
+    auto substanceMapper = substanceSearchListProvider->GetItem(substanceIndex);
     Substance substance{
-        .name = substanceSearch->GetValue().ToStdString(),
+        .medicamentMapper = substanceMapper,
+        .name = substanceName.utf8_string(),
         .strength = substanceStrength->GetValue(),
         .strengthUnit = units.at(substanceStrengthUnit->GetSelection())
     };
-    substanceList->InsertItem((long) magistralMedicament.substances.size(), substance.name);
+    substanceList->InsertItem((long) magistralMedicament.substances.size(), wxString::FromUTF8(substance.name));
     {
         std::stringstream sstr{};
         sstr << substance.strength;
-        substanceList->SetItem((long) magistralMedicament.substances.size(), 1, sstr.str());
+        substanceList->SetItem((long) magistralMedicament.substances.size(), 1, wxString::FromUTF8(sstr.str()));
     }
-    substanceList->SetItem((long) magistralMedicament.substances.size(), 2, substance.strengthUnit);
+    substanceList->SetItem((long) magistralMedicament.substances.size(), 2, wxString::FromUTF8(substance.strengthUnit));
     magistralMedicament.substances.emplace_back(substance);
 }
 
