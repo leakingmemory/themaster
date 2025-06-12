@@ -354,7 +354,7 @@ void TheMasterFrame::UpdateMedications() {
         if (medicationStatement) {
             auto row = pos++;
             displayedMedicationStatements.emplace_back(versions);
-            prescriptions->InsertItem(row, medicationStatement->GetMedicationReference().GetDisplay());
+            prescriptions->InsertItem(row, wxString::FromUTF8(medicationStatement->GetMedicationReference().GetDisplay()));
             auto statusInfo = PrescriptionChangesService::GetPrescriptionStatusInfo(*medicationStatement);
             if (statusInfo.IsPll) {
                 if (versions.size() > 1) {

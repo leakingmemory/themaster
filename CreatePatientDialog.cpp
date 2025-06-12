@@ -94,14 +94,14 @@ PatientInformation CreatePatientDialog::GetPatientInformation() {
         patientInformation.SetPatientIdType(pIdType);
     }
     if (patientInformation.GetPatientIdType() != PatientIdType::NOT_SET) {
-        std::string id{patientIDField->GetValue().ToUTF8()};
+        std::string id{patientIDField->GetValue().utf8_string()};
         patientInformation.SetPatientId(id);
     }
-    patientInformation.SetGivenName(firstNameField->GetValue().ToStdString());
-    patientInformation.SetFamilyName(lastNameField->GetValue().ToStdString());
+    patientInformation.SetGivenName(firstNameField->GetValue().utf8_string());
+    patientInformation.SetFamilyName(lastNameField->GetValue().utf8_string());
     patientInformation.SetGender(genderChoice->GetSelection() == 0 ? PersonGender::FEMALE : PersonGender::MALE);
-    patientInformation.SetDateOfBirth(dobField->GetValue().ToStdString());
-    patientInformation.SetCity(cityField->GetValue().ToStdString());
-    patientInformation.SetPostCode(postCodeField->GetValue().ToStdString());
+    patientInformation.SetDateOfBirth(dobField->GetValue().utf8_string());
+    patientInformation.SetCity(cityField->GetValue().utf8_string());
+    patientInformation.SetPostCode(postCodeField->GetValue().utf8_string());
     return patientInformation;
 }
