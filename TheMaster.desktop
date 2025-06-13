@@ -3,6 +3,6 @@ Encoding=UTF-8
 Version=1.0
 Type=Application
 Terminal=false
-Exec=PREFIX/bin/themaster
+Exec=env SSL_CERT_DIR=/etc/ssl/certs SSL_CERT_FILE=/etc/ssl/certs/ca-certificates.crt GNUTLS_SYSTEM_TRUST_FILE=/etc/ssl/certs/ca-certificates.crt PREFIX/bin/themaster
 Name=TheMaster
 Icon=PREFIX/share/themaster/TheMasterLogo.png

@@ -21,6 +21,9 @@ wxFSFile *HelseidAppHandler::GetFile(const wxString &uri) {
 
 HelseidLoginDialog::HelseidLoginDialog(wxWindow *parent, const std::string &url, const std::string &clientId) : wxDialog(parent, wxID_ANY, wxT("HelseID")) {
     auto *webView = wxWebView::New();
+#ifndef WIN32
+    webView->SetUserAgent("Mozilla/5.0 (Macintosh; Intel Mac OS X 13_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36");
+#endif
     webView->Create(this, wxID_ANY, wxWebViewDefaultURLStr, wxDefaultPosition, wxSize(800,600));
     webView->RegisterHandler(wxSharedPtr<wxWebViewHandler>(new HelseidAppHandler(), [] (auto *handler) { delete handler; }));
     webView->Bind(wxEVT_WEBVIEW_NAVIGATING, &HelseidLoginDialog::OnNavigating, this);
