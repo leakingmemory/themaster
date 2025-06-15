@@ -612,7 +612,7 @@ private:
     std::shared_ptr<FhirMedication> medication;
     std::vector<MedicamentRefund> refund;
 public:
-    constexpr MagistralMedicamentMapper(const std::vector<FhirBundleEntry> &substances, const std::shared_ptr<FhirMedication> &medication, const std::vector<MedicamentRefund> &refund) : substances(substances), medication(medication), refund(refund) {
+    MagistralMedicamentMapper(const std::vector<FhirBundleEntry> &substances, const std::shared_ptr<FhirMedication> &medication, const std::vector<MedicamentRefund> &refund) : substances(substances), medication(medication), refund(refund) {
     }
     constexpr std::vector<PrescriptionValidity> GetPrescriptionValidity() const {
         return {};
