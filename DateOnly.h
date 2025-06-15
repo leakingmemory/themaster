@@ -6,6 +6,7 @@
 #define THEMASTER_DATEONLY_H
 
 #include <cstdint>
+#include <ctime>
 #include <string>
 
 class DateOnlyInvalidException : public std::exception {

@@ -29,7 +29,7 @@
 #include <sfmbasisapi/nhnfhir/SfmBandaPrescription.h>
 #include <jjwtid/Jwt.h>
 #include <jjwtid/OidcTokenRequest.h>
-#include <cpprest/http_client.h>
+#include "http_client.h"
 #include <wx/listctrl.h>
 #include <wx/notebook.h>
 #include "MedBundleData.h"

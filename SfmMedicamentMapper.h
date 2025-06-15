@@ -75,9 +75,7 @@ public:
     [[nodiscard]] bool IsPackage() const {
         return isPackage;
     }
-    [[nodiscard]] std::vector<SfmMedicamentMapper> GetPackages() const {
-        return packages;
-    }
+    [[nodiscard]] std::vector<SfmMedicamentMapper> GetPackages() const;
     [[nodiscard]] constexpr std::string GetPackageDescription() const {
         return packageDescription;
     }

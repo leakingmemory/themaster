@@ -8,6 +8,7 @@
 #include "DateOnly.h"
 #include "FestDb.h"
 #include "MedicalCodedValue.h"
+#include <algorithm>
 
 Handelsvare GetHandelsvare(const OppfMedForbrMatr &oppf) {
     return oppf.GetMedForbrMatr();

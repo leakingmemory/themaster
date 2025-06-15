@@ -13,6 +13,7 @@
 #include "DateOnly.h"
 #include "GetLegemiddelRefunds.h"
 #include "Uuid.h"
+#include <algorithm>
 
 SfmMedicamentDetailsMapper::SfmMedicamentDetailsMapper(const std::shared_ptr<FestDb> &festDb, const std::shared_ptr<LegemiddelCore> &legemiddelCore) : festDb(festDb) {
     medicamentRefunds = GetLegemiddelRefunds::GetMedicamentRefunds(*festDb, GetLegemiddelRefunds(*legemiddelCore));
@@ -217,6 +218,10 @@ void SfmMedicamentDetailsMapper::Map(const Legemiddelpakning &legemiddelpakning)
         }
     }
     isPackage = true;
+}
+
+std::vector<SfmMedicamentMapper> SfmMedicamentDetailsMapper::GetPackages() const {
+    return packages;
 }
 
 SfmMedicamentMapper::SfmMedicamentMapper(const std::shared_ptr<FestDb> &festDb,

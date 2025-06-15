@@ -3,7 +3,7 @@
 //
 
 #include "FestDbUi.h"
-#include <cpprest/http_client.h>
+#include "http_client.h"
 #include "DownloadFestDialog.h"
 #include "DataDirectory.h"
 #include <filesystem>

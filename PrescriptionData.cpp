@@ -10,6 +10,7 @@
 #include <sfmbasisapi/fhir/medstatement.h>
 #include <functional>
 #include <sstream>
+#include <algorithm>
 
 struct DosingPeriodData {
     DateOnly startDate{};

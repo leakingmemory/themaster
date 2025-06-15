@@ -7,7 +7,7 @@
 #include "HelseidLoginDialog.h"
 #include <cpprest/uri.h>
 #include <jjwtid/OidcTokenRequest.h>
-#include <cpprest/http_client.h>
+#include "http_client.h"
 #include <nlohmann/json.hpp>
 #include <jjwtid/DpopHost.h>
 #include "DataDirectory.h"
