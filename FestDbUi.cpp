@@ -62,9 +62,9 @@ void FestDbUi::UpdateFromFile(DownloadFestDialog &dialog, const std::string &fil
 }
 
 void FestDbUi::Update() {
-    web::http::client::http_client httpClient{as_wstring_on_win32("https://www.legemiddelsok.no")};
+    web::http::client::http_client httpClient{as_wstring_on_win32("https://www.dmp.no")};
     web::http::http_request request{web::http::methods::GET};
-    request.set_request_uri(as_wstring_on_win32("/_layouts/15/FESTmelding/fest251.zip"));
+    request.set_request_uri(as_wstring_on_win32("/globalassets/documents/om-oss/distribusjon-av-legemiddeldata/fest/festfiler/fest251.zip"));
     {
         auto dbfile = DataDirectory::Data("themaster").Sub("FEST").GetPath("fest.db");
         if (std::filesystem::exists(dbfile)) {
