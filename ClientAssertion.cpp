@@ -9,6 +9,7 @@
 #include <jjwtid/Jwt.h>
 #include <jjwtid/Rs256.h>
 #include "Uuid.h"
+#include <ctime>
 
 ClientAssertion::ClientAssertion(const std::string &audienceUrl, const std::string &clientId, const std::string &jwk,
                                  const HelseidMultiTenantInfo &multiTenantInfo)
