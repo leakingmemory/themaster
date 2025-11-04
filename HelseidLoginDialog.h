@@ -19,7 +19,7 @@ private:
     std::string verification;
     std::string state;
 public:
-    explicit HelseidLoginDialog(wxWindow *parent, const std::string &url, const std::string &clientId);
+    explicit HelseidLoginDialog(wxWindow *parent, const std::string &url, const std::string &clientId, const std::string &secretJwk);
     void OnNavigating(wxWebViewEvent &);
     [[nodiscard]] std::string GetResultUrl() const {
         return resultUrl;

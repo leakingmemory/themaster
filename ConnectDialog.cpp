@@ -242,7 +242,7 @@ void ConnectDialog::OnConnect(wxCommandEvent &) {
         }
     }
     if (!helseidUrl.empty()) {
-        HelseidLoginDialog helseidLoginDialog{this, helseidUrl.ToStdString(), helseidClientId.ToStdString()};
+        HelseidLoginDialog helseidLoginDialog{this, helseidUrl.ToStdString(), helseidClientId.ToStdString(), helseidSecretJwk.ToStdString()};
         helseidLoginDialog.ShowModal();
         std::string uri{helseidLoginDialog.GetResultUrl()};
         auto querySeparatorPos = uri.find('?');

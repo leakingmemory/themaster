@@ -19,7 +19,7 @@ wxFSFile *HelseidAppHandler::GetFile(const wxString &uri) {
     return new wxFSFile(new wxStringInputStream(wxT("Please wait...")), uri, wxT("text/plain"), wxT(""), wxDateTime::Now());
 }
 
-HelseidLoginDialog::HelseidLoginDialog(wxWindow *parent, const std::string &url, const std::string &clientId) : wxDialog(parent, wxID_ANY, wxT("HelseID")) {
+HelseidLoginDialog::HelseidLoginDialog(wxWindow *parent, const std::string &url, const std::string &clientId, const std::string &secretJwk) : wxDialog(parent, wxID_ANY, wxT("HelseID")) {
     auto *webView = wxWebView::New();
 #ifndef WIN32
     webView->SetUserAgent("Mozilla/5.0 (Macintosh; Intel Mac OS X 13_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36");
@@ -31,7 +31,7 @@ HelseidLoginDialog::HelseidLoginDialog(wxWindow *parent, const std::string &url,
     auto *sizer = new wxBoxSizer(wxVERTICAL);
     sizer->Add(webView, 1, wxEXPAND | wxALL);
     SetSizerAndFit(sizer);
-    HelseidAuthorization authorization{url, clientId};
+    HelseidAuthorization authorization{url, clientId, secretJwk};
     webView->LoadURL(authorization.GetAuthorizeUrl());
     scopes = authorization.GetScopes();
     redirectUri = authorization.GetRedirectUri();
