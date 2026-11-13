@@ -687,6 +687,24 @@ void TheMasterFrame::OnCreatePatient(wxCommandEvent &e) {
     }
 }
 
+static std::string ToFormBody(const OidcPostRequest &request) {
+    std::stringstream sstr{};
+    auto iterator = request.params.begin();
+    if (iterator != request.params.end()) {
+        const auto &param = *iterator;
+        sstr << from_wstring_on_win32(web::uri::encode_data_string(as_wstring_on_win32(param.first))) << "=";
+        sstr << from_wstring_on_win32(web::uri::encode_data_string(as_wstring_on_win32(param.second)));
+        ++iterator;
+    }
+    while (iterator != request.params.end()) {
+        const auto &param = *iterator;
+        sstr << "&" << from_wstring_on_win32(web::uri::encode_data_string(as_wstring_on_win32(param.first))) << "=";
+        sstr << from_wstring_on_win32(web::uri::encode_data_string(as_wstring_on_win32(param.second)));
+        ++iterator;
+    }
+    return sstr.str();
+}
+
 pplx::task<std::string> TheMasterFrame::GetAccessToken() {
     if (accessToken && !accessToken->empty()) {
         std::string atWithoutSignature{};
@@ -737,29 +755,12 @@ pplx::task<std::string> TheMasterFrame::GetAccessToken() {
         std::cout << "DPoP: " << dpop << std::endl;
         req.headers().add(as_wstring_on_win32("DPoP"), as_wstring_on_win32(dpop));
         req.set_request_uri(as_wstring_on_win32("/connect/token"));
-        std::string rqBody{};
-        {
-            std::stringstream sstr{};
-            auto iterator = requestData.params.begin();
-            if (iterator != requestData.params.end()) {
-                const auto &param = *iterator;
-                sstr << from_wstring_on_win32(web::uri::encode_data_string(as_wstring_on_win32(param.first))) << "=";
-                sstr << from_wstring_on_win32(web::uri::encode_data_string(as_wstring_on_win32(param.second)));
-                ++iterator;
-            }
-            while (iterator != requestData.params.end()) {
-                const auto &param = *iterator;
-                sstr << "&" << from_wstring_on_win32(web::uri::encode_data_string(as_wstring_on_win32(param.first))) << "=";
-                sstr << from_wstring_on_win32(web::uri::encode_data_string(as_wstring_on_win32(param.second)));
-                ++iterator;
-            }
-            rqBody = sstr.str();
-        }
+        std::string rqBody = ToFormBody(requestData);
         std::cout << rqBody << "\n";
         req.set_body(rqBody, "application/x-www-form-urlencoded; charset=utf-8");
         auto respTask = client.request(req);
         std::shared_ptr<std::string> at = accessToken;
-        return respTask.then([this, rqBody, at] (const web::http::http_response &response) {
+        return respTask.then([this, tokenRequest, at] (const web::http::http_response &response) {
             if ((response.status_code() / 100) == 2) {
                 return response.extract_json().then([at] (const web::json::value &json) {
                     if (json.has_string_field(as_wstring_on_win32("access_token"))) {
@@ -797,9 +798,12 @@ pplx::task<std::string> TheMasterFrame::GetAccessToken() {
                     std::cout << "DPoP: " << dpop << std::endl;
                     req.headers().add(as_wstring_on_win32("DPoP"), as_wstring_on_win32(dpop));
                     req.set_request_uri(as_wstring_on_win32("/connect/token"));
+                    // HelseID rejects a reused client assertion (jti), so a new one is generated for the retry
+                    std::string rqBody = ToFormBody(tokenRequest.GetTokenRequest());
+                    std::cout << rqBody << "\n";
                     req.set_body(rqBody, "application/x-www-form-urlencoded; charset=utf-8");
                     auto respTask = client.request(req);
-                    return respTask.then([this, rqBody, at] (const web::http::http_response &response) {
+                    return respTask.then([this, at] (const web::http::http_response &response) {
                         if ((response.status_code() / 100) == 2) {
                             return response.extract_json().then([at] (const web::json::value &json) {
                                 if (json.has_string_field(as_wstring_on_win32("access_token"))) {

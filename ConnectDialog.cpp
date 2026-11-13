@@ -54,6 +54,24 @@ std::string ConnectionConfig::ToJson() const {
     return obj.dump();
 }
 
+static std::string ToFormBody(const OidcPostRequest &request) {
+    std::stringstream sstr{};
+    auto iterator = request.params.begin();
+    if (iterator != request.params.end()) {
+        const auto &param = *iterator;
+        sstr << from_wstring_on_win32(web::uri::encode_data_string(as_wstring_on_win32(param.first))) << "=";
+        sstr << from_wstring_on_win32(web::uri::encode_data_string(as_wstring_on_win32(param.second)));
+        ++iterator;
+    }
+    while (iterator != request.params.end()) {
+        const auto &param = *iterator;
+        sstr << "&" << from_wstring_on_win32(web::uri::encode_data_string(as_wstring_on_win32(param.first))) << "=";
+        sstr << from_wstring_on_win32(web::uri::encode_data_string(as_wstring_on_win32(param.second)));
+        ++iterator;
+    }
+    return sstr.str();
+}
+
 static std::vector<ConnectionConfig> ReadConfigs() {
     std::vector<ConnectionConfig> configs{};
     {
@@ -277,30 +295,13 @@ void ConnectDialog::OnConnect(wxCommandEvent &) {
                     std::cout << "DPoP: " << dpop << "\n";
                     req.headers().add(as_wstring_on_win32("DPoP"), as_wstring_on_win32(dpop));
                     req.set_request_uri(as_wstring_on_win32("/connect/token"));
-                    std::string rqBody{};
-                    {
-                        std::stringstream sstr{};
-                        auto iterator = firstTokenRequest.params.begin();
-                        if (iterator != firstTokenRequest.params.end()) {
-                            const auto &param = *iterator;
-                            sstr << from_wstring_on_win32(web::uri::encode_data_string(as_wstring_on_win32(param.first))) << "=";
-                            sstr << from_wstring_on_win32(web::uri::encode_data_string(as_wstring_on_win32(param.second)));
-                            ++iterator;
-                        }
-                        while (iterator != firstTokenRequest.params.end()) {
-                            const auto &param = *iterator;
-                            sstr << "&" << from_wstring_on_win32(web::uri::encode_data_string(as_wstring_on_win32(param.first))) << "=";
-                            sstr << from_wstring_on_win32(web::uri::encode_data_string(as_wstring_on_win32(param.second)));
-                            ++iterator;
-                        }
-                        rqBody = sstr.str();
-                    }
+                    std::string rqBody = ToFormBody(firstTokenRequest);
                     std::cout << rqBody << "\n";
                     req.set_body(rqBody, "application/x-www-form-urlencoded; charset=utf-8");
                     auto respTask = client.request(req);
                     auto frameWeakRefDispatcher = frame->GetWeakRefDispatcher();
                     auto helseidScopes = helseidLoginDialog.GetScopes();
-                    respTask.then([frameWeakRefDispatcher, helseidUrl, helseidClientId, helseidSecretJwk, helseidScopes, journalId, orgNo, childOrgNo, dpopHost, rqBody](const pplx::task<web::http::http_response> &task) mutable {
+                    respTask.then([frameWeakRefDispatcher, helseidUrl, helseidClientId, helseidSecretJwk, helseidScopes, journalId, orgNo, childOrgNo, dpopHost, tokenRequest](const pplx::task<web::http::http_response> &task) mutable {
                         try {
                             auto response = task.get();
                             auto tokenRecvFunc = [frameWeakRefDispatcher, helseidUrl, helseidClientId, helseidSecretJwk, helseidScopes, journalId, orgNo, childOrgNo, dpopHost](const pplx::task<web::json::value> &jsonTask, const std::string &dpopNonce) mutable {
@@ -359,6 +360,9 @@ void ConnectDialog::OnConnect(wxCommandEvent &) {
                                     std::cout << "DPoP: " << dpop << "\n";
                                     req.headers().add(as_wstring_on_win32("DPoP"), as_wstring_on_win32(dpop));
                                     req.set_request_uri(as_wstring_on_win32("/connect/token"));
+                                    // HelseID rejects a reused client assertion (jti), so a new one is generated for the retry
+                                    std::string rqBody = ToFormBody(tokenRequest.GetTokenRequest());
+                                    std::cout << rqBody << "\n";
                                     req.set_body(rqBody, "application/x-www-form-urlencoded; charset=utf-8");
                                     auto respTask = client.request(req);
                                     respTask.then([frameWeakRefDispatcher, helseidUrl, helseidClientId, helseidSecretJwk, helseidScopes, journalId, orgNo, childOrgNo, dpopHost, dpopNonce, tokenRecvFunc](const pplx::task<web::http::http_response> &task) {
