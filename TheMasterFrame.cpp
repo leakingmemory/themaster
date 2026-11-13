@@ -705,6 +705,63 @@ static std::string ToFormBody(const OidcPostRequest &request) {
     return sstr.str();
 }
 
+// POST to the SFM basis API with a DPoP bound access token. If the server asks for a DPoP nonce
+// the request is retried once with a new proof carrying the nonce.
+static pplx::task<web::http::http_response> SfmPost(DpopHost dpopHost, const std::string &apiUrl, const std::string &path,
+                                                    const std::string &accessToken, const std::string &body,
+                                                    const std::string &dpopNonce,
+                                                    const std::function<void (const std::string &)> &dpopNonceUpdate) {
+    std::string fullUrl{apiUrl};
+    if (!fullUrl.ends_with("/")) {
+        fullUrl.append("/");
+    }
+    fullUrl.append(path);
+    auto createRequest = [fullUrl, path, accessToken, body] (DpopHost &dpopHost, const std::string &nonce) {
+        web::http::http_request request{web::http::methods::POST};
+        if (!accessToken.empty()) {
+            std::cout << "Access token: " << accessToken << "\n";
+            std::string authorization{"DPoP "};
+            authorization.append(accessToken);
+            request.headers().add(as_wstring_on_win32("Authorization"), as_wstring_on_win32(authorization));
+            auto dpop = dpopHost.Generate("POST", fullUrl, accessToken, nonce);
+            std::cout << "DPoP: " << dpop << "\n";
+            request.headers().add(as_wstring_on_win32("DPoP"), as_wstring_on_win32(dpop));
+        }
+        request.set_request_uri(as_wstring_on_win32(path));
+        request.set_body(body, "application/fhir+json; charset=utf-8");
+        return request;
+    };
+    web::http::client::http_client client{as_wstring_on_win32(apiUrl)};
+    return client.request(createRequest(dpopHost, dpopNonce)).then([apiUrl, accessToken, dpopHost, dpopNonceUpdate, createRequest] (const web::http::http_response &response) mutable {
+        if (response.status_code() == web::http::status_codes::Unauthorized && !accessToken.empty()) {
+            std::string dpopNonce{};
+            for (const auto &header : response.headers()) {
+                auto name = from_wstring_on_win32(header.first);
+                std::transform(name.cbegin(), name.cend(), name.begin(),
+                               [](char ch) { return std::tolower(ch); });
+                if (name == "dpop-nonce") {
+                    dpopNonce = from_wstring_on_win32(header.second);
+                }
+            }
+            if (!dpopNonce.empty()) {
+                std::cout << "SFM DPoP nonce: " << dpopNonce << "\n";
+                dpopNonceUpdate(dpopNonce);
+                web::http::client::http_client client{as_wstring_on_win32(apiUrl)};
+                return client.request(createRequest(dpopHost, dpopNonce));
+            }
+        }
+        return pplx::task_from_result(response);
+    });
+}
+
+std::function<void (const std::string &)> TheMasterFrame::GetSfmDpopNonceUpdate() {
+    return [this] (const std::string &dpopNonce) {
+        wxTheApp->GetTopWindow()->GetEventHandler()->CallAfter([this, dpopNonce]() {
+            sfmDpopNonce = dpopNonce;
+        });
+    };
+}
+
 pplx::task<std::string> TheMasterFrame::GetAccessToken() {
     if (accessToken && !accessToken->empty()) {
         std::string atWithoutSignature{};
@@ -1000,16 +1057,12 @@ void TheMasterFrame::GetMedication(CallContext &ctx, const std::function<void(co
     auto kjConsent = this->kjConsent;
     auto kjBarredConsent = this->kjBarredConsent;
     auto kjLockedConsent = this->kjLockedConsent;
-    responseTask = accessTokenTask.then([apiUrl, patient, rawRequest, kjConsent, kjBarredConsent, kjLockedConsent, refNumbers] (const std::string &accessToken) {
-        web::http::http_request request{web::http::methods::POST};
-        if (!accessToken.empty()) {
-            std::cout << "Access token: " << accessToken << "\n";
-            std::string bearer{"Bearer "};
-            bearer.append(accessToken);
-            request.headers().add(as_wstring_on_win32("Authorization"), as_wstring_on_win32(bearer));
-        }
+    auto dpopHost = this->dpopHost;
+    auto sfmDpopNonce = this->sfmDpopNonce;
+    auto sfmDpopNonceUpdate = GetSfmDpopNonceUpdate();
+    responseTask = accessTokenTask.then([apiUrl, patient, rawRequest, kjConsent, kjBarredConsent, kjLockedConsent, refNumbers, dpopHost, sfmDpopNonce, sfmDpopNonceUpdate] (const std::string &accessToken) {
+        std::string requestBody{};
         {
-            std::string requestBody{};
             {
                 FhirParameters requestParameters{};
                 requestParameters.AddParameter("patient", patient);
@@ -1027,14 +1080,9 @@ void TheMasterFrame::GetMedication(CallContext &ctx, const std::function<void(co
                 }
                 requestBody = requestParameters.ToJson();
             }
-            request.set_request_uri(as_wstring_on_win32("patient/$getMedication"));
-            {
-                request.set_body(requestBody, "application/fhir+json; charset=utf-8");
-                *rawRequest = requestBody;
-            }
+            *rawRequest = requestBody;
         }
-        web::http::client::http_client client{as_wstring_on_win32(apiUrl)};
-        return client.request(request);
+        return SfmPost(dpopHost, apiUrl, "v2/patient/$getMedication", accessToken, requestBody, sfmDpopNonce, sfmDpopNonceUpdate);
     });
 
     std::shared_ptr<std::mutex> getMedResponseMtx = std::make_shared<std::mutex>();
@@ -1339,15 +1387,11 @@ void TheMasterFrame::SendMedication(CallContext &ctx,
     auto accessTokenTask = GetAccessToken();
     std::shared_ptr<std::string> rawRequest = std::make_shared<std::string>();
     medicationBundleResetData = "";
-    responseTask = accessTokenTask.then([apiUrl, bundle, preprocessing, rawRequest] (const std::string &accessToken) {
-        web::http::http_request request{web::http::methods::POST};
-        if (!accessToken.empty()) {
-            std::cout << "Access token: " << accessToken << "\n";
-            std::string bearer{"Bearer "};
-            bearer.append(accessToken);
-            request.headers().add(as_wstring_on_win32("Authorization"), as_wstring_on_win32(bearer));
-        }
-        request.set_request_uri(as_wstring_on_win32("Patient/$sendMedication"));
+    auto dpopHost = this->dpopHost;
+    auto sfmDpopNonce = this->sfmDpopNonce;
+    auto sfmDpopNonceUpdate = GetSfmDpopNonceUpdate();
+    responseTask = accessTokenTask.then([apiUrl, bundle, preprocessing, rawRequest, dpopHost, sfmDpopNonce, sfmDpopNonceUpdate] (const std::string &accessToken) {
+        std::string requestBody{};
         {
             FhirParameters sendMedicationParameters{};
             {
@@ -1403,14 +1447,10 @@ void TheMasterFrame::SendMedication(CallContext &ctx,
 
                 sendMedicationParameters.AddParameter("medication", medBundle);
             }
-            {
-                auto jsonString = sendMedicationParameters.ToJson();
-                request.set_body(jsonString, "application/fhir+json; charset=utf-8");
-                *rawRequest = jsonString;
-            }
+            requestBody = sendMedicationParameters.ToJson();
+            *rawRequest = requestBody;
         }
-        web::http::client::http_client client{as_wstring_on_win32(apiUrl)};
-        return client.request(request);
+        return SfmPost(dpopHost, apiUrl, "v2/Patient/$sendMedication", accessToken, requestBody, sfmDpopNonce, sfmDpopNonceUpdate);
     });
     std::shared_ptr<std::mutex> sendMedResponseMtx = std::make_shared<std::mutex>();
     std::shared_ptr<std::shared_ptr<Fhir>> sendMedResponse = std::make_shared<std::shared_ptr<Fhir>>();
@@ -2554,10 +2594,12 @@ void TheMasterFrame::SetHelseid(const std::string &url, const std::string &clien
     this->childOrgNo = childOrgNo;
     this->dpopHost = dpopHost;
     this->helseidDpopNonce = helseidDpopNonce;
+    sfmDpopNonce = "";
 }
 
 void TheMasterFrame::Connect(const std::string &url) {
     this->url = url;
+    sfmDpopNonce = "";
 }
 
 void TheMasterFrame::OnUpdateFest(wxCommandEvent &e) {

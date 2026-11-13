@@ -73,6 +73,7 @@ private:
     std::shared_ptr<std::string> accessToken{};
     DpopHost dpopHost;
     std::string helseidDpopNonce{};
+    std::string sfmDpopNonce{};
     wxComboBox *kjConsentSelect;
     wxComboBox *kjLockedConsentSelect;
     wxComboBox *kjBarredConsentSelect;
@@ -99,6 +100,7 @@ public:
     void OnCreatePatient(wxCommandEvent &e);
     pplx::task<std::string> GetAccessToken();
 private:
+    std::function<void (const std::string &)> GetSfmDpopNonceUpdate();
     void GetMedication(CallContext &ctx, const std::function<void (const std::string &err)> &callback);
 public:
     void OnResetMedication(wxCommandEvent &e);
