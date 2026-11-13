@@ -33,7 +33,7 @@ std::string ClientAssertion::ToString() const {
         token.Body()->Add("iss", clientId);
         token.Body()->Add("iat", iat);
         token.Body()->Add("nbf", iat);
-        token.Body()->Add("exp", iat + 120);
+        token.Body()->Add("exp", iat + 30);
         token.Body()->Add("sub", clientId);
         token.Body()->Add("aud", url);
         if (helseidMultiTenantInfo.IsSet()) {

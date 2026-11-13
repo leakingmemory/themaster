@@ -6,6 +6,7 @@
 #include "Uuid.h"
 #include <sfmbasisapi/nhnfhir/SfmBandaPrescription.h>
 #include <functional>
+#include <algorithm>
 
 void MerchData::SetDefaults() {
     itemGroup = {"urn:oid:2.16.578.1.12.4.1.1.7402", "A", "Annet", "Annet"};

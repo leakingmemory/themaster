@@ -23,7 +23,7 @@ private:
             "helseid://scopes/identity/pid",
             "helseid://scopes/identity/security_level",
             "nhn:kjernejournal/api",
-            "e-helse:sfm.api/sfm.api"};
+            "e-helse:sfm.api/sfm.api2"};
     std::string state;
     std::string verification;
 public:
