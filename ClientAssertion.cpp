@@ -7,7 +7,7 @@
 #include <memory>
 #include <jjwtid/JwkPemRsaKey.h>
 #include <jjwtid/Jwt.h>
-#include <jjwtid/Rs256.h>
+#include <jjwtid/Ps256.h>
 #include "Uuid.h"
 #include <ctime>
 
@@ -71,8 +71,8 @@ std::string ClientAssertion::ToString() const {
             }
             token.Body()->Add("authorization_details", arr);
         }
-        Rs256 rs256{signingKey};
-        rs256.Sign(token);
+        Ps256 ps256{signingKey};
+        ps256.Sign(token);
         jwt = token.ToString();
     }
     return jwt;
